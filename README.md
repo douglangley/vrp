@@ -19,7 +19,7 @@ JAWS, VoiceOver).
 **Any platform — manual:**
 
 ```bash
-git clone https://github.com/<you>/versatile-radio-programmer.git
+git clone https://github.com/douglangley/Versatile-Radio-Programmer.git
 cd versatile-radio-programmer
 git clone --depth=1 https://github.com/kk7ds/chirp.git   # CHIRP must exist before sync
 uv sync
