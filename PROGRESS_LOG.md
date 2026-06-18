@@ -6,6 +6,186 @@ architecture, keyboard map, and CHIRP feature-coverage checklist.
 
 ---
 
+## 2026-06-18 — FIXED: the actual cause of dead buttons (supersedes the entry below)
+
+The entry below this one found a real, reproducible native crash, but it was
+a secondary/rarer issue, not the dominant cause of "nothing happens when I
+click". The actual cause, found and fixed in a further follow-up session:
+
+**Root cause:** `_on_webview_loaded` injected `_SHORTCUTS_JS` via
+`wx.CallAfter(self.view.run_js, _SHORTCUTS_JS)`, deferred specifically to
+avoid a known "nested RunScript inside the native WebView2 loaded callback"
+problem (see the original comment, preserved in the fix). `wx.CallAfter`
+schedules work on wx's idle-event queue, which — confirmed by direct,
+repeatable testing — can still run while nested inside the same native call
+stack as the `EVT_WEBVIEW_LOADED` event. It doesn't always surface the
+"Unknown runtime error" dialog that motivated the original deferral, but it
+silently breaks the `AddScriptMessageHandler` script-message channel for the
+rest of the session: `window.vrp` still exists, `postMessage` still exists
+and is callable from JS with no error, but `EVT_WEBVIEW_SCRIPT_MESSAGE_RECEIVED`
+never fires again in Python — meaning every in-page button, plus every
+Ctrl-combo shortcut (which is *literally what `_SHORTCUTS_JS` itself
+installs*), goes dead immediately after the page loads. This is a 100%
+reproducible, deterministic bug, confirmed by:
+- A monkeypatched copy of the real `MainWindow` with `_on_webview_loaded`
+  neutralized: bridge worked.
+- The same, but replaying the original `wx.CallAfter(...)` logic: bridge
+  broke, immediately, every time.
+- Swapping just `CallAfter` for `wx.CallLater(50, ...)` (a real OS timer
+  instead of an idle-event, landing in a guaranteed fresh top-level
+  message-loop iteration): bridge worked, repeatedly, with the real
+  `_SHORTCUTS_JS` content, confirmed via 5+ repeated UI-Automation-driven
+  button invokes with zero failures.
+
+**Fix applied:** `vrp/app.py`, `_on_webview_loaded` — changed
+`wx.CallAfter(self.view.run_js, _SHORTCUTS_JS)` to
+`wx.CallLater(50, self.view.run_js, _SHORTCUTS_JS)`. Comment updated in place
+to record why `CallAfter` wasn't sufficient.
+
+**Relationship to the native-crash entry below:** that crash (SIGSEGV inside
+`wx\_html2.cp311-win_amd64.pyd`) is real and was reproduced independently of
+this bug, under heavy UI-Automation-driven repeated invokes specifically —
+it's a separate, rarer issue, most likely still an environmental
+WebView2-runtime/wxWidgets ABI edge case. It is **not** what most users would
+have hit; this `CallAfter`/`CallLater` bug is what made every button and
+shortcut appear permanently dead from the first interaction onward, which
+matches every symptom in the original bug report below. The previous plan's
+WebView2 Fixed-Version-Runtime workaround is no longer needed for the primary
+symptom and was not pursued further; the large runtime files downloaded
+during that investigation were deleted from the project root.
+
+Also fixed in the same session (unrelated, found during a code audit):
+`_import_results` in `vrp/app.py` referenced an undefined name
+(`radio_result`) instead of its own `src_radio` parameter — guaranteed
+`NameError` on every completed import. Fixed.
+
+`uv run pytest` — 63/63 passing after these changes.
+
+---
+
+## 2026-06-18 — ROOT CAUSE FOUND: native WebView2 crash, not app code (corrects entry below)
+
+The investigation below (same date) chased the wrong cause. Live debugging in
+a follow-up session established the real root cause:
+
+- Windows Event Log ("Application Error", source `python.exe`) shows the
+  **same crash signature** recurring for hours, predating the menu-bar/
+  `EVT_CHAR_HOOK` edits described below entirely (earliest matching entry:
+  6/17 7:44 PM): a SIGSEGV/access-violation (`0xc0000005`) inside
+  `wx\_html2.cp311-win_amd64.pyd` (wxPython's WebView2 binding), at the
+  **identical fault offset (`0x1c00`) every time**.
+- Confirmed live: invoking the real app's "Open Image File" button (via UI
+  Automation, bypassing keyboard/mouse routing entirely) killed the process
+  outright (exit code 139/SIGSEGV) with **zero** Python-level exception or
+  log output — this is why nothing showed up even with `--debug`: the
+  process was dying natively, silently, with no console (`--windowed`).
+- A from-scratch, minimal `AccessibleWebView` test script — no menu bar, no
+  `vrp/app.py` code at all — reproduced the **identical crash, same module,
+  same offset**, on the same kind of button invoke. This rules out anything
+  specific to this app's window/menu-bar construction order.
+- A full audit of `vrp/app.py` (`MainWindow.__init__`, `_build_menubar`,
+  `_on_char_hook`, focus-restoration helpers) and every dialog file found
+  **no lifecycle bug** that could explain a native crash in the WebView2
+  binding. The project rename (omw -> VRP) happened in the single initial
+  commit (no separate rename commit exists), and a repo-wide grep for "omw"
+  found zero leftover references — the rename was clean and is not
+  implicated either.
+- Versions: wxPython 4.2.5 / wxWidgets 3.2.9, against the installed WebView2
+  **Evergreen** Runtime 149.0.4022.69 (Windows auto-updating channel). Most
+  likely cause: an ABI mismatch between wxWidgets' WebView2 backend and this
+  particular (very new) runtime build.
+
+**Conclusion: the menu-bar-construction-order revert and the `EVT_CHAR_HOOK`
+disable documented below did not fix anything** — they happened to land on a
+state that simply hadn't yet triggered the crash during that round of manual
+testing. Re-applying either change is not blocked by anything found here.
+
+**Also fixed in passing** (found during the audit, unrelated to the crash):
+`_import_results` in `vrp/app.py` referenced an undefined name (`radio_result`)
+instead of its own `src_radio` parameter — a guaranteed `NameError` on every
+completed import (query-source or import-from-file). Fixed.
+
+**Next step (workaround, not yet completed):** pin a WebView2 **Fixed
+Version** Runtime for local dev via the `VRP_WEBVIEW2_RUNTIME_DIR` env var
+(wired up in `main.py`, no-op unless set) to sidestep the Evergreen-runtime
+ABI mismatch. Blocked on obtaining the actual runtime files — Microsoft's
+download page generates the link client-side via JS after picking
+version+arch, and browser automation wasn't available this session. Until
+this is done, the app remains effectively unusable for any in-page
+interaction; expect the same crash on the first button/keystroke.
+
+---
+
+## 2026-06-18 — OPEN: webview input appears totally dead (in progress, mid-diagnosis)
+
+**Status: unresolved, reverted to last-known state, paused for a machine reboot.**
+
+Chain of reports, in order:
+1. "Control+O to open a file is not working" — fixed by catching Ctrl+O at
+   the native `EVT_CHAR_HOOK` level (mirroring the earlier Alt-menu-mnemonic
+   fix), theory being WebView2 treats Ctrl-combos as "browser accelerator
+   keys" it can consume before the page's own JS keydown listener sees them.
+2. "It works most of the time but breaks after you open a file — additional
+   opens don't work via hotkey OR the page button." This ruled out the
+   WebView2-accelerator-key theory (the hotkey path now bypassed the webview
+   entirely via EVT_CHAR_HOOK, yet still broke identically to the button) —
+   pointed at something common to both paths (`on_open`, or app state).
+3. Asked the user to run `uv run python main.py --debug` from a terminal to
+   see if an exception was being silently swallowed (the app is `--windowed`,
+   no console). Result: **no debug output at all**, not even from the first
+   "Open Image File…" button press — meaning the click never reached Python.
+4. Suspected the `EVT_CHAR_HOOK` binding added today (for Alt mnemonics +
+   Ctrl+O) as a regression and disabled it (commented out the `Bind` call in
+   `MainWindow.__init__`). Bug persisted with it disabled.
+5. Asked the user to check whether **F12** (WebView2's own built-in DevTools
+   toggle — independent of any of our code) does anything. **It does not.**
+   This is the most important data point so far: if the webview can't even
+   trigger its own native F12 handling, the control may not be receiving
+   keyboard input/focus at all, which would explain every symptom above
+   uniformly (our bridge, our shortcuts, AND WebView2's own built-ins all
+   failing the same way) — pointing away from a JS-bridge-registration race
+   theory and toward a focus/construction-order issue instead.
+6. Reverted the *other* change made today: building `_build_menubar()`
+   **before** constructing the webview (vs. its original position, after).
+   Both `vrp/app.py` changes are now reverted to pre-today behavior:
+   - `EVT_CHAR_HOOK` binding commented out (search for "TEMPORARILY DISABLED"
+     in `MainWindow.__init__`).
+   - `_build_menubar()` call moved back to after the webview/sizer setup
+     (search for "TEMPORARILY REVERTED").
+   - The Ctrl+O-specific handling inside `_on_char_hook` is moot while the
+     binding above it is disabled, but the code is still there, unused.
+   - Tests pass (63/63) throughout — none of this is covered by the test
+     suite, which only exercises `chirp_backend`/`views`/`config`, not live
+     wx event routing.
+
+**Not yet known:** whether reverting the construction-order change (step 6)
+fixes it — the user was about to retest when they asked to reboot the machine
+first. **Next step on resume: clean relaunch (`uv run python main.py
+--debug`), retest F12 and the Open button.**
+
+If reverting BOTH changes still doesn't restore F12/button interaction, the
+cause predates today's session entirely (something environmental — possibly
+a WebView2 runtime update, a stuck process, or something unrelated to recent
+code at all) and the investigation needs to widen beyond `vrp/app.py`.
+
+Also from today, unrelated to the above and NOT reverted (working, separate
+from this investigation):
+- `wx.CallAfter`-deferred `_SHORTCUTS_JS` injection in `_on_webview_loaded`
+  (fixes a spurious "Unknown runtime error" dialog from nested `RunScript`
+  calls — see the entry/commit for that fix if one exists; this was verified
+  working before the input-dead regression appeared).
+- Switched packager Nuitka → PyInstaller (see entry below) — built and smoke
+  tested successfully, unrelated to this webview-input issue.
+- Added `payown` and `accesswatch` as GitHub collaborators (admin) on
+  douglangley/Versatile-Radio-Programmer.
+
+**Uncommitted right now:** only `vrp/app.py` (the disable/revert edits above).
+Safe on disk regardless of reboot — `git status --short` shows just that one
+modified file. Not committed because it's a mid-diagnosis state, not a
+validated fix.
+
+---
+
 ## 2026-06-17 — Switched packager: Nuitka → PyInstaller (build time)
 
 Nuitka compiled all 552 CHIRP drivers to C on every build — 20-30 minutes

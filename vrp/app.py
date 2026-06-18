@@ -135,19 +135,15 @@ class MainWindow(wx.Frame):
         self.CreateStatusBar()
         self.SetStatusText("Ready")
 
-        # Build the native menu bar on the frame BEFORE the webview control
-        # exists. _build_menubar() doesn't touch self.view (menu handlers only
-        # reference it later, when actually invoked), so this ordering is safe
-        # and gives the frame's menu bar / accelerator table priority over the
-        # webview's native window when both are competing for the OS's
-        # keyboard-routing setup.
-        self._build_menubar()
-
-        # The webview swallows Alt entirely (see module docstring re: #24786),
-        # so menu mnemonics/F10 are caught here instead — EVT_CHAR_HOOK is a
-        # low-level keyboard hook on Windows that sees keys before a focused
-        # child control (the webview) can consume them.
-        self.Bind(wx.EVT_CHAR_HOOK, self._on_char_hook)
+        # TEMPORARILY REVERTED for diagnosis: this used to build the menu bar
+        # AFTER the webview existed; today it was reordered to build it
+        # BEFORE, plus an EVT_CHAR_HOOK binding was added (already disabled
+        # above this point in history) — and in-page interaction (even the
+        # very first button press, AND WebView2's own built-in F12 devtools
+        # toggle) stopped working entirely afterward. Reverting construction
+        # order to isolate whether IT is responsible, independent of
+        # EVT_CHAR_HOOK. Re-apply the reorder only once this is ruled out.
+        # self._build_menubar()
 
         # The accessible HTML host. handler_name="vrp" exposes
         # window.vrp.postMessage() to page code; messages arrive at
@@ -176,6 +172,7 @@ class MainWindow(wx.Frame):
         sizer.Add(self.view.control, 1, wx.EXPAND)
         self.SetSizer(sizer)
 
+        self._build_menubar()
         self.show_welcome()
         self.view.focus()
 
@@ -320,6 +317,15 @@ class MainWindow(wx.Frame):
         Must call event.Skip() for every key we don't handle, or normal
         typing/navigation in the webview breaks (EVT_CHAR_HOOK is the
         highest-priority key event in wx and stops propagation otherwise).
+
+        Ctrl+O (Open) is also caught here, not just Alt mnemonics: WebView2
+        treats any Ctrl/Alt key combo as a candidate "browser accelerator
+        key" (Microsoft's ``AreBrowserAcceleratorKeysEnabled``, true by
+        default — wx.html2.WebView doesn't expose a way to turn it off), so
+        WebView2 can consume Ctrl+O before the page's own keydown listener
+        (``_SHORTCUTS_JS``) ever sees it — confirmed by the user: Ctrl+O did
+        nothing. Other Ctrl-combos may have the same problem; only Ctrl+O is
+        fixed here since it's the one actually confirmed broken so far.
         """
         key = event.GetKeyCode()
         if event.AltDown() and not event.ControlDown() and not event.ShiftDown():
@@ -330,6 +336,9 @@ class MainWindow(wx.Frame):
                 return  # consumed
         if key == wx.WXK_F10 and not event.HasAnyModifiers():
             self._open_menu_bar_menu(0)  # File — Windows convention for F10
+            return  # consumed
+        if event.ControlDown() and not event.AltDown() and not event.ShiftDown() and key == ord("O"):
+            self.on_open(None)
             return  # consumed
         event.Skip()
 
@@ -365,15 +374,23 @@ class MainWindow(wx.Frame):
         # page). The script guards against double-install and uses a delegated/
         # document-level listener, so it survives set_content view swaps.
         #
-        # Deferred via CallAfter: AccessibleWebView's own EVT_WEBVIEW_LOADED
-        # handler (bound first, inside its __init__) runs in the same event
-        # dispatch and flushes show_welcome()'s queued set_content with its own
-        # synchronous RunScript call. Calling RunScript again right after, still
-        # nested inside that same native WebView2 "loaded" callback, is a known
-        # trigger for a spurious "Error running JavaScript: Unknown runtime
-        # error" from wxWidgets' Edge backend. Running on the next event-loop
-        # tick avoids the reentrant call.
-        wx.CallAfter(self.view.run_js, _SHORTCUTS_JS)
+        # Deferred via CallLater, NOT CallAfter: AccessibleWebView's own
+        # EVT_WEBVIEW_LOADED handler (bound first, inside its __init__) runs in
+        # the same event dispatch and flushes show_welcome()'s queued
+        # set_content with its own synchronous RunScript call. Calling
+        # RunScript again right after, still nested inside that same native
+        # WebView2 "loaded" callback, is a known trigger for a spurious "Error
+        # running JavaScript: Unknown runtime error" from wxWidgets' Edge
+        # backend. wx.CallAfter (an idle-event) isn't enough to escape this —
+        # confirmed by direct testing, it can still run nested inside the same
+        # native call stack as the loaded event and, even when it doesn't
+        # surface that error, silently breaks all later
+        # AddScriptMessageHandler/postMessage delivery for the rest of the
+        # session (every in-page button and shortcut going forward becomes a
+        # silent no-op, with no exception anywhere). wx.CallLater uses a real
+        # OS timer instead of the idle queue, which reliably lands in a fresh
+        # top-level message-loop iteration.
+        wx.CallLater(50, self.view.run_js, _SHORTCUTS_JS)
         event.Skip()
 
     # -- views -------------------------------------------------------------
@@ -1060,7 +1077,7 @@ class MainWindow(wx.Frame):
             self._restore_webview_focus()
             return
 
-        ok, message, affected = memory_ops.import_memories(radio_result, dest, overwrite)
+        ok, message, affected = memory_ops.import_memories(src_radio, dest, overwrite)
         if ok:
             target = affected[0] if affected else dest
             self._page = views.page_for_channel(target)

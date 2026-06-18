@@ -11,8 +11,17 @@ Importing ``vrp`` first applies the CHIRP import-path fix (see
 
 import argparse
 import logging
+import os
 
 import vrp  # noqa: F401  (import side effect: makes the vendored chirp importable)
+
+# Opt-in local dev knob: point at an extracted WebView2 Fixed Version Runtime
+# folder to bypass the system Evergreen runtime. Must be set before any
+# wx.html2.WebView/AccessibleWebView is constructed. No-op unless set, so this
+# changes nothing for anyone who hasn't opted in.
+_runtime_dir = os.environ.get("VRP_WEBVIEW2_RUNTIME_DIR")
+if _runtime_dir:
+    os.environ.setdefault("WEBVIEW2_BROWSER_EXECUTABLE_FOLDER", _runtime_dir)
 
 
 def main() -> None:
