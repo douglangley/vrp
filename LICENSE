@@ -1,0 +1,30 @@
+Versatile Radio Programmer (VRP)
+Copyright (C) 2026 Versatile Radio Programmer Contributors
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+-------------------------------------------------------------------------------
+
+This software incorporates the CHIRP radio driver library:
+
+  CHIRP — https://chirpmyradio.com
+  Copyright (C) 2008 Dan Smith <chirp@f.danplanet.com> and contributors
+  Licensed under the GNU General Public License, version 3
+
+The CHIRP library provides the radio hardware interface and driver code
+(serial communication, memory map parsing, and support for 700+ radio models).
+VRP does not modify CHIRP's driver code; it uses it as a library dependency.
+
+The full text of the GNU General Public License v3 is available at:
+  https://www.gnu.org/licenses/gpl-3.0.txt

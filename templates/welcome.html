@@ -1,0 +1,39 @@
+{# Welcome view. Body fragment ONLY — the AccessibleWebView already wraps our
+   content in <main id="content"> and supplies the document, lang, styles, and
+   live region. Do NOT add our own <main> (that would nest landmarks). The
+   CHIRP attribution footer is appended centrally by vrp.html.render_view.
+
+   The "Open Image File" button posts to Python over the bridge. set_content
+   injects via innerHTML, so inline onclick (not <script>) is what works. #}
+<h1>Versatile Radio Programmer</h1>
+<p>
+  An accessible front end to the CHIRP radio programming library. Use the
+  button below (or the File and Radio menus) to open a radio image file or
+  download from a connected radio.
+</p>
+
+<nav aria-label="Primary actions">
+  <button type="button" aria-keyshortcuts="Control+O"
+    onclick="window.vrp&&window.vrp.postMessage(JSON.stringify({action:'open'}))">
+    Open Image File&hellip;
+  </button>
+  <button type="button" aria-keyshortcuts="F1"
+    onclick="window.vrp&&window.vrp.postMessage(JSON.stringify({action:'shortcuts'}))">
+    Keyboard Shortcuts
+  </button>
+  <button type="button"
+    onclick="window.vrp&&window.vrp.postMessage(JSON.stringify({action:'about'}))">
+    About
+  </button>
+</nav>
+
+<h2>Getting started</h2>
+<ul>
+  <li>Choose "Open Image File" (or press Control+O) to load a saved radio image.</li>
+  <li>Press F1 at any time for the list of keyboard shortcuts.</li>
+</ul>
+
+<p>
+  Version {{ version }}. The channel editor and radio operations are being
+  built in phases.
+</p>

@@ -1,0 +1,64 @@
+[project]
+# Versatile Radio Programmer (VRP)
+# A free, open-source, accessible radio memory channel programmer.
+# Built on the CHIRP radio driver library (GPLv3).
+name = "versatile-radio-programmer"
+version = "0.1.0"
+description = "Versatile Radio Programmer (VRP) — accessible radio memory channel programmer"
+requires-python = "==3.11.*"
+
+dependencies = [
+    # Accessible desktop UI host: a wxPython app whose wx.html2.WebView is
+    # wrapped to expose semantic, screen-reader-friendly HTML (NVDA/JAWS).
+    "wxpython>=4.2.0",
+    "wx-accessible-webview>=0.2.0",
+    # Unified TTS / screen-reader speech (prism). Used to speak things that
+    # ARIA alone can't convey. The Python bindings ship as `prismatoid`.
+    "prismatoid>=0.16.0",
+    # The CHIRP radio driver library. Installed as an editable local package
+    # from the sibling ./chirp clone — see [tool.uv.sources] below. Clone it
+    # with `git clone --depth=1 https://github.com/kk7ds/chirp.git` before
+    # running `uv sync`.
+    "chirp",
+    # CHIRP library dependencies
+    "pyserial>=3.5",
+    "lark>=1.1.0",
+    "requests>=2.28.0",
+    "jinja2>=3.1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+]
+build = [
+    "pyinstaller>=6.10.0",
+]
+
+[project.scripts]
+vrp = "main:main"
+versatile-radio-programmer = "main:main"
+
+[tool.uv]
+# The Python version for the venv is pinned by the `.python-version` file
+# (3.11). uv downloads 3.11 automatically if it isn't already installed,
+# independently of whatever Python you have system-wide. This ensures the
+# PyInstaller build always uses 3.11.
+
+[tool.uv.sources]
+# The CHIRP library is a local editable install from the sibling ./chirp
+# clone. Declaring it here lets `uv sync` install (and keep) it automatically,
+# so no separate `uv pip install -e ./chirp` step is needed. The ./chirp
+# directory must exist (git clone it) before running `uv sync`.
+chirp = { path = "./chirp", editable = true }
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# Silence DeprecationWarnings from the vendored, unmodified CHIRP library so our
+# own warnings stay visible. (We don't edit ./chirp; these are upstream's.)
+filterwarnings = [
+    "ignore::DeprecationWarning:chirp",
+    "ignore:.*non-byte-native.*:DeprecationWarning",
+    "ignore:.*Invalid negative seek.*:DeprecationWarning",
+]

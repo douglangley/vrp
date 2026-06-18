@@ -1,0 +1,15 @@
+{# Inner content of one channel <tr>. Shared by the full grid render and by
+   single-row surgical refresh after an edit, so the markup stays identical.
+   Cells are plain read-only text; editing happens in a native wx dialog opened
+   by the per-row Edit button. #}
+{% macro row_inner(row, columns) -%}
+<th scope="row">{{ row.number }}{% if row.empty %} <span class="empty-tag">(empty)</span>{% endif %}</th>
+<td>
+  <button type="button" id="edit-btn-{{ row.number }}" class="row-edit"
+    aria-label="Edit channel {{ row.number }}{% if row.empty %}, empty{% endif %}"
+    onclick="window.vrp&&window.vrp.postMessage(JSON.stringify({action:'edit_channel',number:{{ row.number }}}))">Edit</button>
+</td>
+{% for cell in row.cells %}
+<td>{{ cell.display }}{% if not row.empty %} <span class="visually-hidden">(read only)</span>{% endif %}</td>
+{% endfor %}
+{%- endmacro %}
