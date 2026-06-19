@@ -52,6 +52,17 @@ def test_main_window_constructs_and_lists_channels(app):
         win._load_into_grid()
         assert win.grid.GetItemCount() == 16
         assert win.GetMenuBar().GetMenuCount() == 4
+
+        # CHIRP attribution must be permanently visible in status field 1.
+        sb = win.GetStatusBar()
+        assert sb is not None
+        assert "chirpmyradio.com" in sb.GetStatusText(1)
+
+        # Radio menu must include a Query Source submenu.
+        radio_menu = win.GetMenuBar().GetMenu(1)  # "&Radio" is index 1
+        labels = [radio_menu.FindItemByPosition(i).GetItemLabel()
+                  for i in range(radio_menu.GetMenuItemCount())]
+        assert any("Query Source" in lbl for lbl in labels)
     finally:
         radio_backend.unload()
         win.Destroy()

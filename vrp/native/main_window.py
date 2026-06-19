@@ -56,15 +56,28 @@ APP_SHORTCUTS = [
 ]
 
 
+_CHIRP_ATTRIBUTION = (
+    "Radio driver support provided by the CHIRP project — chirpmyradio.com."
+)
+
+
 class MainWindow(wx.Frame):
     def __init__(self) -> None:
         super().__init__(None, title="Versatile Radio Programmer", size=(900, 600))
-        self.CreateStatusBar()
+
+        # Two status bar fields: field 0 for announcements (overwritten freely),
+        # field 1 permanently holds the CHIRP attribution (never overwritten).
+        self.CreateStatusBar(2)
+        self.SetStatusWidths([-3, -2])
+        self.SetStatusText(_CHIRP_ATTRIBUTION, 1)
 
         # Build speech: Speaker is a class, not a bare function. Create an
         # instance and pass its .speak method; if prism is unavailable the
         # method is a no-op, so Announcer degrades gracefully.
         self._speaker = Speaker()
+        # Announcer calls set_status(message) with ONE argument, which maps to
+        # SetStatusText(message) — the no-index form writes field 0 only, so
+        # the attribution in field 1 is never touched.
         self.announce = Announcer(
             set_status=self.SetStatusText,
             speak=lambda m, interrupt=False: self._speaker.speak(m, interrupt=interrupt),
@@ -123,9 +136,28 @@ class MainWindow(wx.Frame):
         return m
 
     def _build_radio_menu(self) -> wx.Menu:
+        from chirp_backend import query as query_mod
+
         m = wx.Menu()
         self._add(m, "download", "&Download from Radio\tCtrl+Shift+D", self.on_download)
         self._add(m, "upload", "&Upload to Radio\tCtrl+Shift+U", self.on_upload, needs_radio=True)
+        m.AppendSeparator()
+
+        # Query Source submenu — one item per registered online source.
+        # Each item is gated on a loaded radio (the results import into it).
+        query_submenu = wx.Menu()
+        self._query_submenu_items: list[wx.MenuItem] = []
+        for src in query_mod.SOURCES:
+            item = query_submenu.Append(wx.ID_ANY, src["label"] + "…")
+            self.Bind(
+                wx.EVT_MENU,
+                lambda e, k=src["key"]: self.on_query_source(k),
+                item,
+            )
+            self._query_submenu_items.append(item)
+        self._mi_query_source = m.AppendSubMenu(query_submenu, "&Query Source")
+
+        m.AppendSeparator()
         self._add(m, "settings", "&Settings…\tCtrl+Shift+P", self.on_settings, needs_radio=True)
         self._add(m, "radio_info", "Radio &Info…", self.on_radio_info, needs_radio=True)
         return m
@@ -155,6 +187,13 @@ class MainWindow(wx.Frame):
         loaded = radio_backend.get_state().loaded
         for key in self._radio_gated_keys:
             self._menu_items[key].Enable(loaded)
+        # Gate the Query Source submenu: disable the parent item and each child
+        # item individually when no radio is loaded (results import into the
+        # loaded radio, so querying without one is meaningless).
+        if hasattr(self, "_mi_query_source"):
+            self._mi_query_source.Enable(loaded)
+        for item in getattr(self, "_query_submenu_items", []):
+            item.Enable(loaded)
 
     # -- channel handlers ---------------------------------------------
 
@@ -841,6 +880,102 @@ class MainWindow(wx.Frame):
         elif applied:
             self.announce.announce("No settings were changed.")
         self.grid.SetFocus()
+
+    # -- query sources ------------------------------------------------
+
+    def on_query_source(self, key: str) -> None:
+        """Radio > Query Source > <name> — ported from vrp/app.py on_query_source.
+
+        Opens QueryParamsDialog (same class as the webview app) to gather any
+        source-specific parameters, then runs the fetch on a background thread
+        and imports results via _import_results (shared with Import from File).
+        Requires a loaded radio — gated in the menu and guarded here.
+        """
+        from chirp_backend import query
+        from vrp.query_dialogs import QueryParamsDialog
+
+        if not radio_backend.get_state().loaded:
+            self.announce.announce(
+                "Open or download a radio first; query results import into it.",
+                assertive=True,
+            )
+            return
+        source = query.get_source(key)
+        if source is None:
+            return
+        dlg = QueryParamsDialog(self, source)
+        ok = dlg.ShowModal() == wx.ID_OK
+        params = dlg.get_params() if ok else None
+        dlg.Destroy()
+        if not ok:
+            self.grid.SetFocus()
+            return
+        self._run_query(key, source, params)
+
+    def _run_query(self, key: str, source: dict, params: dict | None) -> None:
+        """Start the background fetch for a query source (ported from app.py)."""
+        from chirp_backend import query
+        from vrp.serial_dialogs import CloneProgressDialog
+
+        radio_result = query.make_source_radio(key)
+        if radio_result is None:
+            self.announce.announce(
+                f"Could not load source {source['label']}.", assertive=True
+            )
+            self.grid.SetFocus()
+            return
+
+        progress = CloneProgressDialog(
+            self, f"Querying {source['label']}", allow_cancel=True
+        )
+        self.Disable()
+        progress.Show()
+        throttle = {"t": 0.0, "decade": -1}
+
+        def progress_cb(msg, percent):  # background thread
+            now = time.monotonic()
+            pct = int(percent or 0)
+            speak = (now - throttle["t"] >= 1.0) or (pct // 10 != throttle["decade"])
+            if speak:
+                throttle["t"] = now
+                throttle["decade"] = pct // 10
+            wx.CallAfter(self._on_query_progress, progress, msg, pct, speak)
+
+        def worker():
+            ok, message = query.run_fetch(radio_result, params or {}, progress_cb)
+            wx.CallAfter(
+                self._on_query_done, source, progress, radio_result, ok, message
+            )
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _on_query_progress(
+        self, progress, msg: str, percent: int, speak: bool
+    ) -> None:
+        progress.update(percent, 100, msg)
+        if speak and msg:
+            self.announce.announce(msg)
+
+    def _on_query_done(
+        self, source: dict, progress, radio_result, ok: bool, message: str
+    ) -> None:
+        from chirp_backend import query
+
+        cancelled = progress.is_cancelled()
+        progress.Destroy()
+        self.Enable()
+        self.grid.SetFocus()
+
+        if cancelled:
+            self.announce.announce("Query cancelled.")
+            return
+        if not ok:
+            self.announce.announce(message, assertive=True)
+            wx.MessageBox(message, "Query failed", wx.OK | wx.ICON_ERROR, self)
+            return
+        self.announce.announce(f"{source['label']}: {message}")
+        if query.result_count(radio_result) > 0:
+            self._import_results(radio_result, query.result_count(radio_result))
 
     def on_radio_info(self, _evt=None) -> None:
         """Radio > Radio Info — plain-text summary of the loaded radio.
