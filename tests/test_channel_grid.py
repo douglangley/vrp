@@ -41,3 +41,17 @@ def test_grid_populates_and_maps_selection(app):
         frame.Destroy()
     finally:
         radio_backend.unload()
+
+
+def test_main_window_constructs_and_lists_channels(app):
+    from vrp.native.main_window import MainWindow
+
+    win = MainWindow()
+    try:
+        radio_backend.load_image(IMAGE)
+        win._load_into_grid()
+        assert win.grid.GetItemCount() == 16
+        assert win.GetMenuBar().GetMenuCount() == 4
+    finally:
+        radio_backend.unload()
+        win.Destroy()
