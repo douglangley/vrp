@@ -65,8 +65,11 @@ class ChannelGrid(wx.ListCtrl):
 
     def select_channels(self, numbers: list[int]) -> None:
         """Replace the selection with exactly ``numbers``."""
-        for i in range(self.GetItemCount()):
-            self.Select(i, on=False)
+        item = self.GetFirstSelected()
+        while item != -1:
+            nxt = self.GetNextSelected(item)
+            self.Select(item, on=False)
+            item = nxt
         for n in numbers:
             idx = grid_model.number_to_index(self._rows, n)
             if idx is not None:
@@ -114,6 +117,21 @@ class ChannelGrid(wx.ListCtrl):
                 "cells": cells,
             }
             self.RefreshItem(idx)
+
+    def reorder_refresh(self) -> None:
+        """Refresh row contents/order after a reorder WITHOUT rebuilding columns.
+
+        A move/sort changes which channel is in each slot but not the column
+        set, so we keep the columns (avoiding a ClearAll that drops screen-reader
+        focus) and just rebuild the row model + repaint.
+        """
+        state = radio_backend.get_state()
+        if not state.loaded:
+            return
+        self._rows = grid_model.build_rows(state)
+        self.SetItemCount(len(self._rows))
+        if self._rows:
+            self.RefreshItems(0, len(self._rows) - 1)
 
     def rebuild(self) -> None:
         """Full rebuild after a structural op (move/delete/insert/sort)."""

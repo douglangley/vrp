@@ -43,6 +43,15 @@ APP_SHORTCUTS = [
     ("Ctrl+Shift+D", "Download from radio"),
     ("Ctrl+Shift+U", "Upload to radio"),
     ("Ctrl+Shift+P", "Edit radio settings"),
+    ("F2 / Enter", "Edit the focused channel"),
+    ("Ctrl+Shift+G", "Go to channel"),
+    ("Ctrl+B", "Channel banks for the focused channel"),
+    ("Ctrl+Shift+Up", "Move selected channel(s) up"),
+    ("Ctrl+Shift+Down", "Move selected channel(s) down"),
+    ("Ctrl+Shift+M", "Move selected channel(s) to a chosen slot"),
+    ("Ctrl+M", "Organize Channels dialog"),
+    ("Ctrl+F", "Find a channel"),
+    ("Ctrl+G", "Find next match"),
     ("F1", "Show this list of keyboard shortcuts"),
 ]
 
@@ -58,12 +67,17 @@ class MainWindow(wx.Frame):
         self._speaker = Speaker()
         self.announce = Announcer(
             set_status=self.SetStatusText,
-            speak=lambda m: self._speaker.speak(m, interrupt=True),
+            speak=lambda m, interrupt=False: self._speaker.speak(m, interrupt=interrupt),
         )
 
         self.grid = ChannelGrid(self)
+        self.grid.Bind(wx.EVT_LIST_ITEM_ACTIVATED, self.on_edit_channel)
         self._menu_items: dict[str, wx.MenuItem] = {}
         self._radio_gated_keys: set[str] = set()
+        # Find state: query string, fields, last matched channel.
+        self._find_query: str | None = None
+        self._find_fields: tuple = ("freq", "name", "comment")
+        self._find_last: int | None = None
         self._build_menubar()
         self._update_menu_state()
         self.grid.SetFocus()
@@ -117,8 +131,19 @@ class MainWindow(wx.Frame):
         return m
 
     def _build_channels_menu(self) -> wx.Menu:
-        # Filled in by the reorganization task; empty for now so the bar builds.
-        return wx.Menu()
+        m = wx.Menu()
+        self._add(m, "edit", "&Edit channel…\tF2", self.on_edit_channel, needs_radio=True)
+        self._add(m, "goto", "&Go to channel…\tCtrl+Shift+G", self.on_goto, needs_radio=True)
+        self._add(m, "banks", "Channel &banks…\tCtrl+B", self.on_banks, needs_radio=True)
+        m.AppendSeparator()
+        self._add(m, "move_up", "Move &up\tCtrl+Shift+Up", self.on_move_up, needs_radio=True)
+        self._add(m, "move_down", "Move &down\tCtrl+Shift+Down", self.on_move_down, needs_radio=True)
+        self._add(m, "move_to", "&Move to channel…\tCtrl+Shift+M", self.on_move_to, needs_radio=True)
+        self._add(m, "organize", "&Organize Channels…\tCtrl+M", self.on_organize, needs_radio=True)
+        m.AppendSeparator()
+        self._add(m, "find", "&Find…\tCtrl+F", self.on_find, needs_radio=True)
+        self._add(m, "find_next", "Find &next\tCtrl+G", self.on_find_next, needs_radio=True)
+        return m
 
     def _build_help_menu(self) -> wx.Menu:
         m = wx.Menu()
@@ -130,6 +155,335 @@ class MainWindow(wx.Frame):
         loaded = radio_backend.get_state().loaded
         for key in self._radio_gated_keys:
             self._menu_items[key].Enable(loaded)
+
+    # -- channel handlers ---------------------------------------------
+
+    def on_edit_channel(self, _evt=None) -> None:
+        """Edit the focused channel in a native dialog, then refresh that row."""
+        number = self.grid.focused_channel()
+        if number is None:
+            self.announce.announce("No channel selected.")
+            return
+        state = radio_backend.get_state()
+        mem = radio_backend.get_memory(number)
+        if mem is None:
+            return
+        from vrp.edit_dialog import EditChannelDialog
+        from chirp_backend import memory_ops
+
+        with EditChannelDialog(self, number, mem, state.features) as dlg:
+            if dlg.ShowModal() != wx.ID_OK:
+                self.grid.select_channels([number])
+                self.grid.focus_channel(number)
+                return
+            ok, message, _affected = memory_ops.update_channel(number, dlg.get_values())
+        self.grid.refresh_numbers([number])
+        self.grid.select_channels([number])
+        self.grid.focus_channel(number)
+        self.announce.announce(message, assertive=not ok)
+
+    def on_goto(self, _evt=None) -> None:
+        """Go to a specific channel by number — prompt, select, and focus it."""
+        low, high = radio_backend.get_state().memory_bounds
+        n = wx.GetNumberFromUser(
+            "Go to channel:", "Channel", "Go to channel", low, low, high, self
+        )
+        if n == -1:
+            return
+        self.grid.select_channels([n])
+        self.grid.focus_channel(n)
+        self.announce.announce(f"Channel {n}")
+
+    def on_banks(self, _evt=None) -> None:
+        """Open the banks dialog for the focused channel; apply changes."""
+        from chirp_backend import bank_ops
+        from vrp.bank_dialog import ChannelBanksDialog
+
+        number = self.grid.focused_channel()
+        if number is None:
+            self.announce.announce("No channel selected.")
+            return
+        state = bank_ops.get_bank_state(number)
+        if not state.get("ok"):
+            self.announce.announce(state.get("message", "Banks unavailable."), assertive=True)
+            return
+
+        dlg = ChannelBanksDialog(self, state)
+        applied = dlg.ShowModal() == wx.ID_OK and not state["read_only"]
+        desired = dlg.get_desired_indexes() if applied else None
+        dlg.Destroy()
+
+        if desired is not None:
+            ok, message, _affected = bank_ops.apply_bank_changes(number, desired)
+            if ok:
+                self.announce.announce(message)
+            else:
+                self.announce.announce(message, assertive=True)
+                wx.MessageBox(message, "Banks", wx.OK | wx.ICON_ERROR, self)
+        # Return focus to the channel row.
+        self.grid.select_channels([number])
+        self.grid.focus_channel(number)
+
+    def _do_move(self, direction: int) -> None:
+        """Shared implementation for move-up / move-down."""
+        from chirp_backend import memory_ops
+        from vrp.native import grid_model
+
+        numbers = self.grid.selected_channel_numbers()
+        if not numbers:
+            return
+        ok, message, _affected = memory_ops.move_memories(numbers, direction)
+        if ok:
+            self.grid.reorder_refresh()
+            new_sel, focus = grid_model.selection_after_move(numbers, direction)
+            self.grid.select_channels(new_sel)
+            self.grid.focus_channel(focus)
+            first, last = new_sel[0], new_sel[-1]
+            if first == last:
+                where = f". Now on channel {first}."
+            else:
+                where = f". Now at channels {first} to {last}, on channel {first}."
+            self.announce.announce(message + where)
+        else:
+            self.announce.announce(message, assertive=True)
+
+    def on_move_up(self, _evt=None) -> None:
+        self._do_move(-1)
+
+    def on_move_down(self, _evt=None) -> None:
+        self._do_move(1)
+
+    def on_move_to(self, _evt=None) -> None:
+        """Move the selected channel(s) to start at a user-chosen channel."""
+        from chirp_backend import memory_ops
+        from vrp.native import grid_model
+
+        numbers = self.grid.selected_channel_numbers()
+        if not numbers:
+            return
+        low, high = radio_backend.get_state().memory_bounds
+        dest = wx.GetNumberFromUser(
+            f"Move {len(numbers)} channel(s) to start at channel:",
+            "Destination", "Move to channel", low, low, high, self,
+        )
+        if dest == -1:
+            return
+        ok, message, _affected = memory_ops.move_to(numbers, dest)
+        if ok:
+            self.grid.reorder_refresh()
+            new_sel, focus = grid_model.selection_after_move_to(len(numbers), dest)
+            self.grid.select_channels(new_sel)
+            self.grid.focus_channel(focus)
+            first, last = new_sel[0], new_sel[-1]
+            if first == last:
+                where = f". Now on channel {first}."
+            else:
+                where = f". Now at channels {first} to {last}, on channel {first}."
+            self.announce.announce(message + where)
+        else:
+            self.announce.announce(message, assertive=True)
+
+    def on_organize(self, _evt=None) -> None:
+        """Open the Organize Channels dialog; dispatch the chosen operation."""
+        from chirp_backend import memory_ops as mo
+        from vrp.native import grid_model
+        from vrp.ops_dialog import ChannelOperationsDialog
+
+        state = radio_backend.get_state()
+        if not state.loaded:
+            self.announce.announce("No radio image is open.", assertive=True)
+            return
+        low, high = state.memory_bounds
+        default_from = self.grid.focused_channel() or low
+        columns = [(c["name"], c["label"]) for c in grid_model.column_meta(state)]
+        with ChannelOperationsDialog(self, low, high, default_from, columns) as dlg:
+            if dlg.ShowModal() != wx.ID_OK:
+                return
+            numbers, _err = dlg.selected_numbers()
+            op = dlg.get_operation()
+
+        key = op["op"]
+        confirm = self._op_confirm_message(key, op, numbers)
+        if confirm and not self._confirm(confirm):
+            return
+        if key in ("move_to", "copy_to") and self._destination_occupied(
+            op["dest"], len(numbers)
+        ):
+            verb = "moved" if key == "move_to" else "copied"
+            if not self._confirm(
+                f"Channels at {op['dest']} and following are not empty and will "
+                f"be overwritten by the {verb} channels. Continue?"
+            ):
+                return
+
+        runner = {
+            "delete": lambda: mo.delete_range(numbers),
+            "delete_shift": lambda: mo.delete_and_shift(numbers, op.get("mode", "all")),
+            "insert": lambda: mo.insert_row(numbers[0]),
+            "move_up": lambda: mo.move_memories(numbers, -1),
+            "move_down": lambda: mo.move_memories(numbers, 1),
+            "move_to": lambda: mo.move_to(numbers, op["dest"]),
+            "copy_to": lambda: mo.copy_memories(numbers, op["dest"]),
+            "sort": lambda: mo.sort_range(numbers, op["attr"], op["reverse"]),
+            "arrange": lambda: mo.arrange_range(numbers),
+        }.get(key)
+        if runner is None:
+            return
+        ok, message, _affected = runner()
+
+        if not ok:
+            self.announce.announce(message, assertive=True)
+            return
+
+        if key in ("move_up", "move_down", "move_to", "copy_to"):
+            # Reorder ops: refresh without ClearAll (preserves screen-reader focus),
+            # then reselect the entire moved/copied block.
+            self.grid.reorder_refresh()
+            if key in ("move_up", "move_down"):
+                direction = -1 if key == "move_up" else 1
+                block, focus = grid_model.selection_after_move(numbers, direction)
+            else:
+                dest = op["dest"]
+                block, focus = grid_model.selection_after_move_to(len(numbers), dest)
+            self.grid.select_channels(block)
+            self.grid.focus_channel(focus)
+            first, last = block[0], block[-1]
+            if first == last:
+                where = f" Now on channel {first}."
+            else:
+                where = f" Now at channels {first} to {last}, on channel {first}."
+            self.announce.announce(f"{message}{where}")
+        else:
+            # Structural ops (delete, insert, sort, arrange): full rebuild needed,
+            # land on the single logical focus target.
+            self.grid.rebuild()
+            target = self._op_focus_target(key, numbers, op)
+            self.grid.select_channels([target])
+            self.grid.focus_channel(target)
+            self.announce.announce(f"{message} Now on channel {target}.")
+
+    def _op_focus_target(self, key: str, numbers: list[int], op: dict) -> int:
+        """Mirror of app.py _op_focus_target: where focus lands after an organize op."""
+        low, high = radio_backend.get_state().memory_bounds
+        if key in ("move_to", "copy_to"):
+            target = op["dest"]
+        elif key == "move_up":
+            target = numbers[0] - 1
+        elif key == "move_down":
+            target = numbers[0] + 1
+        else:
+            target = numbers[0]
+        return min(max(target, low), high)
+
+    def _op_confirm_message(self, key: str, op: dict, numbers: list[int]) -> str | None:
+        """Return a confirmation prompt for destructive/reordering ops, or None."""
+        first, last, count = numbers[0], numbers[-1], len(numbers)
+        rng = f"{count} channel(s), {first} to {last}"
+        if key == "delete":
+            return (
+                f"Delete {rng}? Their contents will be cleared. "
+                "This cannot be undone."
+            )
+        if key == "delete_shift":
+            scope = (
+                "and shift all higher channels down to close the gap (this renumbers them)"
+                if op.get("mode", "all") == "all"
+                else "and shift channels within the block"
+            )
+            return f"Delete {rng} {scope}? This cannot be undone."
+        if key == "sort":
+            order = "descending" if op.get("reverse") else "ascending"
+            return (
+                f"Sort {rng} by {op.get('attr')} {order}? This reorders and "
+                "renumbers these channels. This cannot be undone."
+            )
+        if key == "arrange":
+            return (
+                f"Compact {rng}, removing empty slots? Channels will be "
+                "renumbered. This cannot be undone."
+            )
+        return None
+
+    def _destination_occupied(self, dest: int, count: int) -> bool:
+        """True if any of the target slots are non-empty."""
+        low, high = radio_backend.get_state().memory_bounds
+        for n in range(dest, min(high, dest + count - 1) + 1):
+            mem = radio_backend.get_memory(n)
+            if mem is not None and not getattr(mem, "empty", True):
+                return True
+        return False
+
+    def on_find(self, _evt=None) -> None:
+        """Open the Find dialog; jump to and announce the first match."""
+        from chirp_backend import memory_ops
+        from vrp.find_dialog import FindDialog
+
+        if not radio_backend.get_state().loaded:
+            self.announce.announce("No radio image is open.", assertive=True)
+            return
+
+        def _search(query: str, fields: tuple) -> bool:
+            self._find_query = query
+            self._find_fields = fields
+            ok, _message, affected = memory_ops.find(query, None, fields)
+            if not ok:
+                return False
+            self._find_last = affected[0]
+            return True
+
+        dlg = FindDialog(self, _search)
+        found = dlg.ShowModal() == wx.ID_OK
+        dlg.Destroy()
+        if found and self._find_last is not None:
+            n = self._find_last
+            self.grid.select_channels([n])
+            self.grid.focus_channel(n)
+            self.announce.announce(self._describe_match(n, prefix="Found "))
+        else:
+            self.grid.SetFocus()
+
+    def on_find_next(self, _evt=None) -> None:
+        """Continue the last find, wrapping if needed; announce the result."""
+        from chirp_backend import memory_ops
+
+        if not radio_backend.get_state().loaded:
+            self.announce.announce("No radio image is open.", assertive=True)
+            return
+        if not self._find_query:
+            self.announce.announce("No active search. Press Ctrl+F to find.", assertive=True)
+            return
+        low, _high = radio_backend.get_state().memory_bounds
+        start = (self._find_last + 1) if self._find_last is not None else low
+        ok, _message, affected = memory_ops.find(
+            self._find_query, start, self._find_fields
+        )
+        if not ok:
+            self.announce.announce(
+                f"No matches for '{self._find_query}'.", assertive=True
+            )
+            return
+        prev = self._find_last
+        ch = affected[0]
+        self._find_last = ch
+        self.grid.select_channels([ch])
+        self.grid.focus_channel(ch)
+        if prev is not None and ch == prev:
+            prefix = "Only match. "
+        elif prev is not None and ch <= prev:
+            prefix = "Wrapped to start. "
+        else:
+            prefix = "Next match. "
+        self.announce.announce(self._describe_match(ch, prefix=prefix))
+
+    def _describe_match(self, number: int, prefix: str = "") -> str:
+        """Human-readable description of a find match."""
+        mem = radio_backend.get_memory(number)
+        detail = ""
+        if mem is not None and not getattr(mem, "empty", True):
+            name = (getattr(mem, "name", "") or "").strip()
+            mhz = f"{mem.freq / 1_000_000:.6f}".rstrip("0").rstrip(".")
+            detail = f": {name or mhz}"
+        return f"{prefix}'{self._find_query}' at channel {number}{detail}."
 
     # -- helpers shared by handlers -----------------------------------
 

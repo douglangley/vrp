@@ -208,3 +208,23 @@ keeps the dialog open and speaks "not found"; an empty search field is rejected.
 Delete, insert, move up/down, move-to, copy-to, sort, arrange, find/find-next,
 goto — all keyboard-accessible, with a "Move to channel…" style dialog instead
 of any drag-and-drop. Exact bindings to be filled in when implemented.
+
+## Native UI: reorganizing channels (keyboard)
+
+The native channel grid is a multi-select list. Select one channel, or a group:
+`Shift+Arrow` extends a contiguous block; `Ctrl+Space` toggles individual rows
+for a non-contiguous set. Then:
+
+| Key                 | Action                                            |
+|---------------------|---------------------------------------------------|
+| `F2` / `Enter`      | Edit the focused channel (dialog)                 |
+| `Ctrl+Shift+Up`     | Move the selected channel(s) up one slot          |
+| `Ctrl+Shift+Down`   | Move the selected channel(s) down one slot        |
+| `Ctrl+Shift+M`      | Move the selected channel(s) to a chosen channel  |
+| `Ctrl+M`            | Organize (delete/copy/sort/insert/arrange) dialog |
+| `Ctrl+Shift+G`      | Go to channel                                     |
+| `Ctrl+F` / `Ctrl+G` | Find / Find next                                  |
+| `Ctrl+B`            | Channel banks for the focused channel             |
+
+After a move, the moved block stays selected at its new position and focus lands
+on its first channel; the result is announced via the status bar and speech.
