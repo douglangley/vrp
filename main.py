@@ -12,8 +12,15 @@ Importing ``vrp`` first applies the CHIRP import-path fix (see
 import argparse
 import logging
 import os
+import sys
 
 import vrp  # noqa: F401  (import side effect: makes the vendored chirp importable)
+
+
+def parse_mode(argv: list[str]) -> str:
+    """Return 'native' if --native is present, else 'webview'."""
+    return "native" if "--native" in argv else "webview"
+
 
 # Opt-in local dev knob: point at an extracted WebView2 Fixed Version Runtime
 # folder to bypass the system Evergreen runtime. Must be set before any
@@ -44,4 +51,10 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    if parse_mode(sys.argv) == "native":
+        from vrp.native.app import run
+
+        debug = "--debug" in sys.argv
+        run(debug=debug)
+    else:
+        main()
