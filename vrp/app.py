@@ -92,6 +92,7 @@ _SHORTCUTS_JS = """
   if (window.__vrpKeys) return;
   window.__vrpKeys = true;
   function post(action){ if(window.vrp){ window.vrp.postMessage(JSON.stringify({action:action})); } }
+  function postMenu(index){ if(window.vrp){ window.vrp.postMessage(JSON.stringify({action:'menu_open', index:index})); } }
   function inText(el){
     if(!el) return false;
     if(el.tagName==='TEXTAREA' || el.isContentEditable) return true;
@@ -99,7 +100,27 @@ _SHORTCUTS_JS = """
       return ['text','search','number','email','tel','url','password'].indexOf(t)!==-1; }
     return false;
   }
+  // Native menu bar. A focused WebView2 hides Alt/F10 from wx, but the page
+  // still sees them here. Alt by itself activates the bar (confirmed on keyup,
+  // so it isn't mistaken for the start of Alt+letter / Alt+Tab); Alt+F/R/C/H
+  // opens that menu; F10 activates the bar. Python then drives the real menu.
+  var altAlone = false;
+  document.addEventListener('keyup', function(e){
+    if(e.key==='Alt'){
+      if(altAlone){ e.preventDefault(); post('menu_activate'); }
+      altAlone=false;
+    }
+  }, true);
   document.addEventListener('keydown', function(e){
+    if(e.key==='Alt' && !e.ctrlKey && !e.shiftKey && !e.metaKey){ altAlone=true; return; }
+    if(e.key==='F10' && !e.altKey && !e.ctrlKey && !e.shiftKey && !e.metaKey){
+      altAlone=false; e.preventDefault(); post('menu_activate'); return; }
+    if(e.altKey && !e.ctrlKey && !e.metaKey){
+      var mk=(e.key||'').toLowerCase();
+      var midx={'f':0,'r':1,'c':2,'h':3}[mk];
+      altAlone=false;
+      if(midx!==undefined){ e.preventDefault(); postMenu(midx); return; }
+    } else if(e.key!=='Alt'){ altAlone=false; }
     if(e.key==='F1'){ e.preventDefault(); post('shortcuts'); return; }
     if(e.ctrlKey && e.altKey && !e.metaKey){          // Ctrl+Alt+arrows = paging
       if(e.key==='ArrowRight'){ e.preventDefault(); post('page_next'); return; }
@@ -542,6 +563,16 @@ class MainWindow(wx.Frame):
         """
         LOG.debug("bridge message: %r", data)
         action = data.get("action") if isinstance(data, dict) else None
+        # Menu keys (Alt / Alt+letter / F10) are caught by in-page JS because a
+        # focused WebView2 hides them from wx; the page bridges them here and we
+        # drive the real native menu bar.
+        if action == "menu_activate":
+            self._activate_menu_bar()
+            return
+        if action == "menu_open":
+            idx = data.get("index", 0) if isinstance(data, dict) else 0
+            self._open_menu_bar_menu(int(idx) if idx is not None else 0)
+            return
         handler = {
             "open": self.on_open,
             "save": self.on_save,
