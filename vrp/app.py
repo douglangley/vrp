@@ -21,12 +21,16 @@ separate fix: ``MainWindow`` binds ``EVT_CHAR_HOOK`` on the frame, which wx
 implements via a low-level keyboard hook on Windows specifically so it can
 see keys a child control would otherwise consume (the same mechanism
 ``wx_accessible_webview``'s own dialogs already use for Escape). Alt+letter
-and F10 are detected there and open the matching top-level menu via
-``PopupMenu()`` on the same ``wx.Menu`` object already attached to the menu
-bar — a real native Win32 menu, NVDA-readable, arrow keys + Enter work,
-``EVT_MENU`` fires normally. (Bare Alt-alone-opens-menu is intentionally not
-implemented — see ``_on_char_hook``.) After a menu action, webview focus is
-restored so the bridged shortcuts stay live.
+and F10 are detected there and drive the real native menu bar into its
+keyboard loop by posting ``WM_SYSCOMMAND``/``SC_KEYMENU`` to the frame — the
+exact message Windows itself sends on Alt, which WebView2 was eating. That
+puts the actual menu bar in navigation mode, so Left/Right move across
+File/Radio/Channels/Help and Up/Down/Enter work, NVDA-readable, ``EVT_MENU``
+fires normally. (An earlier attempt used ``PopupMenu()`` on a single
+``wx.Menu``, but a detached popup has no menu-bar context, so Left/Right were
+dead — see ``_open_menu_bar_menu``. Bare Alt-alone-opens-menu is intentionally
+not implemented — see ``_on_char_hook``.) After a menu closes, webview focus
+is restored so the bridged shortcuts stay live.
 """
 
 from __future__ import annotations
@@ -285,6 +289,13 @@ class MainWindow(wx.Frame):
         self._update_menu_state()
         self._rebuild_recent_menu()
 
+        # The native menu loop (opened via Alt/F10 → SC_KEYMENU) leaves focus on
+        # the frame when it closes without a selection (e.g. Escape). Return
+        # focus to the webview so the page keeps receiving keys and NVDA lands
+        # back in the grid. Chosen items already restore focus via
+        # _menu_then_focus / their own re-render.
+        self.Bind(wx.EVT_MENU_CLOSE, self._on_menu_close)
+
     def _menu_then_focus(self, handler):
         """Wrap a menu handler so webview focus is restored after it runs."""
         def wrapper(event):
@@ -296,6 +307,12 @@ class MainWindow(wx.Frame):
         if self.view.using_webview and self.view.view is not None:
             self.view.view.SetFocus()
         self.view.focus()
+
+    def _on_menu_close(self, event: wx.MenuEvent) -> None:
+        """Return focus to the webview after a native menu closes (e.g. Escape)."""
+        event.Skip()
+        # Defer until the menu loop has fully unwound, or SetFocus is ignored.
+        wx.CallAfter(self._restore_webview_focus)
 
     # Mnemonic letter -> top-level menu index, matching _build_menubar's
     # bar.Append() order and the &File/&Radio/&Channels/&Help accelerators.
@@ -342,16 +359,46 @@ class MainWindow(wx.Frame):
             return  # consumed
         event.Skip()
 
-    def _open_menu_bar_menu(self, index: int) -> None:
-        """Pop up one of the menu bar's own menus as a substitute for Alt.
+    # Top-level menu index -> its mnemonic key code, matching _build_menubar's
+    # &File/&Radio/&Channels/&Help order. Used to drive the native menu bar.
+    _MENU_INDEX_TO_MNEMONIC = {0: ord("f"), 1: ord("r"), 2: ord("c"), 3: ord("h")}
 
-        Reuses the same wx.Menu object already attached to the menu bar (same
-        items, same EVT_MENU bindings, same enable/disable state from
-        _update_menu_state) — this is a real native Win32 menu, not a
-        reimplementation, so it reads and navigates in NVDA exactly like any
-        other native popup menu. PopupMenu() blocks until dismissed/chosen;
-        EVT_MENU for a chosen item fires synchronously inside this call.
+    def _open_menu_bar_menu(self, index: int) -> None:
+        """Open a top-level menu in the REAL native menu-bar keyboard loop.
+
+        Earlier this popped one wx.Menu with PopupMenu(), but a standalone
+        popup has no menu-bar context, so Left/Right (move between File / Radio
+        / Channels / Help) were dead — you could only go Up/Down within the one
+        menu. That is the bug this fixes.
+
+        On Windows the focused WebView2 swallows Alt (issue #24786), so the OS
+        never enters menu mode on its own. Posting WM_SYSCOMMAND / SC_KEYMENU to
+        the frame is the exact signal Windows sends when you press Alt: it drives
+        the actual menu bar into keyboard-navigation mode, where Left/Right move
+        across the top-level menus and Up/Down/Enter work, just like any native
+        app and read correctly in NVDA. Non-Windows platforms keep PopupMenu.
         """
+        if wx.Platform == "__WXMSW__":
+            import ctypes
+            from ctypes import wintypes
+
+            WM_SYSCOMMAND = 0x0112
+            SC_KEYMENU = 0xF100
+            user32 = ctypes.windll.user32
+            # Set argtypes so the 64-bit HWND isn't truncated to a C int.
+            user32.PostMessageW.argtypes = [
+                wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM,
+            ]
+            user32.PostMessageW.restype = wintypes.BOOL
+            # lParam = the menu's mnemonic char opens that menu and enters the
+            # menu loop (0 would just activate the bar at the first item).
+            user32.PostMessageW(
+                self.GetHandle(),
+                WM_SYSCOMMAND,
+                SC_KEYMENU,
+                self._MENU_INDEX_TO_MNEMONIC.get(index, 0),
+            )
+            return
         bar = self.GetMenuBar()
         menu = bar.GetMenu(index)
         self.PopupMenu(menu, wx.Point(0, 0))
