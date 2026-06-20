@@ -177,6 +177,15 @@ class MainWindow(wx.Frame):
         self.SetSizer(sizer)
 
         self._build_menubar()
+        # Wire the keyboard hook that drives the native menu bar (plain Alt,
+        # Alt+letter, F10). EVT_CHAR_HOOK is a low-level key hook that sees keys
+        # before the focused WebView2 can swallow them. _on_char_hook Skip()s
+        # every key it doesn't consume, so in-page typing, buttons, and the
+        # webview's own keys are unaffected. (Historically disabled during a
+        # diagnosis of a menu-build-order bug that is now reverted; re-enabled.)
+        self.Bind(wx.EVT_CHAR_HOOK, self._on_char_hook)
+        # Log when a native menu actually opens, to confirm activation works.
+        self.Bind(wx.EVT_MENU_OPEN, self._on_menu_open)
         self.show_welcome()
         self.view.focus()
 
@@ -308,6 +317,11 @@ class MainWindow(wx.Frame):
             self.view.view.SetFocus()
         self.view.focus()
 
+    def _on_menu_open(self, event: wx.MenuEvent) -> None:
+        """Diagnostic: confirms a native menu actually opened (key path works)."""
+        LOG.debug("menu OPEN fired — native menu activated")
+        event.Skip()
+
     def _on_menu_close(self, event: wx.MenuEvent) -> None:
         """Return focus to the webview after a native menu closes (e.g. Escape)."""
         event.Skip()
@@ -344,6 +358,10 @@ class MainWindow(wx.Frame):
         in wx and stops propagation otherwise).
         """
         key = event.GetKeyCode()
+        LOG.debug(
+            "char_hook key=%d alt=%s ctrl=%s shift=%s",
+            key, event.AltDown(), event.ControlDown(), event.ShiftDown(),
+        )
 
         # Plain Alt by itself: arm menu-bar activation (cancelled below if a
         # second key turns it into a combo).
@@ -395,7 +413,13 @@ class MainWindow(wx.Frame):
             wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM,
         ]
         user32.PostMessageW.restype = wintypes.BOOL
-        user32.PostMessageW(self.GetHandle(), WM_SYSCOMMAND, SC_KEYMENU, lparam)
+        hwnd = self.GetHandle()
+        ok = user32.PostMessageW(hwnd, WM_SYSCOMMAND, SC_KEYMENU, lparam)
+        fg = user32.GetForegroundWindow()
+        LOG.debug(
+            "SC_KEYMENU lparam=%d post_ok=%s hwnd=%s foreground=%s match=%s",
+            lparam, bool(ok), hwnd, fg, hwnd == fg,
+        )
         return True
 
     def _open_menu_bar_menu(self, index: int) -> None:
