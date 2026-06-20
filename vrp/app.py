@@ -1409,7 +1409,14 @@ class VRPApp(wx.App):
     """The wx application object."""
 
     def OnInit(self) -> bool:  # noqa: N802 (wx naming)
-        self.SetAppName(APP_TITLE)
+        # Use a space-free app name. wxWidgets' Edge backend derives the
+        # WebView2 user-data folder from GetUserLocalDataDir()
+        # (== %LOCALAPPDATA%\<AppName>) with no override, and Edge fails with
+        # "can't create its data directory" when that path contains spaces
+        # ("...\Versatile Radio Programmer"). Keep the human-facing title via
+        # the display name; the window title is set explicitly elsewhere.
+        self.SetAppName("VRP")
+        self.SetAppDisplayName(APP_TITLE)
         window = MainWindow()
         window.Show()
         self.SetTopWindow(window)
