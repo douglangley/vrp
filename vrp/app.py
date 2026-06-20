@@ -207,6 +207,11 @@ class MainWindow(wx.Frame):
         self.Bind(wx.EVT_CHAR_HOOK, self._on_char_hook)
         # Log when a native menu actually opens, to confirm activation works.
         self.Bind(wx.EVT_MENU_OPEN, self._on_menu_open)
+        # Maximizing / reactivating the window can move focus off the webview
+        # onto the frame; the menu keys are caught inside the page, so they go
+        # dead until focus is back in the content. Pull it back (rule #6).
+        self.Bind(wx.EVT_MAXIMIZE, self._on_maximize)
+        self.Bind(wx.EVT_ACTIVATE, self._on_activate)
         self.show_welcome()
         self.view.focus()
 
@@ -342,6 +347,22 @@ class MainWindow(wx.Frame):
         """Diagnostic: confirms a native menu actually opened (key path works)."""
         LOG.debug("menu OPEN fired — native menu activated")
         event.Skip()
+
+    def _on_maximize(self, event: wx.MaximizeEvent) -> None:
+        """Keep keys alive after maximize: focus can land on the frame, but the
+        menu keys are caught in the page, so return focus to the webview."""
+        event.Skip()
+        LOG.debug("maximize — restoring webview focus")
+        wx.CallAfter(self._restore_webview_focus)
+
+    def _on_activate(self, event: wx.ActivateEvent) -> None:
+        """Return focus to the webview when the window regains activation, so the
+        in-page key handling keeps working (e.g. after Alt+Tab or maximize)."""
+        event.Skip()
+        # Skip while a modal dialog is up (the frame is disabled then), so we
+        # don't yank focus away from the dialog.
+        if event.GetActive() and self.IsEnabled():
+            wx.CallAfter(self._restore_webview_focus)
 
     def _on_menu_close(self, event: wx.MenuEvent) -> None:
         """Return focus to the webview after a native menu closes (e.g. Escape)."""
