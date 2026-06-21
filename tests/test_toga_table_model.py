@@ -155,7 +155,9 @@ def test_page_for_channel_matches_loaded_radio_bounds():
     assert page_for_channel(999, page_size=100) == 2
 
 
-def test_refresh_table_reuses_content_and_table_when_schema_is_unchanged(monkeypatch):
+def test_refresh_table_reuses_content_table_and_data_when_schema_is_unchanged(
+    monkeypatch,
+):
     monkeypatch.setenv("TOGA_BACKEND", "toga_dummy")
 
     from vrp_toga import app as appmod
@@ -201,9 +203,13 @@ def test_refresh_table_reuses_content_and_table_when_schema_is_unchanged(monkeyp
     )
 
     scroll_calls = []
+    source = appmod.ListSource(accessors=initial_page.accessors, data=initial_page.rows)
+    selected_row = source[1]
     table = SimpleNamespace(
-        data=appmod.ListSource(accessors=initial_page.accessors, data=initial_page.rows),
-        scroll_to_top=lambda: scroll_calls.append("top"),
+        data=source,
+        selection=selected_row,
+        scroll_to_row=lambda index: scroll_calls.append(("row", index)),
+        scroll_to_top=lambda: scroll_calls.append(("top", None)),
     )
     content = object()
 
@@ -224,6 +230,7 @@ def test_refresh_table_reuses_content_and_table_when_schema_is_unchanged(monkeyp
 
     assert app.main_window.content is content
     assert app.table is table
+    assert app.table.data is source
     assert app.radio_label.text == next_page.radio_label
     assert app.status_label.text == next_page.status
     rows = list(app.table.data)
@@ -232,7 +239,94 @@ def test_refresh_table_reuses_content_and_table_when_schema_is_unchanged(monkeyp
     assert app._last_table_page is next_page
     assert app._page == 2
     assert refresh_calls == ["refreshed"]
-    assert scroll_calls == ["top"]
+    assert scroll_calls == [("row", 1)]
+
+
+def test_refresh_table_updates_existing_source_and_scrolls_to_top_without_selection(
+    monkeypatch,
+):
+    monkeypatch.setenv("TOGA_BACKEND", "toga_dummy")
+
+    from vrp_toga import app as appmod
+
+    app = appmod.VRPTogaApp(
+        formal_name=appmod.APP_TITLE,
+        app_id="online.techopolis.vrp.toga.test",
+    )
+
+    initial_page = SimpleNamespace(
+        radio_label="Baofeng BF-888",
+        status="Showing channels 1 to 3 of 4, page 1 of 2.",
+        columns=["Ch #", "State", "Frequency"],
+        accessors=["number", "state", "freq", "channel_number", "empty"],
+        rows=[
+            {"number": "1", "state": "", "freq": "462.125000", "channel_number": 1, "empty": False},
+            {"number": "2", "state": "", "freq": "462.225000", "channel_number": 2, "empty": False},
+            {"number": "3", "state": "", "freq": "462.325000", "channel_number": 3, "empty": False},
+        ],
+        page=1,
+        total_pages=2,
+        first=1,
+        last=3,
+        total=4,
+        has_prev=False,
+        has_next=True,
+    )
+    next_page = SimpleNamespace(
+        radio_label="Baofeng BF-888",
+        status="Showing channels 1 to 2 of 2, page 1 of 1.",
+        columns=["Ch #", "State", "Frequency"],
+        accessors=["number", "state", "freq", "channel_number", "empty"],
+        rows=[
+            {"number": "8", "state": "", "freq": "463.125000", "channel_number": 8, "empty": False},
+            {"number": "9", "state": "", "freq": "463.225000", "channel_number": 9, "empty": False},
+        ],
+        page=1,
+        total_pages=1,
+        first=1,
+        last=2,
+        total=2,
+        has_prev=False,
+        has_next=False,
+    )
+
+    scroll_calls = []
+    source = appmod.ListSource(accessors=initial_page.accessors, data=initial_page.rows)
+    table = SimpleNamespace(
+        data=source,
+        selection=None,
+        scroll_to_row=lambda index: scroll_calls.append(("row", index)),
+        scroll_to_top=lambda: scroll_calls.append(("top", None)),
+    )
+    content = object()
+
+    app._speak_enabled = False
+    app._page = 1
+    app._last_table_page = initial_page
+    app._main_window = SimpleNamespace(content=content)
+    app.radio_label = SimpleNamespace(text=initial_page.radio_label)
+    app.status_label = SimpleNamespace(text=initial_page.status)
+    app.table = table
+
+    refresh_calls = []
+    app._refresh_command_state = lambda: refresh_calls.append("refreshed")
+
+    monkeypatch.setattr(appmod, "build_table_page", lambda page: next_page)
+
+    app._refresh_table()
+
+    assert app.main_window.content is content
+    assert app.table is table
+    assert app.table.data is source
+    assert app.radio_label.text == next_page.radio_label
+    assert app.status_label.text == next_page.status
+    rows = list(app.table.data)
+    assert [row.channel_number for row in rows] == [8, 9]
+    assert [row.freq for row in rows] == ["463.125000", "463.225000"]
+    assert app._last_table_page is next_page
+    assert app._page == 1
+    assert refresh_calls == ["refreshed"]
+    assert scroll_calls == [("top", None)]
 
 
 def test_refresh_table_rebuilds_content_when_schema_changes(monkeypatch):

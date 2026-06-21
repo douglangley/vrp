@@ -218,24 +218,72 @@ class VRPTogaApp(toga.App):
     def _table_schema(table_page: TablePage) -> tuple[tuple[str, ...], tuple[str, ...]]:
         return tuple(table_page.columns), tuple(table_page.accessors)
 
+    def _selected_row_index(self) -> int | None:
+        selection = getattr(self.table, "selection", None)
+        if selection is None:
+            return None
+        source = getattr(self.table, "data", None)
+        index = getattr(source, "index", None)
+        if not callable(index):
+            return None
+        try:
+            selected_index = index(selection)
+        except (TypeError, ValueError):
+            return None
+        return selected_index if isinstance(selected_index, int) else None
+
+    def _replace_table_source(self, table_page: TablePage) -> None:
+        self.table.data = ListSource(
+            accessors=table_page.accessors,
+            data=table_page.rows,
+        )
+
+    def _refresh_existing_table_source(self, table_page: TablePage) -> bool:
+        source = getattr(self.table, "data", None)
+        if source is None:
+            return False
+
+        required = ("__len__", "__setitem__", "clear", "append")
+        if not all(hasattr(source, name) for name in required):
+            return False
+
+        # Toga has no portable selection setter, so preserving the existing
+        # table and source objects is the safest path for native focus/selection.
+        try:
+            if len(source) == len(table_page.rows):
+                for index, row in enumerate(table_page.rows):
+                    source[index] = row
+            else:
+                source.clear()
+                for row in table_page.rows:
+                    source.append(row)
+        except (AttributeError, IndexError, KeyError, TypeError, ValueError):
+            return False
+
+        return True
+
     def _refresh_table(self) -> None:
         previous_page = self._last_table_page
         table_page = build_table_page(self._page)
         self._last_table_page = table_page
         self._page = table_page.page
+        same_schema = self._table_schema(previous_page) == self._table_schema(table_page)
+        selected_index = None
 
-        if self._table_schema(previous_page) != self._table_schema(table_page):
+        if not same_schema:
             self.main_window.content = self._build_content(table_page)
         else:
             self.radio_label.text = table_page.radio_label
-            self.table.data = ListSource(
-                accessors=table_page.accessors,
-                data=table_page.rows,
-            )
+            selected_index = self._selected_row_index()
+            if not self._refresh_existing_table_source(table_page):
+                self._replace_table_source(table_page)
         self._set_status(table_page.status)
         self._refresh_command_state()
         if table_page.rows:
-            self.table.scroll_to_top()
+            if same_schema and selected_index is not None and selected_index < len(self.table.data):
+                self.table.scroll_to_row(selected_index)
+            elif selected_index is None:
+                self.table.scroll_to_top()
 
     def _set_status(self, message: str) -> None:
         self.status_label.text = message
