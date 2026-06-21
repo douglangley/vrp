@@ -604,7 +604,7 @@ wheels = [
 [[package]]
 name = "wx-accessible-grid"
 version = "0.1.0"
-source = { git = "https://github.com/Community-Access/wx-accessible-grid?branch=main#d51f650133a82e0f6cb0423ba683a88518f87033" }
+source = { git = "https://github.com/Community-Access/wx-accessible-grid?branch=main#42bf123edc433bbda84d71bf94df0d39769e5ac5" }
 dependencies = [
     { name = "wx-accessible-webview" },
     { name = "wxpython" },
