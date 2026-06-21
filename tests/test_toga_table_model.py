@@ -86,6 +86,24 @@ def test_bf888_negative_page_size_falls_back_to_default_metadata():
     assert len(page.rows) == 16
 
 
+def test_table_page_status_reflects_modified_flag_after_save(tmp_path):
+    from vrp_toga.table_model import build_table_page
+
+    ok, message = radio_backend.load_image(BF888_IMAGE)
+    assert ok, message
+
+    page = build_table_page(page=1, page_size=100)
+    assert page.status == "Showing channels 1 to 16 of 16, page 1 of 1."
+
+    saved_path = tmp_path / "bf888-copy.img"
+    ok, message = radio_backend.save_image(str(saved_path))
+    assert ok, message
+
+    page = build_table_page(page=1, page_size=100)
+    assert page.radio_label == "Baofeng BF-888"
+    assert page.status == "Showing channels 1 to 16 of 16, page 1 of 1."
+
+
 def test_page_range_clamps_requested_page_to_loaded_bounds():
     from vrp_toga.table_model import page_range
 
