@@ -477,8 +477,8 @@ requires-dist = [
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.0.0" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=4.0.0" },
     { name = "requests", specifier = ">=2.28.0" },
-    { name = "wx-accessible-grid", git = "https://github.com/Community-Access/wx-accessible-grid?branch=main" },
-    { name = "wx-accessible-menubar", git = "https://github.com/Community-Access/wx-accessible-menubar?branch=main" },
+    { name = "wx-accessible-grid", specifier = ">=0.1.0" },
+    { name = "wx-accessible-menubar", specifier = ">=0.1.1" },
     { name = "wx-accessible-webview", specifier = ">=0.2.0" },
     { name = "wxpython", specifier = ">=4.2.0" },
 ]
@@ -606,18 +606,26 @@ wheels = [
 [[package]]
 name = "wx-accessible-grid"
 version = "0.1.0"
-source = { git = "https://github.com/Community-Access/wx-accessible-grid?branch=main#42bf123edc433bbda84d71bf94df0d39769e5ac5" }
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "wx-accessible-webview" },
     { name = "wxpython" },
 ]
+sdist = { url = "https://files.pythonhosted.org/packages/9c/0b/4ba1e17bd4d44e05f96d56e87fd6c552a3e0a3451f29ae997fa5c5d6224a/wx_accessible_grid-0.1.0.tar.gz", hash = "sha256:d96d2ce65e0347ba5db0974ef03a295bb07143249a62c6d409dfd1ff1b94cbdd", size = 23716, upload-time = "2026-06-21T04:35:42.325Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/17/f2/3b1e95541443eaef05a3a57696ea4075d682be53f4e05030e42bce42836a/wx_accessible_grid-0.1.0-py3-none-any.whl", hash = "sha256:4336bf35d0d3b079bd08e1b24acb407c788e7e216d5f0d9bb1c8bc5195b56990", size = 20597, upload-time = "2026-06-21T04:35:43.404Z" },
+]
 
 [[package]]
 name = "wx-accessible-menubar"
-version = "0.1.0"
-source = { git = "https://github.com/Community-Access/wx-accessible-menubar?branch=main#927e47b11045de06e2a53e1b6ae5fc75dcd63ee9" }
+version = "0.1.1"
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "wxpython" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/ea/80/9c5fc967a7ae5d161851601b7dcadabb55f21774957b47fbc6d820fa8669/wx_accessible_menubar-0.1.1.tar.gz", hash = "sha256:d509f55eeb8838a3c1127984a08657941b696d9a6266c754af0cb8cc7829de8c", size = 11758, upload-time = "2026-06-21T04:35:41.432Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/14/94/064dae6160eeb85db71c0987eaac1701173a631c899d1a7a4f1dbf0af8bc/wx_accessible_menubar-0.1.1-py3-none-any.whl", hash = "sha256:617241719c9b4b3cf41c5286d1623602850bedfec6ebb82f20feb8d8579d2bb2", size = 11421, upload-time = "2026-06-21T04:35:40.583Z" },
 ]
 
 [[package]]
