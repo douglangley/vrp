@@ -15,6 +15,8 @@ class CommandSpec:
     order: int
     shortcut: str | None = None
     requires_radio: bool = False
+    requires_prev_page: bool = False
+    requires_next_page: bool = False
     tooltip: str | None = None
 
 
@@ -47,6 +49,7 @@ _COMMANDS: tuple[CommandSpec, ...] = (
         group="file",
         section=0,
         order=20,
+        shortcut="mod+shift+s",
         requires_radio=True,
         tooltip="Save the current radio image to a new file.",
     ),
@@ -67,7 +70,9 @@ _COMMANDS: tuple[CommandSpec, ...] = (
         group="channels",
         section=0,
         order=0,
+        shortcut="mod+alt+left",
         requires_radio=True,
+        requires_prev_page=True,
         tooltip="Show the previous page of channels.",
     ),
     CommandSpec(
@@ -77,7 +82,9 @@ _COMMANDS: tuple[CommandSpec, ...] = (
         group="channels",
         section=0,
         order=10,
+        shortcut="mod+alt+right",
         requires_radio=True,
+        requires_next_page=True,
         tooltip="Show the next page of channels.",
     ),
     CommandSpec(
@@ -119,6 +126,7 @@ _COMMANDS: tuple[CommandSpec, ...] = (
         group="channels",
         section=1,
         order=30,
+        shortcut="mod+m",
         requires_radio=True,
         tooltip="Move, copy, sort, or delete channels.",
     ),
@@ -129,6 +137,7 @@ _COMMANDS: tuple[CommandSpec, ...] = (
         group="help",
         section=0,
         order=0,
+        shortcut="f1",
         tooltip="Show available keyboard shortcuts.",
     ),
 )
@@ -138,5 +147,17 @@ def all_command_specs() -> tuple[CommandSpec, ...]:
     return _COMMANDS
 
 
-def command_enabled(spec: CommandSpec, radio_loaded: bool) -> bool:
-    return radio_loaded or not spec.requires_radio
+def command_enabled(
+    spec: CommandSpec,
+    radio_loaded: bool,
+    *,
+    has_prev: bool = True,
+    has_next: bool = True,
+) -> bool:
+    if spec.requires_radio and not radio_loaded:
+        return False
+    if spec.requires_prev_page and not has_prev:
+        return False
+    if spec.requires_next_page and not has_next:
+        return False
+    return True

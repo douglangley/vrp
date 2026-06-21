@@ -32,11 +32,40 @@ def test_loaded_radio_commands_are_gated():
     assert command_enabled(by_id["page_next"], radio_loaded=True)
 
 
-def test_shortcuts_avoid_single_letter_table_commands():
+def test_expected_command_shortcuts_are_declared():
+    by_id = {spec.id: spec for spec in all_command_specs()}
+
+    assert {
+        command_id: spec.shortcut
+        for command_id, spec in by_id.items()
+        if spec.shortcut is not None
+    } == {
+        "open": "mod+o",
+        "save": "mod+s",
+        "save_as": "mod+shift+s",
+        "page_prev": "mod+alt+left",
+        "page_next": "mod+alt+right",
+        "find": "mod+f",
+        "find_next": "mod+g",
+        "operations": "mod+m",
+        "shortcuts": "f1",
+    }
+
+
+def test_shortcuts_avoid_bare_single_letters():
     specs = all_command_specs()
 
     for spec in specs:
         if spec.shortcut is None:
             continue
-        assert "+" in spec.shortcut, spec
+        assert len(spec.shortcut) != 1 or not spec.shortcut.isalpha(), spec
         assert not spec.shortcut.lower().startswith("alt+"), spec
+
+
+def test_page_commands_respect_boundary_availability():
+    by_id = {spec.id: spec for spec in all_command_specs()}
+
+    assert not command_enabled(by_id["page_prev"], radio_loaded=True, has_prev=False)
+    assert not command_enabled(by_id["page_next"], radio_loaded=True, has_next=False)
+    assert command_enabled(by_id["page_prev"], radio_loaded=True, has_prev=True)
+    assert command_enabled(by_id["page_next"], radio_loaded=True, has_next=True)
