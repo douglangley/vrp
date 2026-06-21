@@ -35,12 +35,14 @@ import logging
 import wx
 import wx.adv
 import wx.html2
+from wx_accessible_grid import AccessibleGrid, ContextMenuItem
 from wx_accessible_menubar import AccessibleMenuBar
 from wx_accessible_webview import AccessibleWebView, show_message
 
 from chirp_backend import radio as radio_backend
 
 from vrp import __version__, html, views
+from vrp.channel_grid_model import ChannelGridModel
 from vrp.speech import Speaker
 
 LOG = logging.getLogger(__name__)
@@ -134,6 +136,8 @@ class MainWindow(wx.Frame):
         self._find_query: str | None = None
         self._find_fields: tuple = ("freq", "name", "comment")
         self._find_last: int | None = None
+        self._grid: AccessibleGrid | None = None
+        self._grid_model: ChannelGridModel | None = None
 
         self.CreateStatusBar()
         self.SetStatusText("Ready")
@@ -171,9 +175,9 @@ class MainWindow(wx.Frame):
 
         # AccessibleWebView is a wrapper, not a wx.Window; .control is the
         # underlying webview (or a TextCtrl fallback if no WebView backend).
-        sizer = wx.BoxSizer(wx.VERTICAL)
-        sizer.Add(self.view.control, 1, wx.EXPAND)
-        self.SetSizer(sizer)
+        self._content_sizer = wx.BoxSizer(wx.VERTICAL)
+        self._content_sizer.Add(self.view.control, 1, wx.EXPAND)
+        self.SetSizer(self._content_sizer)
 
         self._build_menubar()
         # Menu-bar keyboard accessibility is the wx-accessible-menubar library's
@@ -315,11 +319,17 @@ class MainWindow(wx.Frame):
         # (wired in __init__ with restore_focus=self._restore_webview_focus).
 
     def _menu_then_focus(self, handler):
-        """Wrap a menu handler so webview focus is restored after it runs."""
+        """Wrap a menu handler so content focus is restored after it runs."""
         def wrapper(event):
             handler(event)
-            self._restore_webview_focus()
+            self._restore_content_focus()
         return wrapper
+
+    def _restore_content_focus(self) -> None:
+        if self._grid is not None:
+            self._grid.focus()
+        else:
+            self._restore_webview_focus()
 
     def _restore_webview_focus(self) -> None:
         if self.view.using_webview and self.view.view is not None:
@@ -397,14 +407,120 @@ class MainWindow(wx.Frame):
 
     def show_welcome(self) -> None:
         """Render the welcome screen into the webview."""
+        self._show_webview()
         self.view.set_content(html.render_view("welcome.html", version=__version__))
         self.view.status("Welcome to Versatile Radio Programmer.")
         self._set_title()
 
     def show_channels(self) -> None:
-        """Render the current page of the channel grid for the loaded radio."""
-        self.view.set_content(views.render_channels(self._page))
-        self.view.focus()
+        """Show the editable accessible channel grid for the loaded radio."""
+        if not radio_backend.get_state().loaded:
+            self.show_welcome()
+            return
+        self._show_grid()
+        self._set_title()
+
+    def _show_webview(self) -> None:
+        """Make the regular HTML view visible and remove the grid surface."""
+        self._destroy_grid()
+        self.view.control.Show()
+        self.Layout()
+
+    def _show_grid(self) -> None:
+        """Replace the old read-only channel table with ``AccessibleGrid``."""
+        self.view.control.Hide()
+        self._destroy_grid()
+        state = radio_backend.get_state()
+        radio_name = f"{state.radio.VENDOR} {state.radio.MODEL}"
+        self._grid_model = ChannelGridModel()
+        self._grid = AccessibleGrid(
+            self,
+            self._grid_model,
+            label=f"{radio_name} memory channels",
+            page_size=0,
+            row_select=True,
+            on_context=self._on_grid_context,
+            on_navigate=self._on_grid_navigate,
+            on_selection_changed=self._on_grid_selection_changed,
+            on_edit_committed=self._on_grid_edit_committed,
+            description=(
+                "Use arrow keys or screen-reader table navigation to move. "
+                "F2 edits. Escape cancels editing, then leaves the grid. "
+                "Applications key opens row actions."
+            ),
+        )
+        self._content_sizer.Add(self._grid.control, 1, wx.EXPAND)
+        self.Layout()
+        wx.CallAfter(self._grid.focus)
+
+    def _destroy_grid(self) -> None:
+        if self._grid is None:
+            return
+        control = self._grid.control
+        self._content_sizer.Detach(control)
+        control.Destroy()
+        self._grid = None
+        self._grid_model = None
+
+    def _on_grid_context(self, row: int, column: str) -> None:
+        if self._grid is None or self._grid_model is None:
+            return
+        cols = self._grid_model.columns()
+        col_index = next((i for i, c in enumerate(cols) if c.name == column), 0)
+        number = self._grid_model._low() + row
+        items = [
+            ContextMenuItem(
+                f"Edit channel {number} (F2)",
+                lambda: self._grid.edit_cell(row, col_index) if self._grid else None,
+            ),
+            ContextMenuItem(
+                f"Select channel {number}",
+                lambda: self._grid.select_row(row) if self._grid else None,
+            ),
+            ContextMenuItem(
+                "Select range to here",
+                lambda: self._grid.select_row_range(row) if self._grid else None,
+            ),
+            ContextMenuItem(
+                f"Delete channel {number} (Del)",
+                lambda: self._delete_grid_rows([row]),
+            ),
+            ContextMenuItem("Organize selected channels", lambda: self.on_operations()),
+        ]
+        self._grid.show_context_menu(items)
+
+    def _delete_grid_rows(self, rows: list[int]) -> None:
+        if self._grid_model is None or self._grid is None:
+            return
+        result = self._grid_model.delete_rows(rows)
+        self._announce(result.message or "Deleted channel.", error=not result.ok)
+        if result.ok:
+            self._grid.refresh()
+            wx.CallAfter(self._grid.focus)
+
+    def _on_grid_navigate(self, row: int, column: str) -> None:
+        if self._grid_model is None:
+            return
+        number = self._grid_model._low() + row
+        self.SetStatusText(f"Channel {number}, {column}.")
+
+    def _on_grid_selection_changed(self, rows: list[int]) -> None:
+        if not rows:
+            self.SetStatusText("No channels selected.")
+            return
+        if self._grid_model is None:
+            return
+        low = self._grid_model._low()
+        numbers = [low + r for r in rows]
+        self.SetStatusText(
+            f"{len(numbers)} channel(s) selected, {numbers[0]} to {numbers[-1]}."
+        )
+
+    def _on_grid_edit_committed(self, row: int, column: str, display: str) -> None:
+        if self._grid_model is None:
+            return
+        number = self._grid_model._low() + row
+        self.SetStatusText(f"Channel {number} {column} set to {display}.")
 
     def _announce(self, message: str, error: bool = False) -> None:
         """Surface a result to the user: status bar, live region, and speech.
@@ -412,9 +528,17 @@ class MainWindow(wx.Frame):
         ``error`` interrupts any in-progress speech so failures are heard now.
         """
         self.SetStatusText(message)
-        self.view.status(message)  # always — the screen reader reads this
+        self._status(message)  # always — the screen reader reads this
         if self._speak_enabled:    # supplemental prism speech is opt-in
             self.speaker.speak(message, interrupt=error)
+
+    def _status(self, message: str) -> None:
+        """Announce status on whichever content surface is currently visible."""
+        self.SetStatusText(message)
+        if self._grid is not None:
+            self._grid.announce(message)
+        else:
+            self.view.status(message)
 
     def _set_title(self) -> None:
         """Reflect the loaded radio / file in the window title bar."""
@@ -532,6 +656,9 @@ class MainWindow(wx.Frame):
 
     def _refresh_row(self, number: int) -> None:
         """Replace one row's contents in the grid with freshly rendered HTML."""
+        if self._grid is not None:
+            self._grid.refresh()
+            return
         inner = views.render_row(number)
         if not inner:
             return
@@ -541,9 +668,19 @@ class MainWindow(wx.Frame):
         )
 
     def _focus_edit_button(self, number: int) -> None:
+        if self._grid is not None:
+            low, high = radio_backend.get_state().memory_bounds
+            if low <= number <= high:
+                self._grid.focus_cell(number - low, 0)
+            else:
+                self._grid.focus()
+            return
         self._focus_element(f"edit-btn-{number}")
 
     def _focus_element(self, element_id: str) -> None:
+        if self._grid is not None:
+            self._grid.focus()
+            return
         # Focus the WebView control first, then the specific element, so NVDA
         # follows focus back into the page (after a dialog or a re-render).
         if self.view.using_webview and self.view.view is not None:
@@ -556,11 +693,15 @@ class MainWindow(wx.Frame):
 
     def _change_page(self, new_page: int, which: str) -> None:
         """Move to ``new_page`` (clamped), re-render, refocus, and announce."""
+        if self._grid is not None:
+            self._status("All channels are loaded in the accessible grid; page commands are not needed.")
+            self._grid.focus()
+            return
         tp = views.total_pages()
         new_page = min(max(new_page, 1), tp)
         if new_page == self._page:
             edge = "last" if which == "next" else "first"
-            self.view.status(f"Already on the {edge} page. Page {self._page} of {tp}.")
+            self._status(f"Already on the {edge} page. Page {self._page} of {tp}.")
             return
 
         self._page = new_page
@@ -577,7 +718,7 @@ class MainWindow(wx.Frame):
         self._focus_element(target)
 
         first, last = views.page_range(self._page)
-        self.view.status(
+        self._status(
             f"Page {self._page} of {tp}. Channels {first} to {last} of "
             f"{views.channel_total()}."
         )
@@ -603,7 +744,7 @@ class MainWindow(wx.Frame):
         self._page = views.page_for_channel(number)
         self.show_channels()
         self._focus_edit_button(number)
-        self.view.status(f"Channel {number}. Page {self._page} of {views.total_pages()}.")
+        self._status(f"Channel {number}.")
 
     def on_menu_edit_channel(self, _event=None) -> None:
         """Channels ▸ Edit channel… — prompt for a number, then open the editor."""
@@ -626,7 +767,7 @@ class MainWindow(wx.Frame):
         low, high = state.memory_bounds
         number = wx.GetNumberFromUser(prompt, "Channel:", caption, low, low, high, self)
         if number < low:  # cancelled (returns -1)
-            self._restore_webview_focus()
+            self._restore_content_focus()
             return None
         return int(number)
 
@@ -642,7 +783,11 @@ class MainWindow(wx.Frame):
             self._announce("No radio image is open.", error=True)
             return
         low, high = state.memory_bounds
-        default_from = views.page_range(self._page)[0]
+        if self._grid is not None:
+            active_row, _active_col = self._grid.get_active_cell()
+            default_from = min(max(low + active_row, low), high)
+        else:
+            default_from = views.page_range(self._page)[0]
         cols = [
             (c.name, c.label)
             for c in build_column_defs(state.features)
@@ -702,7 +847,7 @@ class MainWindow(wx.Frame):
         self._page = views.page_for_channel(target)
         self.show_channels()
         self._focus_edit_button(target)
-        self.view.status(f"{message} Now on channel {target}.")
+        self._status(f"{message} Now on channel {target}.")
 
     def _op_focus_target(self, key: str, numbers: list[int], op: dict) -> int:
         low, high = radio_backend.get_state().memory_bounds
@@ -778,9 +923,9 @@ class MainWindow(wx.Frame):
         dlg.Destroy()
         if found and self._find_last is not None:
             self._focus_edit_button(self._find_last)
-            self.view.status(self._describe_match(self._find_last, prefix="Found "))
+            self._status(self._describe_match(self._find_last, prefix="Found "))
         else:
-            self._restore_webview_focus()
+            self._restore_content_focus()
 
     def _find_from_dialog(self, query: str, fields: tuple) -> bool:
         """Search callback for the Find dialog. Navigates to the match (focus is
@@ -804,7 +949,7 @@ class MainWindow(wx.Frame):
             self._announce("No radio image is open.", error=True)
             return
         if not self._find_query:
-            self.view.status("No active search. Press Control+F to find.")
+            self._status("No active search. Press Control+F to find.")
             return
         low, _high = radio_backend.get_state().memory_bounds
         start = (self._find_last + 1) if self._find_last is not None else low
@@ -826,7 +971,7 @@ class MainWindow(wx.Frame):
             prefix = "Wrapped to start. "
         else:
             prefix = "Next match. "
-        self.view.status(self._describe_match(ch, prefix=prefix))
+        self._status(self._describe_match(ch, prefix=prefix))
 
     def _describe_match(self, number: int, prefix: str = "") -> str:
         mem = radio_backend.get_memory(number)
@@ -856,7 +1001,7 @@ class MainWindow(wx.Frame):
         state = bank_ops.get_bank_state(number)
         if not state.get("ok"):
             self._announce(state.get("message", "Banks unavailable."), error=True)
-            self._restore_webview_focus()
+            self._restore_content_focus()
             return
 
         dlg = ChannelBanksDialog(self, state)
@@ -867,7 +1012,7 @@ class MainWindow(wx.Frame):
         if desired is not None:
             ok, message, _affected = bank_ops.apply_bank_changes(number, desired)
             if ok:
-                self.view.status(message)
+                self._status(message)
             else:
                 self._announce(message, error=True)
                 wx.MessageBox(message, "Banks", wx.OK | wx.ICON_ERROR, self)
@@ -892,7 +1037,7 @@ class MainWindow(wx.Frame):
         )
         if dlg.ShowModal() != wx.ID_OK:
             dlg.Destroy()
-            self._restore_webview_focus()
+            self._restore_content_focus()
             return
         values = dlg.get_values()
         dlg.Destroy()
@@ -903,18 +1048,16 @@ class MainWindow(wx.Frame):
 
         # Page size takes effect immediately: re-render + re-clamp the page.
         if values["channels_per_page"] != before_page and radio_backend.get_state().loaded:
-            tp = views.total_pages()
-            self._page = min(self._page, tp)
             self.show_channels()
-            first, _last = views.page_range(self._page)
-            self._focus_edit_button(first)
-            self.view.status(
+            low, _high = radio_backend.get_state().memory_bounds
+            self._focus_edit_button(low)
+            self._status(
                 f"Preferences saved. Channels per page set to "
-                f"{values['channels_per_page']}. Page {self._page} of {tp}."
+                f"{values['channels_per_page']}. The accessible grid now loads all channels."
             )
         else:
-            self.view.status("Preferences saved.")
-            self._restore_webview_focus()
+            self._status("Preferences saved.")
+            self._restore_content_focus()
 
     # -- import / export / radio info -------------------------------------
 
@@ -932,7 +1075,7 @@ class MainWindow(wx.Frame):
             style=wx.FD_OPEN | wx.FD_FILE_MUST_EXIST,
         ) as dlg:
             if dlg.ShowModal() == wx.ID_CANCEL:
-                self._restore_webview_focus()
+                self._restore_content_focus()
                 return
             path = dlg.GetPath()
 
@@ -940,7 +1083,7 @@ class MainWindow(wx.Frame):
         if src is None:
             self._announce(message, error=True)
             wx.MessageBox(message, "Import", wx.OK | wx.ICON_ERROR, self)
-            self._restore_webview_focus()
+            self._restore_content_focus()
             return
 
         lo, hi = src.get_features().memory_bounds
@@ -953,7 +1096,7 @@ class MainWindow(wx.Frame):
                 continue
         if count == 0:
             self._announce("That image has no channels to import.", error=True)
-            self._restore_webview_focus()
+            self._restore_content_focus()
             return
         self._import_results(src, count)
 
@@ -970,7 +1113,7 @@ class MainWindow(wx.Frame):
             style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT,
         ) as dlg:
             if dlg.ShowModal() == wx.ID_CANCEL:
-                self._restore_webview_focus()
+                self._restore_content_focus()
                 return
             path = dlg.GetPath()
         if not os.path.splitext(path)[1]:
@@ -980,7 +1123,7 @@ class MainWindow(wx.Frame):
         self._announce(message, error=not ok)
         if not ok:
             wx.MessageBox(message, "Export", wx.OK | wx.ICON_ERROR, self)
-        self._restore_webview_focus()
+        self._restore_content_focus()
 
     def on_radio_info(self, _event=None) -> None:
         """Radio ▸ Radio Info — read-only summary of the loaded radio."""
@@ -1010,7 +1153,7 @@ class MainWindow(wx.Frame):
         params = dlg.get_params() if ok else None
         dlg.Destroy()
         if not ok:
-            self._restore_webview_focus()
+            self._restore_content_focus()
             return
         self._run_query(key, source, params)
 
@@ -1023,7 +1166,7 @@ class MainWindow(wx.Frame):
         radio_result = query.make_source_radio(key)
         if radio_result is None:
             self._announce(f"Could not load source {source['label']}.", error=True)
-            self._restore_webview_focus()
+            self._restore_content_focus()
             return
 
         progress = CloneProgressDialog(self, f"Querying {source['label']}", allow_cancel=True)
@@ -1049,7 +1192,7 @@ class MainWindow(wx.Frame):
     def _on_query_progress(self, progress, msg, percent, speak) -> None:
         progress.update(percent, 100, msg)
         if speak and msg:
-            self.view.status(msg)
+            self._status(msg)
 
     def _on_query_done(self, source, progress, radio_result, ok, message) -> None:
         from chirp_backend import query
@@ -1057,16 +1200,16 @@ class MainWindow(wx.Frame):
         cancelled = progress.is_cancelled()
         progress.Destroy()
         self.Enable()
-        self._restore_webview_focus()
+        self._restore_content_focus()
 
         if cancelled:
-            self.view.status("Query cancelled.")
+            self._status("Query cancelled.")
             return
         if not ok:
             self._announce(message, error=True)
             wx.MessageBox(message, "Query failed", wx.OK | wx.ICON_ERROR, self)
             return
-        self.view.status(f"{source['label']}: {message}")
+        self._status(f"{source['label']}: {message}")
         if query.result_count(radio_result) > 0:
             self._import_results(radio_result, query.result_count(radio_result))
 
@@ -1083,7 +1226,7 @@ class MainWindow(wx.Frame):
         overwrite = dlg.get_overwrite() if ok else False
         dlg.Destroy()
         if not ok:
-            self._restore_webview_focus()
+            self._restore_content_focus()
             return
 
         ok, message, affected = memory_ops.import_memories(src_radio, dest, overwrite)
@@ -1092,7 +1235,7 @@ class MainWindow(wx.Frame):
             self._page = views.page_for_channel(target)
             self.show_channels()
             self._focus_edit_button(target)
-            self.view.status(message)
+            self._status(message)
         else:
             self._announce(message, error=True)
             wx.MessageBox(message, "Import", wx.OK | wx.ICON_ERROR, self)
@@ -1130,13 +1273,13 @@ class MainWindow(wx.Frame):
         if applied and changed:
             ok, message = radio_backend.apply_radio_settings(settings)
             if ok:
-                self.view.status(f"Radio settings saved. {changed} setting(s) changed.")
+                self._status(f"Radio settings saved. {changed} setting(s) changed.")
             else:
                 self._announce(message, error=True)
                 wx.MessageBox(message, "Operation failed", wx.OK | wx.ICON_ERROR, self)
         elif applied:
-            self.view.status("No settings were changed.")
-        self._restore_webview_focus()
+            self._status("No settings were changed.")
+        self._restore_content_focus()
 
     # -- serial download / upload -----------------------------------------
 
@@ -1151,7 +1294,7 @@ class MainWindow(wx.Frame):
         if ok and port and driver_id:
             self._run_clone("download", port, driver_id=driver_id, label=label)
         else:
-            self._restore_webview_focus()
+            self._restore_content_focus()
 
     def on_upload(self, _event=None) -> None:
         from vrp.serial_dialogs import UploadDialog
@@ -1165,14 +1308,14 @@ class MainWindow(wx.Frame):
         port = dlg.get_port() if ok else None
         dlg.Destroy()
         if not (ok and port):
-            self._restore_webview_focus()
+            self._restore_content_focus()
             return
         label = f"{state.radio.VENDOR} {state.radio.MODEL}"
         if not self._confirm(
             f"This will overwrite ALL memory channels on the {label} connected to "
             f"{port}. The radio's current contents cannot be recovered. Continue?"
         ):
-            self._restore_webview_focus()
+            self._restore_content_focus()
             return
         self._run_clone("upload", port, label=label)
 
@@ -1215,13 +1358,13 @@ class MainWindow(wx.Frame):
     def _on_clone_progress(self, progress, cur, total, msg, speak) -> None:
         progress.update(cur, total, msg)           # gauge updates every time
         if speak and msg:
-            self.view.status(msg)                  # announcements are throttled
+            self._status(msg)                      # announcements are throttled
 
     def _on_clone_done(self, kind, progress, ok, message) -> None:
         cancelled = progress.is_cancelled()
         progress.Destroy()
         self.Enable()
-        self._restore_webview_focus()
+        self._restore_content_focus()
 
         if kind == "download":
             if cancelled:
@@ -1236,13 +1379,13 @@ class MainWindow(wx.Frame):
                 self._set_title()
                 low, _high = radio_backend.get_state().memory_bounds
                 self._focus_edit_button(low)
-                self.view.status(f"{message}. Channel list updated.")
+                self._status(f"{message}. Channel list updated.")
             else:
                 self._announce(message, error=True)
                 wx.MessageBox(message, "Operation failed", wx.OK | wx.ICON_ERROR, self)
         else:  # upload
             if ok:
-                self.view.status(message)
+                self._status(message)
             else:
                 self._announce(message, error=True)
                 wx.MessageBox(message, "Operation failed", wx.OK | wx.ICON_ERROR, self)
@@ -1288,7 +1431,7 @@ class MainWindow(wx.Frame):
             )
             get_config().remove_recent(path)
             self._rebuild_recent_menu()
-            self._restore_webview_focus()
+            self._restore_content_focus()
             return
         if not self._open_path(path):
             # Won't load (corrupt/unsupported) — drop it from the list.
@@ -1300,8 +1443,8 @@ class MainWindow(wx.Frame):
 
         get_config().clear_recent()
         self._rebuild_recent_menu()
-        self.view.status("Recent files list cleared.")
-        self._restore_webview_focus()
+        self._status("Recent files list cleared.")
+        self._restore_content_focus()
 
     def _rebuild_recent_menu(self) -> None:
         import os
@@ -1408,8 +1551,7 @@ class MainWindow(wx.Frame):
 
     def on_not_implemented(self, _event=None) -> None:
         msg = "That feature is not yet implemented."
-        self.SetStatusText(msg)
-        self.view.status(msg)
+        self._status(msg)
         if self._speak_enabled:
             self.speaker.speak(msg, interrupt=True)
 
