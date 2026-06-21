@@ -21,7 +21,7 @@ from vrp_toga.table_model import TablePage, build_table_page
 
 APP_TITLE = "Versatile Radio Programmer Toga Prototype"
 ATTRIBUTION = "Radio driver support provided by the CHIRP project — chirpmyradio.com."
-IMAGE_TYPES = ["img"]
+IMAGE_TYPES: list[str] | None = None
 CHANNELS_GROUP = toga.Group("Channels", order=30)
 
 
@@ -48,6 +48,11 @@ class VRPTogaApp(toga.App):
         self.heading = toga.Label(
             "Versatile Radio Programmer",
             id="toga-heading",
+            style=Pack(margin_bottom=8),
+        )
+        self.purpose_label = toga.Label(
+            "Welcome. Open a CHIRP radio image to review channels.",
+            id="toga-purpose",
             style=Pack(margin_bottom=8),
         )
         self.radio_label = toga.Label(
@@ -130,6 +135,7 @@ class VRPTogaApp(toga.App):
         return toga.Box(
             children=[
                 self.heading,
+                self.purpose_label,
                 self.radio_label,
                 self.status_label,
                 button_row,

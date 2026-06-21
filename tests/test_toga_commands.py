@@ -1,4 +1,5 @@
 from types import SimpleNamespace
+import asyncio
 
 from vrp.config import get_config
 from vrp_toga.commands import all_command_specs, command_enabled
@@ -130,3 +131,60 @@ def test_page_commands_respect_boundary_availability():
     assert not command_enabled(by_id["page_next"], radio_loaded=True, has_next=False)
     assert command_enabled(by_id["page_prev"], radio_loaded=True, has_prev=True)
     assert command_enabled(by_id["page_next"], radio_loaded=True, has_next=True)
+
+
+def test_toga_image_dialogs_do_not_filter_by_extension(monkeypatch):
+    appmod = _toga_app_module(monkeypatch)
+    app = _run_startup_without_gui(monkeypatch)
+
+    captured_dialogs = []
+
+    class FakeOpenFileDialog:
+        def __init__(self, title, file_types=None, multiple_select=False):
+            self.title = title
+            self.file_types = file_types
+            self.multiple_select = multiple_select
+
+    class FakeSaveFileDialog:
+        def __init__(self, title, suggested_filename=None, file_types=None):
+            self.title = title
+            self.suggested_filename = suggested_filename
+            self.file_types = file_types
+
+    monkeypatch.setattr(appmod.toga, "OpenFileDialog", FakeOpenFileDialog)
+    monkeypatch.setattr(appmod.toga, "SaveFileDialog", FakeSaveFileDialog)
+
+    async def fake_dialog(dialog):
+        captured_dialogs.append(dialog)
+        return None
+
+    app._speak_enabled = False
+    app._set_status = lambda message: None
+    monkeypatch.setattr(app.main_window, "dialog", fake_dialog)
+
+    asyncio.run(app._open_image())
+    asyncio.run(app._save_as())
+
+    assert [dialog.file_types for dialog in captured_dialogs] == [None, None]
+
+
+def test_toga_content_includes_a_short_welcome_label(monkeypatch):
+    appmod = _toga_app_module(monkeypatch)
+    app = appmod.VRPTogaApp(
+        formal_name=appmod.APP_TITLE,
+        app_id="online.techopolis.vrp.toga.test",
+    )
+
+    page = SimpleNamespace(
+        radio_label="No radio loaded",
+        status="Ready.",
+        columns=["Ch #", "State"],
+        accessors=["number", "state", "channel_number", "empty"],
+        rows=[],
+    )
+
+    content = app._build_content(page)
+
+    assert content.children[1].text == (
+        "Welcome. Open a CHIRP radio image to review channels."
+    )

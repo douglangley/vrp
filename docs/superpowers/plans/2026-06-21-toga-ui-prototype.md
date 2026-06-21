@@ -6,6 +6,8 @@
 
 **Architecture:** Add `main_toga.py` and a focused `vrp_toga/` package. Keep CHIRP/image behavior in `chirp_backend/`, keep wx code untouched, and put Toga-only table adaptation, command metadata, app shell, and accessibility verification in new files.
 
+**Scope note:** Open Recent is deferred in this prototype. The shared backend may still record recent files, but the Toga UI does not surface a recent-files menu yet.
+
 **Tech Stack:** Python 3.11, BeeWare Toga 0.5.x, `toga-dummy` for import/smoke checks, existing CHIRP backend, pytest.
 
 ---

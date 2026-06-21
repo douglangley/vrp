@@ -23,6 +23,9 @@ prototype outcome and should be documented before widening the port.
 - Do not port every dialog in the first slice.
 - Do not ship the Toga app as the default launcher until screen-reader behavior
   is verified against the acceptance criteria below.
+- Do not implement a dynamic Open Recent menu in the first slice. The shared
+  backend may still record recent files, but the Toga UI does not surface them
+  yet.
 
 ## Architecture
 
@@ -93,7 +96,8 @@ Toga on a platform, keep the command available through menus/buttons and record
 the shortcut gap in the prototype notes.
 
 - Open Image File
-- Open Recent
+- Open Recent is deferred for this prototype. Recent files may still be stored
+  by the shared backend, but the Toga UI does not surface them yet.
 - Save
 - Save As
 - Close Image
