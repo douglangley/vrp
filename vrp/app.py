@@ -183,11 +183,16 @@ class MainWindow(wx.Frame):
         # focused WebView2 (wxWidgets #24786) — and drives the real native bar via
         # SC_KEYMENU. capture_native_keys also binds a frame EVT_CHAR_HOOK for the
         # non-webview path. restore_focus uses our own webview-focus helper.
+        # NOTE: do NOT pass webview= here. That makes the library add its own
+        # script-message handler, which WebView2 rejects when our AccessibleWebView
+        # already registered the "vrp" bridge — the add throws, is caught, and the
+        # menu bar silently loses its key listener. Instead we inject the library's
+        # listener over our existing "vrp" bridge in _on_webview_loaded and forward
+        # its {amb:...} messages via handle_bridge_message (single channel).
         self._menubar_helper = AccessibleMenuBar(
             self,
             self._menubar,
             focus_target=self.view.view if self.view.using_webview else None,
-            webview=self.view.view if self.view.using_webview else None,
             restore_focus=self._restore_webview_focus,
             capture_native_keys=True,
         )
@@ -372,8 +377,21 @@ class MainWindow(wx.Frame):
         # silent no-op, with no exception anywhere). wx.CallLater uses a real
         # OS timer instead of the idle queue, which reliably lands in a fresh
         # top-level message-loop iteration.
-        wx.CallLater(50, self.view.run_js, _SHORTCUTS_JS)
+        wx.CallLater(50, self._install_page_scripts)
         event.Skip()
+
+    def _install_page_scripts(self) -> None:
+        """Install the in-page listeners once, off the loaded-event call stack
+        (see _on_webview_loaded for why CallLater, not CallAfter)."""
+        self.view.run_js(_SHORTCUTS_JS)
+        # The menu-bar key listener (plain Alt / Alt+mnemonic / F10) over our
+        # existing "vrp" bridge — NOT a second script-message handler, which
+        # WebView2 would reject. Its {amb:...} messages are routed to the library
+        # in on_bridge_message. Safe to inject on every platform (no-ops off
+        # Windows). Guarded in case the menu bar isn't built (headless tests).
+        helper = getattr(self, "_menubar_helper", None)
+        if helper is not None:
+            self.view.run_js(helper.webview_listener_js("vrp"))
 
     # -- views -------------------------------------------------------------
 
@@ -421,9 +439,16 @@ class MainWindow(wx.Frame):
         announces its own result via the status live region (CLAUDE rule #3).
         """
         LOG.debug("bridge message: %r", data)
+        # Menu-bar keys (plain Alt / Alt+mnemonic / F10) arrive over our own
+        # "vrp" bridge with an {amb:...} payload; hand them to the library, which
+        # drives the native menu bar. (We inject its listener in
+        # _install_page_scripts rather than letting it add a second handler.)
+        if isinstance(data, dict) and "amb" in data:
+            helper = getattr(self, "_menubar_helper", None)
+            if helper is not None:
+                helper.handle_bridge_message(data)
+            return
         action = data.get("action") if isinstance(data, dict) else None
-        # Menu keys (Alt / Alt+mnemonic / F10) are handled by AccessibleMenuBar
-        # over its own webview bridge, not routed through this handler.
         handler = {
             "open": self.on_open,
             "save": self.on_save,

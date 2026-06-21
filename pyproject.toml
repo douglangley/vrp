@@ -59,6 +59,10 @@ versatile-radio-programmer = "main:main"
 # so no separate `uv pip install -e ./chirp` step is needed. The ./chirp
 # directory must exist (git clone it) before running `uv sync`.
 chirp = { path = "./chirp", editable = true }
+# Sibling accessible-menubar library (Community Access), from git for the
+# webview_listener_js single-bridge integration (avoids a second WebView2
+# script-message handler).
+wx-accessible-menubar = { git = "https://github.com/Community-Access/wx-accessible-menubar", branch = "main" }
 # Sibling accessible-grid library (Community Access). Pulled from git so a fresh
 # clone resolves without needing the ../wx-accessible-grid checkout. For local
 # co-development, override with a path source in a local uv config if desired.
