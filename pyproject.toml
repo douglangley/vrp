@@ -12,6 +12,10 @@ dependencies = [
     # wrapped to expose semantic, screen-reader-friendly HTML (NVDA/JAWS).
     "wxpython>=4.2.0",
     "wx-accessible-webview>=0.2.0",
+    # Accessible, editable ARIA data grid (sibling library). Editable local
+    # install from ../wx-accessible-grid — see [tool.uv.sources] below. This is
+    # the screen-reader-first replacement for the read-only channel table.
+    "wx-accessible-grid",
     # Unified TTS / screen-reader speech (prism). Used to speak things that
     # ARIA alone can't convey. The Python bindings ship as `prismatoid`.
     "prismatoid>=0.16.0",
@@ -52,6 +56,10 @@ versatile-radio-programmer = "main:main"
 # so no separate `uv pip install -e ./chirp` step is needed. The ./chirp
 # directory must exist (git clone it) before running `uv sync`.
 chirp = { path = "./chirp", editable = true }
+# Sibling accessible-grid library (Community Access). Pulled from git so a fresh
+# clone resolves without needing the ../wx-accessible-grid checkout. For local
+# co-development, override with a path source in a local uv config if desired.
+wx-accessible-grid = { git = "https://github.com/Community-Access/wx-accessible-grid", branch = "main" }
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -451,6 +451,7 @@ dependencies = [
     { name = "prismatoid" },
     { name = "pyserial" },
     { name = "requests" },
+    { name = "wx-accessible-grid" },
     { name = "wx-accessible-webview" },
     { name = "wxpython" },
 ]
@@ -475,6 +476,7 @@ requires-dist = [
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.0.0" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=4.0.0" },
     { name = "requests", specifier = ">=2.28.0" },
+    { name = "wx-accessible-grid", git = "https://github.com/Community-Access/wx-accessible-grid?branch=main" },
     { name = "wx-accessible-webview", specifier = ">=0.2.0" },
     { name = "wxpython", specifier = ">=4.2.0" },
 ]
@@ -597,6 +599,15 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/f1/ea/4146ecc309460b9ad8fe4b5a5022ef8fab457f7380e493931a0329e83a73/win32more_microsoft_windowsappsdk-0.8.2.2.0.tar.gz", hash = "sha256:97ec03987a167c10761d50cf289922076cb6b05ef6486219d1a46eccf2891989", size = 1169604, upload-time = "2026-06-10T11:38:55.283Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/e7/dc/8774c04e0741158e87e3a15057fa08cdfa269f028e5afa59391b7e64732a/win32more_microsoft_windowsappsdk-0.8.2.2.0-py2.py3-none-any.whl", hash = "sha256:4390d1833034c2db609c3d672d5024e81c6ae610391b78284b2c151ef4ff6f0c", size = 1229061, upload-time = "2026-06-10T11:38:56.809Z" },
+]
+
+[[package]]
+name = "wx-accessible-grid"
+version = "0.1.0"
+source = { git = "https://github.com/Community-Access/wx-accessible-grid?branch=main#d51f650133a82e0f6cb0423ba683a88518f87033" }
+dependencies = [
+    { name = "wx-accessible-webview" },
+    { name = "wxpython" },
 ]
 
 [[package]]

@@ -6,6 +6,58 @@ architecture, keyboard map, and CHIRP feature-coverage checklist.
 
 ---
 
+## 2026-06-20 — Editable channel grid via new wx-accessible-grid library
+
+The read-only-table-plus-edit-dialog model (Phase 2 rework) was the right call at
+the time, but the goal all along was a real editable grid. Built it as a reusable
+spin-out library, `wx-accessible-grid` (sibling of wx-accessible-webview and
+wx-accessible-menubar, at ../wx-accessible-grid), and wired VRP up as its first
+consumer.
+
+Why a library, and why it doesn't repeat the old failure: it renders a real
+`<table role="grid">` into an AccessibleWebView and drives it with the
+**aria-activedescendant** pattern (the table is the one focusable element; the
+active cell is the active descendant). That keeps NVDA in focus mode reading only
+the focused cell and the headers that changed, instead of re-reading the whole
+table on every arrow, which is exactly what killed the earlier in-grid attempt.
+Arrow nav, F2/Enter in-cell editing (text/combo/checkbox/slider/stepper), Space
+selection, Delete, and a context-menu callback are all in the library.
+
+The accessibility-lead review (4 specialists) was a NO-SHIP on the first cut
+(roving tabindex does not reliably trigger NVDA focus mode in WebView2); all three
+Criticals and most should-fixes were applied before this landed.
+
+VRP integration:
+- `vrp/channel_grid_model.py` — `ChannelGridModel` maps `build_column_defs` to the
+  library's columns (number = read-only row header, select = combo, the rest =
+  text), reads via `radio_backend.get_memory`, writes via `memory_ops.set_field`
+  (so edits validate/normalize through CHIRP and the announced value is
+  authoritative), deletes via `delete_range`. Immutable fields and the number
+  column are read-only.
+- `tools/grid_preview.py` — loads a radio image (a CHIRP test image by default)
+  and shows the channels in the grid. `uv run python tools/grid_preview.py`.
+- Dependency added to `pyproject.toml` (+ `[tool.uv.sources]` editable path);
+  installed editable into the venv.
+
+**Verified (Mac):** loads Baofeng_UV-5R.img (128 channels), every real column
+renders with real data, a name edit persists (and the UV-5R's name-length
+truncation comes back as the cell's authoritative display — the validate/normalize
+round-trip works), an invalid frequency is rejected and the old value kept. VRP's
+own suite still green (`uv run pytest` → 63 passed).
+
+**Open / next:**
+- **Make-or-break: NVDA on the Windows VM.** Run `uv run python tools/grid_preview.py`
+  in the Windows clone with NVDA. Step 1 is the focus-mode gate: Tab into the grid,
+  press Down, expect to hear a sibling cell (not a document line / beep). The
+  review's full VM test script covers all five editors, selection, delete, paging,
+  and edit-failed.
+- The existing read-only channels view and the native edit dialog are untouched;
+  the grid is a preview/beta path. Once NVDA proves it out, make it the channels
+  view and keep the edit dialog as the full-row fallback (good for defining an
+  empty channel in one pass). Then sync menu/shortcuts/docs per CLAUDE.md.
+
+---
+
 ## 2026-06-18 — FIXED: the actual cause of dead buttons (supersedes the entry below)
 
 The entry below this one found a real, reproducible native crash, but it was
