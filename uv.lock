@@ -1,6 +1,12 @@
 version = 1
 revision = 3
 requires-python = "==3.11.*"
+resolution-markers = [
+    "sys_platform != 'linux' and 'freebsd' in sys_platform",
+    "sys_platform != 'linux' and 'freebsd' not in sys_platform",
+    "sys_platform == 'linux' and 'freebsd' in sys_platform",
+    "sys_platform == 'linux' and 'freebsd' not in sys_platform",
+]
 
 [[package]]
 name = "altgraph"
@@ -93,6 +99,18 @@ requires-dist = [
 provides-extras = ["wx"]
 
 [[package]]
+name = "clr-loader"
+version = "0.3.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "cffi", marker = "sys_platform != 'linux'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/e4/46/7eea92b6aa2d68af78e049cbecec5f757f1aad44ecdecdc16bbad7eead51/clr_loader-0.3.1.tar.gz", hash = "sha256:2e073e9aaf49d1ae2f56ecba27987ad5fb68be4bcd9dd34a5bed8f0e4e128366", size = 86805, upload-time = "2026-04-18T17:49:44.287Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/5e/da/ec1a6e36624000b6df0dd61183c42342ee5814c073315e802cadaad04d2f/clr_loader-0.3.1-py3-none-any.whl", hash = "sha256:cbad189de20d202a7d621956b0fc38049e13c9bf7ca2923441eff725cd121aa1", size = 55730, upload-time = "2026-04-18T17:49:42.99Z" },
+]
+
+[[package]]
 name = "colorama"
 version = "0.4.6"
 source = { registry = "https://pypi.org/simple" }
@@ -127,7 +145,18 @@ wheels = [
 
 [package.optional-dependencies]
 toml = [
-    { name = "tomli", marker = "python_full_version <= '3.11'" },
+    { name = "tomli", marker = "python_full_version <= '3.11' and python_full_version == '3.11.*'" },
+]
+
+[[package]]
+name = "fonttools"
+version = "4.63.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/84/69/c97f2c18e0db87d2c7b15da1974dace76ae938f1cfa22e2727a648b7ed43/fonttools-4.63.0.tar.gz", hash = "sha256:caeb583deeb5168e694b65cda8b4ee62abedfa66cf88488734466f2366b9c4e0", size = 3597189, upload-time = "2026-05-14T12:04:30.958Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/75/2b/a7f1545bdf5da69c4bda0cea2a5781f0ad2a6623e0277267672db43c5fe6/fonttools-4.63.0-cp311-cp311-macosx_10_9_universal2.whl", hash = "sha256:2b8ae05d9eacf6081414d759c0a352769ac28ce31280d6bb8e77b03f9e3c449f", size = 2881793, upload-time = "2026-05-14T12:02:56.645Z" },
+    { url = "https://files.pythonhosted.org/packages/49/50/965308c703f085f225db2886813b27e015b8b3438c350b22dd65b52c2a2c/fonttools-4.63.0-cp311-cp311-macosx_10_9_x86_64.whl", hash = "sha256:79cdc9f567aec74a72918fd060283911406750cbc9fd28c1316023deb6ce31a9", size = 2428130, upload-time = "2026-05-14T12:02:58.891Z" },
+    { url = "https://files.pythonhosted.org/packages/2c/47/c99d5268f354002ce80f8d029cd9d7d872969da1de8b93d32de4dc56d6f4/fonttools-4.63.0-py3-none-any.whl", hash = "sha256:445af2eab030a16b9171ea8bdda7ebf7d96bda2df88ee182a464252f6e05e20d", size = 1164562, upload-time = "2026-05-14T12:04:29.092Z" },
 ]
 
 [[package]]
@@ -174,7 +203,7 @@ name = "macholib"
 version = "1.16.4"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "altgraph" },
+    { name = "altgraph", marker = "sys_platform != 'linux'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/10/2f/97589876ea967487978071c9042518d28b958d87b17dceb7cdc1d881f963/macholib-1.16.4.tar.gz", hash = "sha256:f408c93ab2e995cd2c46e34fe328b130404be143469e41bc366c807448979362", size = 59427, upload-time = "2025-11-22T08:28:38.373Z" }
 wheels = [
@@ -245,6 +274,32 @@ wheels = [
 ]
 
 [[package]]
+name = "pillow"
+version = "12.2.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/8c/21/c2bcdd5906101a30244eaffc1b6e6ce71a31bd0742a01eb89e660ebfac2d/pillow-12.2.0.tar.gz", hash = "sha256:a830b1a40919539d07806aa58e1b114df53ddd43213d9c8b75847eee6c0182b5", size = 46987819, upload-time = "2026-04-01T14:46:17.687Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/68/e1/748f5663efe6edcfc4e74b2b93edfb9b8b99b67f21a854c3ae416500a2d9/pillow-12.2.0-cp311-cp311-macosx_10_10_x86_64.whl", hash = "sha256:8be29e59487a79f173507c30ddf57e733a357f67881430449bb32614075a40ab", size = 5354347, upload-time = "2026-04-01T14:42:44.255Z" },
+    { url = "https://files.pythonhosted.org/packages/47/a1/d5ff69e747374c33a3b53b9f98cca7889fce1fd03d79cdc4e1bccc6c5a87/pillow-12.2.0-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:71cde9a1e1551df7d34a25462fc60325e8a11a82cc2e2f54578e5e9a1e153d65", size = 4695873, upload-time = "2026-04-01T14:42:46.452Z" },
+    { url = "https://files.pythonhosted.org/packages/df/21/e3fbdf54408a973c7f7f89a23b2cb97a7ef30c61ab4142af31eee6aebc88/pillow-12.2.0-cp311-cp311-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:f490f9368b6fc026f021db16d7ec2fbf7d89e2edb42e8ec09d2c60505f5729c7", size = 6280168, upload-time = "2026-04-01T14:42:49.228Z" },
+    { url = "https://files.pythonhosted.org/packages/d3/f1/00b7278c7dd52b17ad4329153748f87b6756ec195ff786c2bdf12518337d/pillow-12.2.0-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:8bd7903a5f2a4545f6fd5935c90058b89d30045568985a71c79f5fd6edf9b91e", size = 8088188, upload-time = "2026-04-01T14:42:51.735Z" },
+    { url = "https://files.pythonhosted.org/packages/ad/cf/220a5994ef1b10e70e85748b75649d77d506499352be135a4989c957b701/pillow-12.2.0-cp311-cp311-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:3997232e10d2920a68d25191392e3a4487d8183039e1c74c2297f00ed1c50705", size = 6394401, upload-time = "2026-04-01T14:42:54.343Z" },
+    { url = "https://files.pythonhosted.org/packages/e9/bd/e51a61b1054f09437acfbc2ff9106c30d1eb76bc1453d428399946781253/pillow-12.2.0-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:e74473c875d78b8e9d5da2a70f7099549f9eb37ded4e2f6a463e60125bccd176", size = 7079655, upload-time = "2026-04-01T14:42:56.954Z" },
+    { url = "https://files.pythonhosted.org/packages/6b/3d/45132c57d5fb4b5744567c3817026480ac7fc3ce5d4c47902bc0e7f6f853/pillow-12.2.0-cp311-cp311-musllinux_1_2_aarch64.whl", hash = "sha256:56a3f9c60a13133a98ecff6197af34d7824de9b7b38c3654861a725c970c197b", size = 6503105, upload-time = "2026-04-01T14:42:59.847Z" },
+    { url = "https://files.pythonhosted.org/packages/7d/2e/9df2fc1e82097b1df3dce58dc43286aa01068e918c07574711fcc53e6fb4/pillow-12.2.0-cp311-cp311-musllinux_1_2_x86_64.whl", hash = "sha256:90e6f81de50ad6b534cab6e5aef77ff6e37722b2f5d908686f4a5c9eba17a909", size = 7203402, upload-time = "2026-04-01T14:43:02.664Z" },
+    { url = "https://files.pythonhosted.org/packages/bd/2e/2941e42858ebb67e50ae741473de81c2984e6eff7b397017623c676e2e8d/pillow-12.2.0-cp311-cp311-win32.whl", hash = "sha256:8c984051042858021a54926eb597d6ee3012393ce9c181814115df4c60b9a808", size = 6378149, upload-time = "2026-04-01T14:43:05.274Z" },
+    { url = "https://files.pythonhosted.org/packages/69/42/836b6f3cd7f3e5fa10a1f1a5420447c17966044c8fbf589cc0452d5502db/pillow-12.2.0-cp311-cp311-win_amd64.whl", hash = "sha256:6e6b2a0c538fc200b38ff9eb6628228b77908c319a005815f2dde585a0664b60", size = 7082626, upload-time = "2026-04-01T14:43:08.557Z" },
+    { url = "https://files.pythonhosted.org/packages/c2/88/549194b5d6f1f494b485e493edc6693c0a16f4ada488e5bd974ed1f42fad/pillow-12.2.0-cp311-cp311-win_arm64.whl", hash = "sha256:9a8a34cc89c67a65ea7437ce257cea81a9dad65b29805f3ecee8c8fe8ff25ffe", size = 2463531, upload-time = "2026-04-01T14:43:10.743Z" },
+    { url = "https://files.pythonhosted.org/packages/4e/b7/2437044fb910f499610356d1352e3423753c98e34f915252aafecc64889f/pillow-12.2.0-pp311-pypy311_pp73-macosx_10_15_x86_64.whl", hash = "sha256:0538bd5e05efec03ae613fd89c4ce0368ecd2ba239cc25b9f9be7ed426b0af1f", size = 5273969, upload-time = "2026-04-01T14:45:55.538Z" },
+    { url = "https://files.pythonhosted.org/packages/f6/f4/8316e31de11b780f4ac08ef3654a75555e624a98db1056ecb2122d008d5a/pillow-12.2.0-pp311-pypy311_pp73-macosx_11_0_arm64.whl", hash = "sha256:394167b21da716608eac917c60aa9b969421b5dcbbe02ae7f013e7b85811c69d", size = 4659674, upload-time = "2026-04-01T14:45:58.093Z" },
+    { url = "https://files.pythonhosted.org/packages/d4/37/664fca7201f8bb2aa1d20e2c3d5564a62e6ae5111741966c8319ca802361/pillow-12.2.0-pp311-pypy311_pp73-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:5d04bfa02cc2d23b497d1e90a0f927070043f6cbf303e738300532379a4b4e0f", size = 5288479, upload-time = "2026-04-01T14:46:01.141Z" },
+    { url = "https://files.pythonhosted.org/packages/49/62/5b0ed78fce87346be7a5cfcfaaad91f6a1f98c26f86bdbafa2066c647ef6/pillow-12.2.0-pp311-pypy311_pp73-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:0c838a5125cee37e68edec915651521191cef1e6aa336b855f495766e77a366e", size = 7032230, upload-time = "2026-04-01T14:46:03.874Z" },
+    { url = "https://files.pythonhosted.org/packages/c3/28/ec0fc38107fc32536908034e990c47914c57cd7c5a3ece4d8d8f7ffd7e27/pillow-12.2.0-pp311-pypy311_pp73-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:4a6c9fa44005fa37a91ebfc95d081e8079757d2e904b27103f4f5fa6f0bf78c0", size = 5355404, upload-time = "2026-04-01T14:46:06.33Z" },
+    { url = "https://files.pythonhosted.org/packages/5e/8b/51b0eddcfa2180d60e41f06bd6d0a62202b20b59c68f5a132e615b75aecf/pillow-12.2.0-pp311-pypy311_pp73-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:25373b66e0dd5905ed63fa3cae13c82fbddf3079f2c8bf15c6fb6a35586324c1", size = 6002215, upload-time = "2026-04-01T14:46:08.83Z" },
+    { url = "https://files.pythonhosted.org/packages/bc/60/5382c03e1970de634027cee8e1b7d39776b778b81812aaf45b694dfe9e28/pillow-12.2.0-pp311-pypy311_pp73-win_amd64.whl", hash = "sha256:bfa9c230d2fe991bed5318a5f119bd6780cda2915cca595393649fc118ab895e", size = 7080946, upload-time = "2026-04-01T14:46:11.734Z" },
+]
+
+[[package]]
 name = "pluggy"
 version = "1.6.0"
 source = { registry = "https://pypi.org/simple" }
@@ -275,6 +330,17 @@ wheels = [
 ]
 
 [[package]]
+name = "pycairo"
+version = "1.29.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/22/d9/1728840a22a4ef8a8f479b9156aa2943cd98c3907accd3849fb0d5f82bfd/pycairo-1.29.0.tar.gz", hash = "sha256:f3f7fde97325cae80224c09f12564ef58d0d0f655da0e3b040f5807bd5bd3142", size = 665871, upload-time = "2025-11-11T19:13:01.584Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/31/92/1b904087e831806a449502786d47d3a468e5edb8f65755f6bd88e8038e53/pycairo-1.29.0-cp311-cp311-win32.whl", hash = "sha256:12757ebfb304b645861283c20585c9204c3430671fad925419cba04844d6dfed", size = 751342, upload-time = "2025-11-11T19:11:37.386Z" },
+    { url = "https://files.pythonhosted.org/packages/db/09/a0ab6a246a7ede89e817d749a941df34f27a74bedf15551da51e86ae105e/pycairo-1.29.0-cp311-cp311-win_amd64.whl", hash = "sha256:3391532db03f9601c1cee9ebfa15b7d1db183c6020f3e75c1348cee16825934f", size = 845036, upload-time = "2025-11-11T19:11:43.408Z" },
+    { url = "https://files.pythonhosted.org/packages/3c/b2/bf455454bac50baef553e7356d36b9d16e482403bf132cfb12960d2dc2e7/pycairo-1.29.0-cp311-cp311-win_arm64.whl", hash = "sha256:b69be8bb65c46b680771dc6a1a422b1cdd0cffb17be548f223e8cbbb6205567c", size = 694644, upload-time = "2025-11-11T19:11:48.599Z" },
+]
+
+[[package]]
 name = "pycparser"
 version = "3.0"
 source = { registry = "https://pypi.org/simple" }
@@ -291,6 +357,15 @@ sdist = { url = "https://files.pythonhosted.org/packages/c3/b2/bc9c9196916376152
 wheels = [
     { url = "https://files.pythonhosted.org/packages/f4/7e/a72dd26f3b0f4f2bf1dd8923c85f7ceb43172af56d63c7383eb62b332364/pygments-2.20.0-py3-none-any.whl", hash = "sha256:81a9e26dd42fd28a23a2d169d86d7ac03b46e2f8b59ed4698fb4785f946d0176", size = 1231151, upload-time = "2026-03-29T13:29:30.038Z" },
 ]
+
+[[package]]
+name = "pygobject"
+version = "3.56.3"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pycairo", marker = "'freebsd' in sys_platform or sys_platform == 'linux'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/da/61/978c5fbca34f10a90df362502fbb5a005637909e7b5a0e9212349ea9d010/pygobject-3.56.3.tar.gz", hash = "sha256:12760e4a0e3d04b6eb95e06f7a27e362c826d567ea613373a92c003b6c70d2d6", size = 1411853, upload-time = "2026-05-08T20:46:39.904Z" }
 
 [[package]]
 name = "pyinstaller"
@@ -372,6 +447,19 @@ wheels = [
 ]
 
 [[package]]
+name = "pythonnet"
+version = "3.1.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "clr-loader", marker = "sys_platform != 'linux'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/05/57/da1992e44663b71365c6e842c8d7fa453d4ec45fb99a68cfee5b7e944d3c/pythonnet-3.1.0.tar.gz", hash = "sha256:7b34c382905d10a371509ffafd64cae0416305c28817738a9cd138336f4e9991", size = 250599, upload-time = "2026-05-23T20:30:21.578Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ac/4b/52414f442624d2589f5374a48c08d5ae94f24bea67fc13a20a752884e5b7/pythonnet-3.1.0-cp310.cp311.cp312.cp313.cp314-none-any.whl", hash = "sha256:698dd88edc198819ad63b624a6ebe76208c7b46e4fe13626f65e484f0358d6ba", size = 217578, upload-time = "2026-05-23T20:30:19.527Z" },
+    { url = "https://files.pythonhosted.org/packages/db/67/031124fdcb937c266a3265118525bbf6dc13b8c79786d6a7290aecb6e7bb/pythonnet-3.1.0-cp310.cp311.cp312.cp313.cp314-none-win32.win_amd64.whl", hash = "sha256:7bdd4de03df3547a48122a3989265c8b31d5be0d19dadffa009eec7df8085e0b", size = 1644898, upload-time = "2026-05-23T20:30:16.213Z" },
+]
+
+[[package]]
 name = "pywin32-ctypes"
 version = "0.2.3"
 source = { registry = "https://pypi.org/simple" }
@@ -396,6 +484,15 @@ wheels = [
 ]
 
 [[package]]
+name = "rubicon-objc"
+version = "0.5.4"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/7b/37/fa4718811f5f33cb43fbd9e78209b4105f86022965ae9ceed08ef23560a9/rubicon_objc-0.5.4.tar.gz", hash = "sha256:9ba5eb203df2b2e6c7f2d93f671b583ef5ea0f61b17a3ff44cd9c68673ad7916", size = 188492, upload-time = "2026-05-06T00:57:50.457Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/50/56/ba4987a64ceaae27f629644c4c52d2291eeab0755486d976c4bd1c781d86/rubicon_objc-0.5.4-py3-none-any.whl", hash = "sha256:f7c755388d5709d7079152892137b13bcc6b4bdd796c9f0d9b3a1eb5bea715c4", size = 64553, upload-time = "2026-05-06T00:57:49.032Z" },
+]
+
+[[package]]
 name = "setuptools"
 version = "82.0.1"
 source = { registry = "https://pypi.org/simple" }
@@ -414,6 +511,129 @@ wheels = [
 ]
 
 [[package]]
+name = "toga"
+version = "0.5.4"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "toga-android", marker = "sys_platform == 'android'" },
+    { name = "toga-cocoa", marker = "sys_platform == 'darwin'" },
+    { name = "toga-gtk", marker = "'freebsd' in sys_platform or sys_platform == 'linux'" },
+    { name = "toga-ios", marker = "sys_platform == 'ios'" },
+    { name = "toga-web", marker = "sys_platform == 'emscripten'" },
+    { name = "toga-winforms", marker = "sys_platform == 'win32'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/53/13/ae42db1a71bedebfd69437ccf7668ff1d8f9c7f89cb180c3c2de20d5d177/toga-0.5.4.tar.gz", hash = "sha256:493600d89809630666a14fad08ecabd0a4c1d7e2089c8c6eade83649a22e0b08", size = 3935, upload-time = "2026-05-06T06:12:12.824Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/4b/e5/27545c42c4cdad5ba46a2b8f7a7d339054e543529a601cd811f82154c335/toga-0.5.4-py3-none-any.whl", hash = "sha256:f123a3814d9311b6f960f53cd2c83b650d6bb43c3ce7a0562d4a0a792a02fd72", size = 3398, upload-time = "2026-05-06T06:12:11.646Z" },
+]
+
+[[package]]
+name = "toga-android"
+version = "0.5.4"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "toga-core", marker = "sys_platform != 'linux'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/2a/51/cb382c75273721b6ced02f994f89c59bc888d94bf3d888fa792b3f97f471/toga_android-0.5.4.tar.gz", hash = "sha256:597c50727ffe12e0f3957c6ca028f2ac3410d222b3645be6347c614702ecbee7", size = 81184, upload-time = "2026-05-06T06:12:11.389Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/84/a0/495d0c0065a60364b99e9b930caf2fc3cc99477eb3316d720eebe8fa58b5/toga_android-0.5.4-py3-none-any.whl", hash = "sha256:ea9bbe031ca15ab12be1bd952a62826334231b9463dea5461a4dcbf30f1ff1fe", size = 75728, upload-time = "2026-05-06T06:12:09.909Z" },
+]
+
+[[package]]
+name = "toga-cocoa"
+version = "0.5.4"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "fonttools", marker = "sys_platform != 'linux'" },
+    { name = "rubicon-objc", marker = "sys_platform != 'linux'" },
+    { name = "toga-core", marker = "sys_platform != 'linux'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/e4/be/8bb98bf59e78aecff09fa66a2f6acd445e447bf932201f4cb502e6139c16/toga_cocoa-0.5.4.tar.gz", hash = "sha256:ec768958844f42ebd0e7652444d9b8bccf2050c78f8958b515cb8f48ba12cb55", size = 480935, upload-time = "2026-05-06T06:12:07.32Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/63/62/33f5ff931b76061f0c1413d1d1e69323693517148c222d05948354284940/toga_cocoa-0.5.4-py3-none-any.whl", hash = "sha256:7d3b97332d0f0ed58309233632994944bd818eca39f93a3fbab8496a9e8888bb", size = 475160, upload-time = "2026-05-06T06:12:05.68Z" },
+]
+
+[[package]]
+name = "toga-core"
+version = "0.5.4"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "travertino" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/70/2e/33d063e3b7b4820246a72639b3557b750b8af2ff828d5746e24ce7807353/toga_core-0.5.4.tar.gz", hash = "sha256:6137b1b62a80d7a4d0a2897c7dcc92b1e179c7431f0cf8b869787b458377079a", size = 1059781, upload-time = "2026-05-06T06:12:18.389Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/1b/c7/5f91060fcd3a109205aa9fb0829dd9da38e825028b7424cc918782952ff7/toga_core-0.5.4-py3-none-any.whl", hash = "sha256:5bb8f46593706676d81b6c66097e3b406c02780a2e4e28d8f1a4699b6a449a8a", size = 167499, upload-time = "2026-05-06T06:12:16.12Z" },
+]
+
+[[package]]
+name = "toga-dummy"
+version = "0.5.4"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "toga-core" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/7a/c4/07a4625c5e0f0b19e11a0dfcc6f1691397ec8344469184a4d6fecb3e21b6/toga_dummy-0.5.4.tar.gz", hash = "sha256:ceaf927f482ddc1ceb0d55e5f5637f537a8341778aea0c637ba3780722b05243", size = 74900, upload-time = "2026-05-06T06:12:08.183Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ad/df/cbce69d48f255060cc8a2b5dc72e1cea01e592597cda8c39a8c78df6d6de/toga_dummy-0.5.4-py3-none-any.whl", hash = "sha256:231241982a5cbc4412585a7263711ee400dd12fa1599994481f9452b40148271", size = 83254, upload-time = "2026-05-06T06:12:06.423Z" },
+]
+
+[[package]]
+name = "toga-gtk"
+version = "0.5.4"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "packaging", marker = "'freebsd' in sys_platform or sys_platform == 'linux'" },
+    { name = "pycairo", marker = "'freebsd' in sys_platform or sys_platform == 'linux'" },
+    { name = "pygobject", marker = "'freebsd' in sys_platform or sys_platform == 'linux'" },
+    { name = "toga-core", marker = "'freebsd' in sys_platform or sys_platform == 'linux'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/42/58/7fa8a4abb1432feeaa6dcfc9d0131bc109d902edee5d141b072a8d1c8ac8/toga_gtk-0.5.4.tar.gz", hash = "sha256:42135a1c3df4b961a1d2cc8383801a92d3bacbcccf7a933864d5cb0df935734a", size = 87467, upload-time = "2026-05-06T06:12:08.541Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/6c/82/7b98104721ed977cad24e46424a45630cc22fe9aaea6cf521ff26af505da/toga_gtk-0.5.4-py3-none-any.whl", hash = "sha256:1178eb900c560c415a44299bb0b2b0dd5dde455198bd0ba52de5c2b43b4fbe50", size = 79861, upload-time = "2026-05-06T06:12:06.681Z" },
+]
+
+[[package]]
+name = "toga-ios"
+version = "0.5.4"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "fonttools", marker = "sys_platform != 'linux'" },
+    { name = "rubicon-objc", marker = "sys_platform != 'linux'" },
+    { name = "toga-core", marker = "sys_platform != 'linux'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/7e/63/a4742a315d57869cd133c45bfd2aba99f3630b122a0f66763c4720ca117a/toga_ios-0.5.4.tar.gz", hash = "sha256:a6daa021ef33b7f72adee2c5a65be56def8bf58c7fb3bf2bb74a03bc91219fb4", size = 447746, upload-time = "2026-05-06T06:12:07.781Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/a0/84/21057986823ab87b687bd0a80541fde6125f76901a8f25881b2f9b4b80f7/toga_ios-0.5.4-py3-none-any.whl", hash = "sha256:02e8d58e605f24b9a2e1c3bc091276da5995fe31ba5dc7b729c1c7d027ec9d03", size = 444206, upload-time = "2026-05-06T06:12:06.138Z" },
+]
+
+[[package]]
+name = "toga-web"
+version = "0.5.4"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "toga-core", marker = "sys_platform != 'linux'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/3c/18/06f7be9c5a7e54c9a350ceab8fe4f5e019d90818c9ba8b5bfb75c404bd86/toga_web-0.5.4.tar.gz", hash = "sha256:df2a516f6ac15378f800e5d469cc89163f46461db16f2e111cd455f603fe2697", size = 22617, upload-time = "2026-05-06T06:12:16.385Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/da/fe/b07fc65cb63c26e732bc015434fe1175f7e12dd7b649994b8a286941ac6f/toga_web-0.5.4-py3-none-any.whl", hash = "sha256:e396e8a8b280101f01520cd5c7e5005abcc9b268009d83f4b2a7ed2e723e960e", size = 28380, upload-time = "2026-05-06T06:12:15.146Z" },
+]
+
+[[package]]
+name = "toga-winforms"
+version = "0.5.4"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pillow", marker = "sys_platform != 'linux'" },
+    { name = "pythonnet", marker = "sys_platform != 'linux'" },
+    { name = "toga-core", marker = "sys_platform != 'linux'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/66/df/5c378ef6c538dcbcbad0369ead290d302afb004bf403e262fe6c0ab50485/toga_winforms-0.5.4.tar.gz", hash = "sha256:7a4177335f69b480b5b536f29600d6600c3a877b9411aae93c6fb4da5be8abd7", size = 446658, upload-time = "2026-05-06T06:12:11.158Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/47/38/61dab903b574396f546b947ec2cbdb615fff84991772ee15d0a29478da0e/toga_winforms-0.5.4-py3-none-win_amd64.whl", hash = "sha256:da257158819bd7ec66e5c865a010c5b94da41e41ce051ad52d928699ad693c59", size = 376666, upload-time = "2026-05-06T06:12:07.552Z" },
+    { url = "https://files.pythonhosted.org/packages/5d/82/1a4e9feccd098165967d19ba4a7cfe386e7796bd233839564ae3a0df3480/toga_winforms-0.5.4-py3-none-win_arm64.whl", hash = "sha256:862c31f8fa15fa159fc3e137d45b116e22e76f40e491d2bf0676c4054fe6de09", size = 364280, upload-time = "2026-05-06T06:12:09.697Z" },
+]
+
+[[package]]
 name = "tomli"
 version = "2.4.1"
 source = { registry = "https://pypi.org/simple" }
@@ -429,6 +649,15 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/42/59/71461df1a885647e10b6bb7802d0b8e66480c61f3f43079e0dcd315b3954/tomli-2.4.1-cp311-cp311-win_amd64.whl", hash = "sha256:5ee18d9ebdb417e384b58fe414e8d6af9f4e7a0ae761519fb50f721de398dd4e", size = 108084, upload-time = "2026-03-25T20:21:18.978Z" },
     { url = "https://files.pythonhosted.org/packages/b8/83/dceca96142499c069475b790e7913b1044c1a4337e700751f48ed723f883/tomli-2.4.1-cp311-cp311-win_arm64.whl", hash = "sha256:c2541745709bad0264b7d4705ad453b76ccd191e64aa6f0fc66b69a293a45ece", size = 95285, upload-time = "2026-03-25T20:21:20.309Z" },
     { url = "https://files.pythonhosted.org/packages/7b/61/cceae43728b7de99d9b847560c262873a1f6c98202171fd5ed62640b494b/tomli-2.4.1-py3-none-any.whl", hash = "sha256:0d85819802132122da43cb86656f8d1f8c6587d54ae7dcaf30e90533028b49fe", size = 14583, upload-time = "2026-03-25T20:22:03.012Z" },
+]
+
+[[package]]
+name = "travertino"
+version = "0.5.4"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/85/04/646af3aa4e464b30828d076f632827f63d2c01b4a1bbf12b57739c191229/travertino-0.5.4.tar.gz", hash = "sha256:0f712aed518cfb47391cd0ade83237f4db127711a892dd4d5cef6118d041e180", size = 49857, upload-time = "2026-05-06T06:12:26.751Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/db/1e/1e8a9d24ba6e72ca7822bf2e596cfe82e8fbefd477e557d78e8775169ed8/travertino-0.5.4-py3-none-any.whl", hash = "sha256:aff0d275c45be3965441d47af04c271ebd7d03f53a436b2b1f8de4534077959b", size = 27016, upload-time = "2026-05-06T06:12:25.416Z" },
 ]
 
 [[package]]
@@ -451,6 +680,7 @@ dependencies = [
     { name = "prismatoid" },
     { name = "pyserial" },
     { name = "requests" },
+    { name = "toga" },
     { name = "wx-accessible-grid" },
     { name = "wx-accessible-menubar" },
     { name = "wx-accessible-webview" },
@@ -462,8 +692,10 @@ build = [
     { name = "pyinstaller" },
 ]
 dev = [
+    { name = "pillow" },
     { name = "pytest" },
     { name = "pytest-cov" },
+    { name = "toga-dummy" },
 ]
 
 [package.metadata]
@@ -471,12 +703,15 @@ requires-dist = [
     { name = "chirp", editable = "chirp" },
     { name = "jinja2", specifier = ">=3.1.0" },
     { name = "lark", specifier = ">=1.1.0" },
+    { name = "pillow", marker = "extra == 'dev'", specifier = ">=12.2.0" },
     { name = "prismatoid", specifier = ">=0.16.0" },
     { name = "pyinstaller", marker = "extra == 'build'", specifier = ">=6.10.0" },
     { name = "pyserial", specifier = ">=3.5" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.0.0" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=4.0.0" },
     { name = "requests", specifier = ">=2.28.0" },
+    { name = "toga", specifier = ">=0.5.4" },
+    { name = "toga-dummy", marker = "extra == 'dev'", specifier = ">=0.5.4" },
     { name = "wx-accessible-grid", specifier = ">=0.1.0" },
     { name = "wx-accessible-menubar", specifier = ">=0.1.1" },
     { name = "wx-accessible-webview", specifier = ">=0.2.0" },
@@ -489,14 +724,14 @@ name = "win32more"
 version = "0.8.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "win32more-appsdk" },
-    { name = "win32more-core" },
-    { name = "win32more-microsoft-graphics-win2d" },
-    { name = "win32more-microsoft-web-webview2" },
-    { name = "win32more-microsoft-windows-sdk-contracts" },
-    { name = "win32more-microsoft-windows-sdk-win32metadata" },
-    { name = "win32more-microsoft-windows-wdk-win32metadata" },
-    { name = "win32more-microsoft-windowsappsdk" },
+    { name = "win32more-appsdk", marker = "sys_platform != 'linux'" },
+    { name = "win32more-core", marker = "sys_platform != 'linux'" },
+    { name = "win32more-microsoft-graphics-win2d", marker = "sys_platform != 'linux'" },
+    { name = "win32more-microsoft-web-webview2", marker = "sys_platform != 'linux'" },
+    { name = "win32more-microsoft-windows-sdk-contracts", marker = "sys_platform != 'linux'" },
+    { name = "win32more-microsoft-windows-sdk-win32metadata", marker = "sys_platform != 'linux'" },
+    { name = "win32more-microsoft-windows-wdk-win32metadata", marker = "sys_platform != 'linux'" },
+    { name = "win32more-microsoft-windowsappsdk", marker = "sys_platform != 'linux'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/54/b2/296ede14cdd2bd0bfb90fef262e945918480f43e0211744427c6d7e9f721/win32more-0.8.1.tar.gz", hash = "sha256:07cea83d8b1b27cb807448a8683428e17865827059bd5c844d07e89c68367dda", size = 4845, upload-time = "2026-05-20T12:15:46.246Z" }
 wheels = [
@@ -508,7 +743,7 @@ name = "win32more-appsdk"
 version = "0.8.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "win32more-core" },
+    { name = "win32more-core", marker = "sys_platform != 'linux'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/4b/ab/cced60a7a2041f4c8a416e65de4aef1246ac241b88447e024e511cb22fa9/win32more_appsdk-0.8.3.tar.gz", hash = "sha256:c0aac4e383c9aa4e8eb20196ad7771bb92e91b1aab0abbf215d443d3adba8c71", size = 11308, upload-time = "2026-05-15T15:01:34.936Z" }
 wheels = [
@@ -529,8 +764,8 @@ name = "win32more-microsoft-graphics-win2d"
 version = "0.8.1.4.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "win32more-core" },
-    { name = "win32more-microsoft-windowsappsdk" },
+    { name = "win32more-core", marker = "sys_platform != 'linux'" },
+    { name = "win32more-microsoft-windowsappsdk", marker = "sys_platform != 'linux'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/44/c1/d9b7c0cfd9292efb45fbdf23aa758c4c0727469dd7a3cc77e50536cb914f/win32more_microsoft_graphics_win2d-0.8.1.4.0.tar.gz", hash = "sha256:d95197936a8ba96014b26f496b983b47b450bf365dd3ca5bf624867ac5be27b5", size = 1911025, upload-time = "2026-03-20T06:59:49.349Z" }
 wheels = [
@@ -542,8 +777,8 @@ name = "win32more-microsoft-web-webview2"
 version = "0.8.1.0.4022.49"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "win32more-core" },
-    { name = "win32more-microsoft-windows-sdk-contracts" },
+    { name = "win32more-core", marker = "sys_platform != 'linux'" },
+    { name = "win32more-microsoft-windows-sdk-contracts", marker = "sys_platform != 'linux'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/8c/8b/5b05095e9c988ef6eeb4bb42b0942a9b99d852f9e07a25071091063b1f30/win32more_microsoft_web_webview2-0.8.1.0.4022.49.tar.gz", hash = "sha256:398d1903a70e254bf41414c99e5f3b874b637b58b22e6f3bb730600dbae90b9d", size = 889538, upload-time = "2026-06-11T10:19:25.087Z" }
 wheels = [
@@ -555,7 +790,7 @@ name = "win32more-microsoft-windows-sdk-contracts"
 version = "0.8.10.0.28000.1839"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "win32more-core" },
+    { name = "win32more-core", marker = "sys_platform != 'linux'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/6b/74/5ec1e63d52693ab1e0de39b085862282ef624aaee66443a5ec6c95c8f0da/win32more_microsoft_windows_sdk_contracts-0.8.10.0.28000.1839.tar.gz", hash = "sha256:6409b5c7592e0f3a405c4295c77e5717eb77fd57ed7c20baaf2f2da6baa2f1b1", size = 1644791, upload-time = "2026-05-01T09:42:17.892Z" }
 wheels = [
@@ -567,8 +802,8 @@ name = "win32more-microsoft-windows-sdk-win32metadata"
 version = "0.8.70.0.11"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "win32more-core" },
-    { name = "win32more-microsoft-windows-sdk-contracts" },
+    { name = "win32more-core", marker = "sys_platform != 'linux'" },
+    { name = "win32more-microsoft-windows-sdk-contracts", marker = "sys_platform != 'linux'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/a9/be/5638282bc091de1574c04f3ab9d07e47e09d6bc92166c5299c274bbad023/win32more_microsoft_windows_sdk_win32metadata-0.8.70.0.11.tar.gz", hash = "sha256:83313195f796aa8de66d4e5b7fb654b3df320f483aabdcacf3bf9e3b3dd734c5", size = 3894843, upload-time = "2026-03-23T09:15:17.913Z" }
 wheels = [
@@ -580,8 +815,8 @@ name = "win32more-microsoft-windows-wdk-win32metadata"
 version = "0.8.0.13.25"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "win32more-core" },
-    { name = "win32more-microsoft-windows-sdk-win32metadata" },
+    { name = "win32more-core", marker = "sys_platform != 'linux'" },
+    { name = "win32more-microsoft-windows-sdk-win32metadata", marker = "sys_platform != 'linux'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/34/98/c1900d0393c757d39bcf4db4e74e1b80b19b71f16a57e3b090dec9dfd66a/win32more_microsoft_windows_wdk_win32metadata-0.8.0.13.25.tar.gz", hash = "sha256:4b42783c57caaabcd731535ab31039f84f08af6d5dbd8e86a097e70953253df6", size = 259270, upload-time = "2026-05-20T12:12:28.273Z" }
 wheels = [
@@ -593,10 +828,10 @@ name = "win32more-microsoft-windowsappsdk"
 version = "0.8.2.2.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "win32more-appsdk" },
-    { name = "win32more-core" },
-    { name = "win32more-microsoft-web-webview2" },
-    { name = "win32more-microsoft-windows-sdk-contracts" },
+    { name = "win32more-appsdk", marker = "sys_platform != 'linux'" },
+    { name = "win32more-core", marker = "sys_platform != 'linux'" },
+    { name = "win32more-microsoft-web-webview2", marker = "sys_platform != 'linux'" },
+    { name = "win32more-microsoft-windows-sdk-contracts", marker = "sys_platform != 'linux'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/f1/ea/4146ecc309460b9ad8fe4b5a5022ef8fab457f7380e493931a0329e83a73/win32more_microsoft_windowsappsdk-0.8.2.2.0.tar.gz", hash = "sha256:97ec03987a167c10761d50cf289922076cb6b05ef6486219d1a46eccf2891989", size = 1169604, upload-time = "2026-06-10T11:38:55.283Z" }
 wheels = [
@@ -645,7 +880,7 @@ name = "wxpython"
 version = "4.2.5"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "numpy" },
+    { name = "numpy", marker = "python_full_version == '3.11.*'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/22/43/81657a6b126ffc19163500a8184d683cec08eb4e1d06905cd0c371c702d0/wxpython-4.2.5.tar.gz", hash = "sha256:44e836d1bccd99c38790bb034b6ecf70d9060f6734320560f7c4b0d006144793", size = 58732217, upload-time = "2026-02-08T20:40:42.086Z" }
 wheels = [

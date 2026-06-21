@@ -12,6 +12,9 @@ dependencies = [
     # wrapped to expose semantic, screen-reader-friendly HTML (NVDA/JAWS).
     "wxpython>=4.2.0",
     "wx-accessible-webview>=0.2.0",
+    # Experimental parallel BeeWare/Toga UI prototype. The wx app remains the
+    # production launcher until native Toga accessibility is verified.
+    "toga>=0.5.4",
     # Keyboard-accessible native menu bar that works when a focused WebView2
     # swallows Alt (the menu key handling is the library's, not inline here).
     # 0.1.1 adds webview_listener_js for the single-bridge integration.
@@ -38,6 +41,9 @@ dependencies = [
 dev = [
     "pytest>=7.0.0",
     "pytest-cov>=4.0.0",
+    "toga-dummy>=0.5.4",
+    # toga-dummy imports PIL during backend initialization.
+    "pillow>=12.2.0",
 ]
 build = [
     "pyinstaller>=6.10.0",
