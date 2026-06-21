@@ -61,14 +61,27 @@ def test_bf888_first_page_has_empty_text_and_hidden_channel_number():
     assert page.last == 5
     assert page.total == 16
     assert page.columns[:3] == ["Ch #", "State", "Frequency"]
-    assert page.accessors[:4] == ["number", "state", "freq", "tmode"]
+    assert page.accessors[:4] == ["number", "state", "freq", "name"]
     assert page.accessors[-2:] == ["channel_number", "empty"]
     assert len(page.rows) == 5
     assert page.rows[0]["number"] == "1"
     assert page.rows[0]["channel_number"] == 1
     assert page.rows[0]["empty"] is False
-    assert any(row["state"] == EMPTY_MARKER for row in page.rows)
+    assert all(row["state"] != EMPTY_MARKER for row in page.rows)
     assert page.status == "Showing channels 1 to 5 of 16, page 1 of 4."
+
+
+def test_uv5r_empty_marker_matches_hidden_empty_flag():
+    from vrp_toga.table_model import EMPTY_MARKER, build_table_page
+
+    ok, message = radio_backend.load_image(UV5R_IMAGE)
+    assert ok, message
+
+    page = build_table_page(page=1, page_size=10)
+
+    assert any(row["empty"] is True for row in page.rows)
+    for row in page.rows:
+        assert (row["state"] == EMPTY_MARKER) is (row["empty"] is True)
 
 
 def test_uv5r_second_page_is_clamped_and_sliced():

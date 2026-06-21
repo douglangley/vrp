@@ -109,13 +109,6 @@ def build_table_page(page: int = 1, page_size: int | None = None) -> TablePage:
 
     columns = build_column_defs(state.features)
     display_columns = [column for column in columns if column.name != "number"]
-    names = [column.name for column in display_columns]
-    if "name" in names and "tmode" in names:
-        name_index = names.index("name")
-        tmode_index = names.index("tmode")
-        if name_index < tmode_index:
-            name_column = display_columns.pop(name_index)
-            display_columns.insert(tmode_index, name_column)
     headings = ["Ch #", "State"] + [column.label for column in display_columns]
     accessors = ["number", "state"] + [column.name for column in display_columns]
     accessors += ["channel_number", "empty"]
@@ -126,7 +119,7 @@ def build_table_page(page: int = 1, page_size: int | None = None) -> TablePage:
         if mem is None:
             continue
         empty = bool(getattr(mem, "empty", False))
-        state_text = EMPTY_MARKER if empty or not getattr(mem, "name", "") else ""
+        state_text = EMPTY_MARKER if empty else ""
         row: dict[str, Any] = {
             "number": str(number),
             "state": state_text,
