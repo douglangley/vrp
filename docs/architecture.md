@@ -28,6 +28,14 @@ main.py  (entry; applies the chirp import-path fix, then runs the app)
             └─ chirp  (vendored ./chirp, used unmodified; serial + driver library)
 ```
 
+## Experimental Toga Prototype
+
+`main_toga.py` launches a parallel BeeWare Toga prototype. It reuses
+`chirp_backend/` and the framework-neutral column definitions, but owns its own
+`vrp_toga/` app shell, command metadata, and native `toga.Table` adapter. This
+prototype does not replace the wxPython app; it exists to test whether native
+Toga widgets can meet VRP's screen-reader requirements.
+
 ## Interaction model (current)
 
 - **Grid is read-only and paged** (100 channels/page). Editing/operations happen

@@ -182,6 +182,16 @@ uv run pytest
 # Run the desktop app
 uv run python main.py
 
+# Experimental Toga prototype
+uv run python main_toga.py
+
+```
+
+The Toga launcher is a parallel prototype. The wxPython app launched by
+`uv run python main.py` remains the production UI until the native Toga table
+passes the screen-reader checklist in `docs/toga-accessibility-checklist.md`.
+
+```bash
 # (optional) debug logging
 uv run python main.py --debug
 
