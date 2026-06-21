@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -213,13 +214,24 @@ class VRPTogaApp(toga.App):
         self.next_button.enabled = loaded and has_next
         self.edit_button.enabled = loaded
 
+    @staticmethod
+    def _table_schema(table_page: TablePage) -> tuple[tuple[str, ...], tuple[str, ...]]:
+        return tuple(table_page.columns), tuple(table_page.accessors)
+
     def _refresh_table(self) -> None:
+        previous_page = self._last_table_page
         table_page = build_table_page(self._page)
         self._last_table_page = table_page
         self._page = table_page.page
 
-        # Table schema is fixed at construction, so rebuild on every refresh.
-        self.main_window.content = self._build_content(table_page)
+        if self._table_schema(previous_page) != self._table_schema(table_page):
+            self.main_window.content = self._build_content(table_page)
+        else:
+            self.radio_label.text = table_page.radio_label
+            self.table.data = ListSource(
+                accessors=table_page.accessors,
+                data=table_page.rows,
+            )
         self._set_status(table_page.status)
         self._refresh_command_state()
         if table_page.rows:
@@ -396,10 +408,40 @@ class VRPTogaApp(toga.App):
             return
         self._set_status("Organize channels is not available in this Toga prototype.")
 
+    @staticmethod
+    def _shortcut_label(shortcut: str, *, platform: str | None = None) -> str:
+        platform = sys.platform if platform is None else platform
+        is_macos = platform == "darwin"
+        token_labels = {
+            "mod": "Command" if is_macos else "Ctrl",
+            "alt": "Option" if is_macos else "Alt",
+            "shift": "Shift",
+            "left": "Left Arrow",
+            "right": "Right Arrow",
+            "up": "Up Arrow",
+            "down": "Down Arrow",
+            "f1": "F1",
+        }
+
+        labels = []
+        for token in shortcut.split("+"):
+            normalized = token.lower()
+            if normalized in token_labels:
+                labels.append(token_labels[normalized])
+            elif len(normalized) == 1 and normalized.isalpha():
+                labels.append(normalized.upper())
+            else:
+                labels.append(token.replace("_", " ").title())
+        return "+".join(labels)
+
     def on_shortcuts(self, widget, **kwargs) -> None:
         lines = []
         for spec in all_command_specs():
-            shortcut = spec.shortcut or "menu or button"
+            shortcut = (
+                self._shortcut_label(spec.shortcut)
+                if spec.shortcut is not None
+                else "Menu or button"
+            )
             lines.append(f"{spec.text}: {shortcut}")
         self._run_dialog(
             self.main_window.dialog(

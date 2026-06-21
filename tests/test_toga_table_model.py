@@ -1,4 +1,5 @@
 import os
+from types import SimpleNamespace
 
 import pytest
 
@@ -152,3 +153,159 @@ def test_page_for_channel_matches_loaded_radio_bounds():
     assert page_for_channel(0, page_size=100) == 1
     assert page_for_channel(100, page_size=100) == 2
     assert page_for_channel(999, page_size=100) == 2
+
+
+def test_refresh_table_reuses_content_and_table_when_schema_is_unchanged(monkeypatch):
+    monkeypatch.setenv("TOGA_BACKEND", "toga_dummy")
+
+    from vrp_toga import app as appmod
+
+    app = appmod.VRPTogaApp(
+        formal_name=appmod.APP_TITLE,
+        app_id="online.techopolis.vrp.toga.test",
+    )
+
+    initial_page = SimpleNamespace(
+        radio_label="Baofeng BF-888",
+        status="Showing channels 1 to 2 of 4, page 1 of 2.",
+        columns=["Ch #", "State", "Frequency"],
+        accessors=["number", "state", "freq", "channel_number", "empty"],
+        rows=[
+            {"number": "1", "state": "", "freq": "462.125000", "channel_number": 1, "empty": False},
+            {"number": "2", "state": "", "freq": "462.225000", "channel_number": 2, "empty": False},
+        ],
+        page=1,
+        total_pages=2,
+        first=1,
+        last=2,
+        total=4,
+        has_prev=False,
+        has_next=True,
+    )
+    next_page = SimpleNamespace(
+        radio_label="Baofeng BF-888",
+        status="Showing channels 3 to 4 of 4, page 2 of 2.",
+        columns=["Ch #", "State", "Frequency"],
+        accessors=["number", "state", "freq", "channel_number", "empty"],
+        rows=[
+            {"number": "3", "state": "", "freq": "462.325000", "channel_number": 3, "empty": False},
+            {"number": "4", "state": "", "freq": "462.425000", "channel_number": 4, "empty": False},
+        ],
+        page=2,
+        total_pages=2,
+        first=3,
+        last=4,
+        total=4,
+        has_prev=True,
+        has_next=False,
+    )
+
+    scroll_calls = []
+    table = SimpleNamespace(
+        data=appmod.ListSource(accessors=initial_page.accessors, data=initial_page.rows),
+        scroll_to_top=lambda: scroll_calls.append("top"),
+    )
+    content = object()
+
+    app._speak_enabled = False
+    app._page = 2
+    app._last_table_page = initial_page
+    app._main_window = SimpleNamespace(content=content)
+    app.radio_label = SimpleNamespace(text=initial_page.radio_label)
+    app.status_label = SimpleNamespace(text=initial_page.status)
+    app.table = table
+
+    refresh_calls = []
+    app._refresh_command_state = lambda: refresh_calls.append("refreshed")
+
+    monkeypatch.setattr(appmod, "build_table_page", lambda page: next_page)
+
+    app._refresh_table()
+
+    assert app.main_window.content is content
+    assert app.table is table
+    assert app.radio_label.text == next_page.radio_label
+    assert app.status_label.text == next_page.status
+    rows = list(app.table.data)
+    assert [row.channel_number for row in rows] == [3, 4]
+    assert [row.freq for row in rows] == ["462.325000", "462.425000"]
+    assert app._last_table_page is next_page
+    assert app._page == 2
+    assert refresh_calls == ["refreshed"]
+    assert scroll_calls == ["top"]
+
+
+def test_refresh_table_rebuilds_content_when_schema_changes(monkeypatch):
+    monkeypatch.setenv("TOGA_BACKEND", "toga_dummy")
+
+    from vrp_toga import app as appmod
+
+    app = appmod.VRPTogaApp(
+        formal_name=appmod.APP_TITLE,
+        app_id="online.techopolis.vrp.toga.test",
+    )
+
+    initial_page = SimpleNamespace(
+        radio_label="No radio loaded",
+        status="No radio image loaded.",
+        columns=["Ch #", "State"],
+        accessors=["number", "state", "channel_number", "empty"],
+        rows=[],
+        page=1,
+        total_pages=1,
+        first=0,
+        last=0,
+        total=0,
+        has_prev=False,
+        has_next=False,
+    )
+    loaded_page = SimpleNamespace(
+        radio_label="Baofeng BF-888",
+        status="Showing channels 1 to 2 of 4, page 1 of 2.",
+        columns=["Ch #", "State", "Frequency"],
+        accessors=["number", "state", "freq", "channel_number", "empty"],
+        rows=[
+            {"number": "1", "state": "", "freq": "462.125000", "channel_number": 1, "empty": False},
+            {"number": "2", "state": "", "freq": "462.225000", "channel_number": 2, "empty": False},
+        ],
+        page=1,
+        total_pages=2,
+        first=1,
+        last=2,
+        total=4,
+        has_prev=False,
+        has_next=True,
+    )
+
+    app._speak_enabled = False
+    app._page = 1
+    app._last_table_page = initial_page
+    app._main_window = SimpleNamespace(content=object())
+    app.status_label = SimpleNamespace(text=initial_page.status)
+
+    new_content = object()
+    build_calls = []
+
+    def fake_build_content(self, table_page):
+        build_calls.append(table_page)
+        self.radio_label = SimpleNamespace(text=table_page.radio_label)
+        self.status_label = SimpleNamespace(text=table_page.status)
+        self.table = SimpleNamespace(
+            data=appmod.ListSource(accessors=table_page.accessors, data=table_page.rows),
+            scroll_to_top=lambda: None,
+        )
+        return new_content
+
+    monkeypatch.setattr(appmod.VRPTogaApp, "_build_content", fake_build_content)
+    monkeypatch.setattr(appmod, "build_table_page", lambda page: loaded_page)
+    app._refresh_command_state = lambda: None
+
+    app._refresh_table()
+
+    assert build_calls == [loaded_page]
+    assert app.main_window.content is new_content
+    rows = list(app.table.data)
+    assert [row.channel_number for row in rows] == [1, 2]
+    assert [row.freq for row in rows] == ["462.125000", "462.225000"]
+    assert app.radio_label.text == loaded_page.radio_label
+    assert app.status_label.text == loaded_page.status

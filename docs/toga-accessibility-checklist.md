@@ -14,7 +14,7 @@ workflow. The wxPython app remains the accessibility baseline.
 
 ## Launch And Window
 
-- [ ] `uv run python main_toga.py` launches without replacing the wx app.
+- [ ] `uv run --extra toga python main_toga.py` launches without replacing the wx app.
 - [ ] Screen reader announces the window title as "Versatile Radio Programmer Toga Prototype".
 - [ ] Keyboard focus starts on a useful control or reaches one with Tab.
 - [ ] The required CHIRP attribution is visible and reachable.

@@ -54,7 +54,7 @@ The Toga prototype owns:
 
 The first implementation should deliver a usable read/navigation workflow:
 
-1. Launch the Toga prototype with `uv run python main_toga.py`.
+1. Launch the Toga prototype with `uv run --extra toga python main_toga.py`.
 2. Show an accessible welcome screen with the VRP purpose and required CHIRP
    attribution.
 3. Open a CHIRP image file through a Toga file dialog.

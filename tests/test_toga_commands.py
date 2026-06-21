@@ -188,3 +188,44 @@ def test_toga_content_includes_a_short_welcome_label(monkeypatch):
     assert content.children[1].text == (
         "Welcome. Open a CHIRP radio image to review channels."
     )
+
+
+def test_shortcut_label_is_human_readable(monkeypatch):
+    appmod = _toga_app_module(monkeypatch)
+
+    assert appmod.VRPTogaApp._shortcut_label("mod+alt+left", platform="darwin") == (
+        "Command+Option+Left Arrow"
+    )
+    assert appmod.VRPTogaApp._shortcut_label("mod+shift+m", platform="win32") == (
+        "Ctrl+Shift+M"
+    )
+    assert appmod.VRPTogaApp._shortcut_label("f1", platform="linux") == "F1"
+
+
+def test_shortcuts_dialog_uses_readable_labels(monkeypatch):
+    appmod = _toga_app_module(monkeypatch)
+    app = appmod.VRPTogaApp(
+        formal_name=appmod.APP_TITLE,
+        app_id="online.techopolis.vrp.toga.test",
+    )
+
+    captured = []
+
+    class FakeInfoDialog:
+        def __init__(self, title, message):
+            self.title = title
+            self.message = message
+
+    monkeypatch.setattr(appmod.toga, "InfoDialog", FakeInfoDialog)
+    monkeypatch.setattr(appmod.sys, "platform", "darwin")
+    app._main_window = SimpleNamespace(dialog=lambda dialog: dialog)
+    app._run_dialog = captured.append
+
+    app.on_shortcuts(None)
+
+    assert len(captured) == 1
+    dialog = captured[0]
+    assert dialog.title == "Keyboard Shortcuts"
+    assert "mod+" not in dialog.message
+    assert "Command+Option+Left Arrow" in dialog.message
+    assert "Command+Shift+M" in dialog.message

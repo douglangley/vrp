@@ -15,8 +15,8 @@
 ## File Structure
 
 - Modify: `pyproject.toml`
-  - Add `toga>=0.5.4` to runtime dependencies.
-  - Add `toga-dummy>=0.5.4` to dev dependencies for non-visual smoke checks.
+  - Keep `toga>=0.5.4` out of base runtime dependencies.
+  - Add a `toga` optional dependency and keep Toga packages in `dev` for non-visual smoke checks.
 - Modify: `uv.lock`
   - Regenerate with `uv lock` after dependency changes.
 - Create: `main_toga.py`
@@ -52,7 +52,8 @@
 
 - [ ] **Step 1: Update dependencies**
 
-In `pyproject.toml`, add Toga beside the UI dependencies and add `toga-dummy` to dev dependencies:
+In `pyproject.toml`, keep the wx production install surface unchanged, add a
+`toga` optional dependency for the prototype, and keep Toga packages in `dev`:
 
 ```toml
 dependencies = [
@@ -60,9 +61,6 @@ dependencies = [
     # wrapped to expose semantic, screen-reader-friendly HTML (NVDA/JAWS).
     "wxpython>=4.2.0",
     "wx-accessible-webview>=0.2.0",
-    # Experimental parallel BeeWare/Toga UI prototype. The wx app remains the
-    # production launcher until native Toga accessibility is verified.
-    "toga>=0.5.4",
     # Keyboard-accessible native menu bar that works when a focused WebView2
     # swallows Alt (the menu key handling is the library's, not inline here).
     # 0.1.1 adds webview_listener_js for the single-bridge integration.
@@ -86,9 +84,13 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+toga = [
+    "toga>=0.5.4",
+]
 dev = [
     "pytest>=7.0.0",
     "pytest-cov>=4.0.0",
+    "toga>=0.5.4",
     "toga-dummy>=0.5.4",
 ]
 ```
@@ -1187,7 +1189,7 @@ workflow. The wxPython app remains the accessibility baseline.
 
 ## Launch And Window
 
-- [ ] `uv run python main_toga.py` launches without replacing the wx app.
+- [ ] `uv run --extra toga python main_toga.py` launches without replacing the wx app.
 - [ ] Screen reader announces the window title as "Versatile Radio Programmer Toga Prototype".
 - [ ] Keyboard focus starts on a useful control or reaches one with Tab.
 - [ ] The required CHIRP attribution is visible and reachable.
@@ -1248,7 +1250,7 @@ In `README.md`, under the existing source run commands, add:
 
 ```markdown
 # Experimental Toga prototype
-uv run python main_toga.py
+uv run --extra toga python main_toga.py
 ```
 
 Add this paragraph immediately below the command:

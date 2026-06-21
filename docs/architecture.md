@@ -34,7 +34,9 @@ main.py  (entry; applies the chirp import-path fix, then runs the app)
 `chirp_backend/` and the framework-neutral column definitions, but owns its own
 `vrp_toga/` app shell, command metadata, and native `toga.Table` adapter. This
 prototype does not replace the wxPython app; it exists to test whether native
-Toga widgets can meet VRP's screen-reader requirements.
+Toga widgets can meet VRP's screen-reader requirements. Run it explicitly with
+`uv run --extra toga python main_toga.py`; the standard `uv run python main.py`
+path remains the production launcher.
 
 ## Interaction model (current)
 
