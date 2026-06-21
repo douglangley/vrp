@@ -20,7 +20,7 @@ from vrp_toga.commands import CommandSpec, all_command_specs, command_enabled
 from vrp_toga.table_model import TablePage, build_table_page
 
 APP_TITLE = "Versatile Radio Programmer Toga Prototype"
-ATTRIBUTION = "Radio driver support provided by the CHIRP project - chirpmyradio.com."
+ATTRIBUTION = "Radio driver support provided by the CHIRP project — chirpmyradio.com."
 IMAGE_TYPES = ["img"]
 CHANNELS_GROUP = toga.Group("Channels", order=30)
 
