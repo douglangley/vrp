@@ -30,7 +30,10 @@ class VRPTogaApp(toga.App):
 
     def startup(self) -> None:
         self.speaker = Speaker()
-        self._speak_enabled = bool(get_config().get("speak_status_messages", False))
+        # Toga has no live-region wrapper yet, so prototype status speech defaults on.
+        self._speak_enabled = bool(
+            get_config().get("toga_speak_status_messages", True)
+        )
         self._page = 1
         self._last_table_page = build_table_page(self._page)
         self._commands_by_id: dict[str, toga.Command] = {}
@@ -176,7 +179,7 @@ class VRPTogaApp(toga.App):
             "mod+shift+s": toga.Key.MOD_1 + toga.Key.SHIFT + "s",
             "mod+alt+left": toga.Key.MOD_1 + toga.Key.MOD_2 + toga.Key.LEFT,
             "mod+alt+right": toga.Key.MOD_1 + toga.Key.MOD_2 + toga.Key.RIGHT,
-            "mod+m": toga.Key.MOD_1 + "m",
+            "mod+shift+m": toga.Key.MOD_1 + toga.Key.SHIFT + "m",
             "mod+f": toga.Key.MOD_1 + "f",
             "mod+g": toga.Key.MOD_1 + "g",
             "f1": toga.Key.F1,

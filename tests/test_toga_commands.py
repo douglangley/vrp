@@ -1,4 +1,41 @@
+from types import SimpleNamespace
+
+from vrp.config import get_config
 from vrp_toga.commands import all_command_specs, command_enabled
+
+
+def _toga_app_module(monkeypatch):
+    monkeypatch.setenv("TOGA_BACKEND", "toga_dummy")
+    from vrp_toga import app as appmod
+
+    return appmod
+
+
+def _run_startup_without_gui(monkeypatch):
+    appmod = _toga_app_module(monkeypatch)
+
+    class SpeakerStub:
+        def speak(self, message):
+            raise AssertionError(f"startup should not speak: {message}")
+
+    monkeypatch.setattr(appmod, "Speaker", SpeakerStub)
+    monkeypatch.setattr(
+        appmod,
+        "build_table_page",
+        lambda page: SimpleNamespace(status="Ready."),
+    )
+    monkeypatch.setattr(
+        appmod.VRPTogaApp, "_build_content", lambda self, page: appmod.toga.Box()
+    )
+    monkeypatch.setattr(appmod.VRPTogaApp, "_install_commands", lambda self: None)
+    monkeypatch.setattr(appmod.VRPTogaApp, "_refresh_command_state", lambda self: None)
+
+    app = appmod.VRPTogaApp(
+        formal_name=appmod.APP_TITLE,
+        app_id="online.techopolis.vrp.toga.test",
+    )
+    app.startup()
+    return app
 
 
 def test_command_ids_are_unique_and_cover_first_slice():
@@ -47,9 +84,33 @@ def test_expected_command_shortcuts_are_declared():
         "page_next": "mod+alt+right",
         "find": "mod+f",
         "find_next": "mod+g",
-        "operations": "mod+m",
+        "operations": "mod+shift+m",
         "shortcuts": "f1",
     }
+
+
+def test_toga_shortcut_translates_shift_modified_operations_shortcut(monkeypatch):
+    appmod = _toga_app_module(monkeypatch)
+    by_id = {spec.id: spec for spec in all_command_specs()}
+
+    assert appmod.VRPTogaApp._toga_shortcut(by_id["operations"]) == (
+        appmod.toga.Key.MOD_1 + appmod.toga.Key.SHIFT + "m"
+    )
+
+
+def test_toga_status_speech_defaults_on_without_live_region(monkeypatch):
+    app = _run_startup_without_gui(monkeypatch)
+
+    assert app._speak_enabled is True
+
+
+def test_toga_status_speech_uses_toga_specific_config_key(monkeypatch):
+    get_config().set("speak_status_messages", True)
+    get_config().set("toga_speak_status_messages", False)
+
+    app = _run_startup_without_gui(monkeypatch)
+
+    assert app._speak_enabled is False
 
 
 def test_shortcuts_avoid_bare_single_letters():

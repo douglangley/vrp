@@ -126,7 +126,7 @@ _COMMANDS: tuple[CommandSpec, ...] = (
         group="channels",
         section=1,
         order=30,
-        shortcut="mod+m",
+        shortcut="mod+shift+m",
         requires_radio=True,
         tooltip="Move, copy, sort, or delete channels.",
     ),
