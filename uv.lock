@@ -452,6 +452,7 @@ dependencies = [
     { name = "pyserial" },
     { name = "requests" },
     { name = "wx-accessible-grid" },
+    { name = "wx-accessible-menubar" },
     { name = "wx-accessible-webview" },
     { name = "wxpython" },
 ]
@@ -477,6 +478,7 @@ requires-dist = [
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=4.0.0" },
     { name = "requests", specifier = ">=2.28.0" },
     { name = "wx-accessible-grid", git = "https://github.com/Community-Access/wx-accessible-grid?branch=main" },
+    { name = "wx-accessible-menubar", specifier = ">=0.1.0" },
     { name = "wx-accessible-webview", specifier = ">=0.2.0" },
     { name = "wxpython", specifier = ">=4.2.0" },
 ]
@@ -608,6 +610,18 @@ source = { git = "https://github.com/Community-Access/wx-accessible-grid?branch=
 dependencies = [
     { name = "wx-accessible-webview" },
     { name = "wxpython" },
+]
+
+[[package]]
+name = "wx-accessible-menubar"
+version = "0.1.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "wxpython" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/f0/86/31c54e05c94dddc78d9047f10af7a83f33faafe463d0752c07cb75500551/wx_accessible_menubar-0.1.0.tar.gz", hash = "sha256:0c11618aec798b8b1deac92df03e660577147344bb03217cbe7bffdab2547978", size = 11320, upload-time = "2026-06-21T00:04:59.86Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/fd/ee/329f10481473bc3e3128b9001668dc2b3df713ec8263a573fa5633d14e30/wx_accessible_menubar-0.1.0-py3-none-any.whl", hash = "sha256:697b1f88a4b30ed1e7ab9f6eaf1dd69a1c17bd0040ca16fdb24f07de0c241a99", size = 10964, upload-time = "2026-06-21T00:05:01.015Z" },
 ]
 
 [[package]]

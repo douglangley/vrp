@@ -12,25 +12,19 @@ handled inside the page and bridged to Python (the mechanism the webview also
 uses for Escape/F6); F1 lists them.
 
 Menu vs shortcuts and wxWidgets issue #24786: the webview is the ONLY child
-control in the frame, and it holds keyboard focus essentially permanently (no
-other native control to tab to), so a focused WebView2 swallows Alt entirely
-— confirmed with NVDA: bare Alt, Alt+F, Alt+R all do nothing, not just
-one-shot mnemonics as originally assumed. The bridged in-page Ctrl-combo
-shortcuts already covered Ctrl accelerators; menu *mnemonics* needed a
-separate fix: ``MainWindow`` binds ``EVT_CHAR_HOOK`` on the frame, which wx
-implements via a low-level keyboard hook on Windows specifically so it can
-see keys a child control would otherwise consume (the same mechanism
-``wx_accessible_webview``'s own dialogs already use for Escape). Alt+letter
-and F10 are detected there and drive the real native menu bar into its
-keyboard loop by posting ``WM_SYSCOMMAND``/``SC_KEYMENU`` to the frame — the
-exact message Windows itself sends on Alt, which WebView2 was eating. That
-puts the actual menu bar in navigation mode, so Left/Right move across
-File/Radio/Channels/Help and Up/Down/Enter work, NVDA-readable, ``EVT_MENU``
-fires normally. (An earlier attempt used ``PopupMenu()`` on a single
-``wx.Menu``, but a detached popup has no menu-bar context, so Left/Right were
-dead — see ``_open_menu_bar_menu``. Bare Alt-alone-opens-menu is intentionally
-not implemented — see ``_on_char_hook``.) After a menu closes, webview focus
-is restored so the bridged shortcuts stay live.
+control in the frame and holds keyboard focus essentially permanently, so a
+focused WebView2 swallows Alt entirely (confirmed with NVDA: bare Alt, Alt+F,
+Alt+R all do nothing). Making the native menu bar keyboard-accessible despite
+that is now the job of the ``wx-accessible-menubar`` library (which was
+extracted from this app): ``_build_menubar`` builds the real ``wx.MenuBar`` and
+``MainWindow`` hands it to ``AccessibleMenuBar`` in ``__init__``. The library
+injects an in-page key listener into the webview (the only place keys survive a
+focused WebView2), bridges plain Alt / Alt+mnemonic / F10 back over its own
+script-message channel, drives the real menu bar via ``WM_SYSCOMMAND``/
+``SC_KEYMENU`` (so Left/Right move across File/Radio/Channels/Help, ``EVT_MENU``
+fires, NVDA reads it), and restores webview focus after a menu closes / the
+window is maximized or reactivated. The only key still handled inline is Ctrl+O
+(see ``_on_char_hook``), which WebView2 can eat as a browser accelerator.
 """
 
 from __future__ import annotations
@@ -41,6 +35,7 @@ import logging
 import wx
 import wx.adv
 import wx.html2
+from wx_accessible_menubar import AccessibleMenuBar
 from wx_accessible_webview import AccessibleWebView, show_message
 
 from chirp_backend import radio as radio_backend
@@ -59,8 +54,8 @@ IMAGE_WILDCARD = "Radio image files (*.img)|*.img|All files (*.*)|*.*"
 # bridge action). Ctrl-combos are safe: NVDA's own commands use the NVDA
 # modifier, so intercepting these in the page doesn't clash with quick-nav.
 # Single letters are never used (rule #8). This list drives the F1 help.
-# The Alt+letter/F10 entries are native menu mnemonics caught by
-# _on_char_hook (not page-bridged), so their action is None — on_shortcuts
+# The Alt+letter/F10 entries are native menu mnemonics handled by the
+# wx-accessible-menubar library, so their action is None — on_shortcuts
 # only displays combo+description, it doesn't dispatch on action.
 APP_SHORTCUTS = [
     ("Alt+F", "Open the File menu", None),
@@ -92,7 +87,6 @@ _SHORTCUTS_JS = """
   if (window.__vrpKeys) return;
   window.__vrpKeys = true;
   function post(action){ if(window.vrp){ window.vrp.postMessage(JSON.stringify({action:action})); } }
-  function postMenu(index){ if(window.vrp){ window.vrp.postMessage(JSON.stringify({action:'menu_open', index:index})); } }
   function inText(el){
     if(!el) return false;
     if(el.tagName==='TEXTAREA' || el.isContentEditable) return true;
@@ -100,27 +94,11 @@ _SHORTCUTS_JS = """
       return ['text','search','number','email','tel','url','password'].indexOf(t)!==-1; }
     return false;
   }
-  // Native menu bar. A focused WebView2 hides Alt/F10 from wx, but the page
-  // still sees them here. Alt by itself activates the bar (confirmed on keyup,
-  // so it isn't mistaken for the start of Alt+letter / Alt+Tab); Alt+F/R/C/H
-  // opens that menu; F10 activates the bar. Python then drives the real menu.
-  var altAlone = false;
-  document.addEventListener('keyup', function(e){
-    if(e.key==='Alt'){
-      if(altAlone){ e.preventDefault(); post('menu_activate'); }
-      altAlone=false;
-    }
-  }, true);
+  // Menu-bar keys (plain Alt, Alt+mnemonic, F10) are owned by the
+  // wx-accessible-menubar library, which injects its own in-page listener and
+  // drives the native bar — not duplicated here. This listener owns the app's
+  // Ctrl-combo shortcuts, the paging keys, and F1.
   document.addEventListener('keydown', function(e){
-    if(e.key==='Alt' && !e.ctrlKey && !e.shiftKey && !e.metaKey){ altAlone=true; return; }
-    if(e.key==='F10' && !e.altKey && !e.ctrlKey && !e.shiftKey && !e.metaKey){
-      altAlone=false; e.preventDefault(); post('menu_activate'); return; }
-    if(e.altKey && !e.ctrlKey && !e.metaKey){
-      var mk=(e.key||'').toLowerCase();
-      var midx={'f':0,'r':1,'c':2,'h':3}[mk];
-      altAlone=false;
-      if(midx!==undefined){ e.preventDefault(); postMenu(midx); return; }
-    } else if(e.key!=='Alt'){ altAlone=false; }
     if(e.key==='F1'){ e.preventDefault(); post('shortcuts'); return; }
     if(e.ctrlKey && e.altKey && !e.metaKey){          // Ctrl+Alt+arrows = paging
       if(e.key==='ArrowRight'){ e.preventDefault(); post('page_next'); return; }
@@ -198,20 +176,24 @@ class MainWindow(wx.Frame):
         self.SetSizer(sizer)
 
         self._build_menubar()
-        # Wire the keyboard hook that drives the native menu bar (plain Alt,
-        # Alt+letter, F10). EVT_CHAR_HOOK is a low-level key hook that sees keys
-        # before the focused WebView2 can swallow them. _on_char_hook Skip()s
-        # every key it doesn't consume, so in-page typing, buttons, and the
-        # webview's own keys are unaffected. (Historically disabled during a
-        # diagnosis of a menu-build-order bug that is now reverted; re-enabled.)
+        # Menu-bar keyboard accessibility is the wx-accessible-menubar library's
+        # job now (extracted from this very app): plain Alt / Alt+mnemonic / F10,
+        # and focus restoration on menu close / maximize / reactivate. It injects
+        # an in-page key listener into the webview — the only place keys survive a
+        # focused WebView2 (wxWidgets #24786) — and drives the real native bar via
+        # SC_KEYMENU. capture_native_keys also binds a frame EVT_CHAR_HOOK for the
+        # non-webview path. restore_focus uses our own webview-focus helper.
+        self._menubar_helper = AccessibleMenuBar(
+            self,
+            self._menubar,
+            focus_target=self.view.view if self.view.using_webview else None,
+            webview=self.view.view if self.view.using_webview else None,
+            restore_focus=self._restore_webview_focus,
+            capture_native_keys=True,
+        )
+        # WebView2 can eat Ctrl+O as a browser accelerator before the page's
+        # shortcut listener sees it, so keep a tiny native hook just for that.
         self.Bind(wx.EVT_CHAR_HOOK, self._on_char_hook)
-        # Log when a native menu actually opens, to confirm activation works.
-        self.Bind(wx.EVT_MENU_OPEN, self._on_menu_open)
-        # Maximizing / reactivating the window can move focus off the webview
-        # onto the frame; the menu keys are caught inside the page, so they go
-        # dead until focus is back in the content. Pull it back (rule #6).
-        self.Bind(wx.EVT_MAXIMIZE, self._on_maximize)
-        self.Bind(wx.EVT_ACTIVATE, self._on_activate)
         self.show_welcome()
         self.view.focus()
 
@@ -282,6 +264,7 @@ class MainWindow(wx.Frame):
         m_about = help_menu.Append(wx.ID_ABOUT, "&About")
         bar.Append(help_menu, "&Help")
 
+        self._menubar = bar  # handed to AccessibleMenuBar in __init__
         self.SetMenuBar(bar)
 
         # Items that move focus into the page themselves (re-render / focus a
@@ -323,13 +306,8 @@ class MainWindow(wx.Frame):
         )
         self._update_menu_state()
         self._rebuild_recent_menu()
-
-        # The native menu loop (opened via Alt/F10 → SC_KEYMENU) leaves focus on
-        # the frame when it closes without a selection (e.g. Escape). Return
-        # focus to the webview so the page keeps receiving keys and NVDA lands
-        # back in the grid. Chosen items already restore focus via
-        # _menu_then_focus / their own re-render.
-        self.Bind(wx.EVT_MENU_CLOSE, self._on_menu_close)
+        # Focus restoration on menu close is handled by AccessibleMenuBar
+        # (wired in __init__ with restore_focus=self._restore_webview_focus).
 
     def _menu_then_focus(self, handler):
         """Wrap a menu handler so webview focus is restored after it runs."""
@@ -343,163 +321,23 @@ class MainWindow(wx.Frame):
             self.view.view.SetFocus()
         self.view.focus()
 
-    def _on_menu_open(self, event: wx.MenuEvent) -> None:
-        """Diagnostic: confirms a native menu actually opened (key path works)."""
-        LOG.debug("menu OPEN fired — native menu activated")
-        event.Skip()
-
-    def _on_maximize(self, event: wx.MaximizeEvent) -> None:
-        """Keep keys alive after maximize: focus can land on the frame, but the
-        menu keys are caught in the page, so return focus to the webview."""
-        event.Skip()
-        LOG.debug("maximize — restoring webview focus")
-        wx.CallAfter(self._restore_webview_focus)
-
-    def _on_activate(self, event: wx.ActivateEvent) -> None:
-        """Return focus to the webview when the window regains activation, so the
-        in-page key handling keeps working (e.g. after Alt+Tab or maximize)."""
-        event.Skip()
-        # Skip while a modal dialog is up (the frame is disabled then), so we
-        # don't yank focus away from the dialog.
-        if event.GetActive() and self.IsEnabled():
-            wx.CallAfter(self._restore_webview_focus)
-
-    def _on_menu_close(self, event: wx.MenuEvent) -> None:
-        """Return focus to the webview after a native menu closes (e.g. Escape)."""
-        event.Skip()
-        # Defer until the menu loop has fully unwound, or SetFocus is ignored.
-        wx.CallAfter(self._restore_webview_focus)
-
-    # Mnemonic letter -> top-level menu index, matching _build_menubar's
-    # bar.Append() order and the &File/&Radio/&Channels/&Help accelerators.
-    _MNEMONIC_TO_MENU_INDEX = {"F": 0, "R": 1, "C": 2, "H": 3}
-
     def _on_char_hook(self, event: wx.KeyEvent) -> None:
-        """Catch menu keys before the focused WebView2 can swallow them.
+        """Native backup for Ctrl+O only.
 
-        The webview holds keyboard focus essentially permanently (it's the only
-        client-area control), and a focused WebView2 swallows Alt and Ctrl/Alt
-        combos — confirmed with NVDA (see module docstring). EVT_CHAR_HOOK is a
-        low-level keyboard hook on Windows that sees the key before WebView2
-        does (the same mechanism wx_accessible_webview's own dialogs use for
-        Escape), so we use it to drive the native menu bar:
-
-        * Plain Alt, tapped alone, activates the menu bar (then Right/Left walk
-          across the top-level menus, like any native Windows app). "Alone"
-          can't be known until we see whether another key follows, so it arms a
-          short timer that ANY other key below cancels — so Alt+F, Alt+Tab and
-          Alt+F4 cancel cleanly because their second key arrives first.
-        * Alt+letter opens that menu; F10 activates the bar.
-        * Ctrl+O is caught here because WebView2 treats Ctrl/Alt combos as
-          browser accelerator keys (``AreBrowserAcceleratorKeysEnabled``, on by
-          default, not exposed by wx.html2.WebView) and can eat Ctrl+O before
-          the page's own ``_SHORTCUTS_JS`` listener sees it.
-
-        Must call event.Skip() for every key we don't consume, or normal typing
-        in the webview breaks (EVT_CHAR_HOOK is the highest-priority key event
-        in wx and stops propagation otherwise).
+        Plain Alt / Alt+mnemonic / F10 are handled by ``AccessibleMenuBar``. The
+        one key still caught here is Ctrl+O: a focused WebView2 treats Ctrl/Alt
+        combos as browser accelerator keys (``AreBrowserAcceleratorKeysEnabled``,
+        not exposed by wx.html2.WebView) and can eat Ctrl+O before the page's
+        ``_SHORTCUTS_JS`` listener sees it. Skip() every other key, or typing in
+        the webview breaks (EVT_CHAR_HOOK is the highest-priority key event in wx
+        and stops propagation otherwise).
         """
         key = event.GetKeyCode()
-        LOG.debug(
-            "char_hook key=%d alt=%s ctrl=%s shift=%s",
-            key, event.AltDown(), event.ControlDown(), event.ShiftDown(),
-        )
-
-        # Plain Alt by itself: arm menu-bar activation (cancelled below if a
-        # second key turns it into a combo).
-        if key == wx.WXK_ALT and not event.ControlDown() and not event.ShiftDown():
-            self._schedule_bare_alt()
-            event.Skip()
-            return
-
-        # Any other key means Alt was not tapped alone — drop the pending arm.
-        self._cancel_bare_alt()
-
-        if event.AltDown() and not event.ControlDown() and not event.ShiftDown():
-            letter = chr(key).upper() if 32 <= key < 128 else ""
-            index = self._MNEMONIC_TO_MENU_INDEX.get(letter)
-            if index is not None:
-                self._open_menu_bar_menu(index)
-                return  # consumed
-        if key == wx.WXK_F10 and not event.HasAnyModifiers():
-            self._activate_menu_bar()  # highlight the bar (Windows F10 convention)
-            return  # consumed
-        if event.ControlDown() and not event.AltDown() and not event.ShiftDown() and key == ord("O"):
+        if (event.ControlDown() and not event.AltDown() and not event.ShiftDown()
+                and key == ord("O")):
             self.on_open(None)
             return  # consumed
         event.Skip()
-
-    # Top-level menu index -> its mnemonic key code, matching _build_menubar's
-    # &File/&Radio/&Channels/&Help order. Used to drive the native menu bar.
-    _MENU_INDEX_TO_MNEMONIC = {0: ord("f"), 1: ord("r"), 2: ord("c"), 3: ord("h")}
-
-    def _post_sc_keymenu(self, lparam: int) -> bool:
-        """Windows: post the menu-activation message that Alt normally sends.
-
-        WM_SYSCOMMAND / SC_KEYMENU is the exact signal Windows itself uses when
-        you press Alt, which the focused WebView2 swallows (#24786). ``lparam``
-        is a menu's mnemonic char to open that menu, or 0 to just activate the
-        bar (highlight the first item) so Left/Right walk across it. Either way
-        the OS enters the real menu-bar keyboard loop. Returns False off Windows.
-        """
-        if wx.Platform != "__WXMSW__":
-            return False
-        import ctypes
-        from ctypes import wintypes
-
-        WM_SYSCOMMAND = 0x0112
-        SC_KEYMENU = 0xF100
-        user32 = ctypes.windll.user32
-        # Set argtypes so the 64-bit HWND isn't truncated to a C int.
-        user32.PostMessageW.argtypes = [
-            wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM,
-        ]
-        user32.PostMessageW.restype = wintypes.BOOL
-        hwnd = self.GetHandle()
-        ok = user32.PostMessageW(hwnd, WM_SYSCOMMAND, SC_KEYMENU, lparam)
-        fg = user32.GetForegroundWindow()
-        LOG.debug(
-            "SC_KEYMENU lparam=%d post_ok=%s hwnd=%s foreground=%s match=%s",
-            lparam, bool(ok), hwnd, fg, hwnd == fg,
-        )
-        return True
-
-    def _open_menu_bar_menu(self, index: int) -> None:
-        """Open a top-level menu in the REAL native menu-bar keyboard loop.
-
-        Earlier this popped one wx.Menu with PopupMenu(), but a standalone
-        popup has no menu-bar context, so Left/Right (move between File / Radio
-        / Channels / Help) were dead — you could only go Up/Down within the one
-        menu. Driving the native menu bar via SC_KEYMENU restores Left/Right and
-        reads correctly in NVDA. Non-Windows platforms keep PopupMenu.
-        """
-        if self._post_sc_keymenu(self._MENU_INDEX_TO_MNEMONIC.get(index, 0)):
-            return
-        bar = self.GetMenuBar()
-        menu = bar.GetMenu(index)
-        self.PopupMenu(menu, wx.Point(0, 0))
-        self._restore_webview_focus()
-
-    def _activate_menu_bar(self) -> None:
-        """Plain Alt / F10: highlight the menu bar with no menu dropped, so
-        Right/Left walk across File/Radio/Channels/Help like a native app."""
-        self._bare_alt_timer = None
-        if not self._post_sc_keymenu(0):
-            self._open_menu_bar_menu(0)  # non-Windows: open the first menu
-
-    def _schedule_bare_alt(self) -> None:
-        """Arm plain-Alt menu-bar activation. We can't tell Alt-tapped-alone
-        from the start of a combo (Alt+F, Alt+Tab, Alt+F4) until another key
-        does or doesn't follow, so a short timer fires and ANY other key in
-        ``_on_char_hook`` cancels it. Tunable; 200 ms reads as instant."""
-        self._cancel_bare_alt()
-        self._bare_alt_timer = wx.CallLater(200, self._activate_menu_bar)
-
-    def _cancel_bare_alt(self) -> None:
-        timer = getattr(self, "_bare_alt_timer", None)
-        if timer is not None and timer.IsRunning():
-            timer.Stop()
-        self._bare_alt_timer = None
 
     def _update_menu_state(self) -> None:
         """Disable channel/file items that need a loaded radio (NVDA hears
@@ -584,16 +422,8 @@ class MainWindow(wx.Frame):
         """
         LOG.debug("bridge message: %r", data)
         action = data.get("action") if isinstance(data, dict) else None
-        # Menu keys (Alt / Alt+letter / F10) are caught by in-page JS because a
-        # focused WebView2 hides them from wx; the page bridges them here and we
-        # drive the real native menu bar.
-        if action == "menu_activate":
-            self._activate_menu_bar()
-            return
-        if action == "menu_open":
-            idx = data.get("index", 0) if isinstance(data, dict) else 0
-            self._open_menu_bar_menu(int(idx) if idx is not None else 0)
-            return
+        # Menu keys (Alt / Alt+mnemonic / F10) are handled by AccessibleMenuBar
+        # over its own webview bridge, not routed through this handler.
         handler = {
             "open": self.on_open,
             "save": self.on_save,

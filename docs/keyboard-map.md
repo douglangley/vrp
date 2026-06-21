@@ -18,17 +18,18 @@ About the menu and wxWidgets issue #24786: the webview is the only client-area
 control and holds focus essentially permanently, so a focused WebView2
 swallows `Alt` entirely — confirmed with NVDA (bare `Alt`, `Alt+F`, `Alt+R` all
 did nothing; `Ctrl` accelerators were already covered by the bridged in-page
-shortcuts below). Fix: `MainWindow` catches `Alt+letter` and `F10` itself via
-`EVT_CHAR_HOOK` (a low-level keyboard hook on Windows that sees the key before
-WebView2 can) and opens the matching top-level menu with `PopupMenu()` — the
-same `wx.Menu` object already on the menu bar, so it's a real native Win32
-menu: arrow keys + Enter navigate and activate it, and NVDA reads it (also
-reachable via NVDA object navigation). Bare `Alt` alone (no letter) does
-*not* open a menu — that case isn't a clean single key event (Windows uses the
-same Alt-up signal for its own menu UI) and risks misfiring against
-`Alt+Tab`/`Alt+F4`; use `Alt+letter` or `F10` instead. After a menu action,
-webview focus is restored so the shortcuts stay live. Menu items that need a
-loaded radio are disabled (announced "unavailable") until an image is open.
+shortcuts below). This is now solved by the **wx-accessible-menubar** library
+(extracted from this app): `_build_menubar` builds the real `wx.MenuBar` and
+`MainWindow` hands it to `AccessibleMenuBar`. The library injects an in-page key
+listener into the webview (the only place keys survive a focused WebView2),
+bridges plain `Alt`, `Alt+mnemonic`, and `F10` back over its own script-message
+channel, and drives the real native menu bar via `WM_SYSCOMMAND`/`SC_KEYMENU` —
+so it stays a real native Win32 menu (arrow keys + Enter navigate it, `EVT_MENU`
+fires, NVDA reads it). Plain `Alt` is confirmed on key-up so it isn't mistaken
+for the start of `Alt+letter`/`Alt+Tab`/`Alt+F4`. After a menu closes (or the
+window is maximized/reactivated) the library restores webview focus so the
+shortcuts stay live. Menu items that need a loaded radio are disabled (announced
+"unavailable") until an image is open.
 
 Menu contents: **File** (Open / Open Recent ▸ … / Save / Save As / Close /
 Import from File… / Export to CSV… / Preferences… / Exit), **Radio** (Download / Upload / Query Source ▸ … /

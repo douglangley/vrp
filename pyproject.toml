@@ -12,6 +12,9 @@ dependencies = [
     # wrapped to expose semantic, screen-reader-friendly HTML (NVDA/JAWS).
     "wxpython>=4.2.0",
     "wx-accessible-webview>=0.2.0",
+    # Keyboard-accessible native menu bar that works when a focused WebView2
+    # swallows Alt (the menu key handling is the library's, not inline here).
+    "wx-accessible-menubar>=0.1.0",
     # Accessible, editable ARIA data grid (sibling library). Editable local
     # install from ../wx-accessible-grid — see [tool.uv.sources] below. This is
     # the screen-reader-first replacement for the read-only channel table.
