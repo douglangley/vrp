@@ -34,13 +34,13 @@ class TablePage:
 
 
 def _page_size(page_size: int | None = None) -> int:
-    if page_size:
-        return page_size
+    if page_size is not None:
+        return page_size if page_size > 0 else DEFAULT_PAGE_SIZE
     try:
         configured = int(get_config().get("channels_per_page", DEFAULT_PAGE_SIZE))
     except Exception:  # noqa: BLE001 - config should never block table rendering
         configured = DEFAULT_PAGE_SIZE
-    return configured or DEFAULT_PAGE_SIZE
+    return configured if configured > 0 else DEFAULT_PAGE_SIZE
 
 
 def _bounds() -> tuple[int, int]:
@@ -73,6 +73,7 @@ def page_range(page: int, page_size: int | None = None) -> tuple[int, int]:
     low, high = _bounds()
     if high < low:
         return 0, 0
+    page = min(max(page, 1), total_pages(size))
     start = low + (page - 1) * size
     return start, min(high, start + size - 1)
 

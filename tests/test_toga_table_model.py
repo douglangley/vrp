@@ -46,7 +46,7 @@ def test_no_radio_page_is_empty_and_named():
     assert page.status == "No radio image loaded."
 
 
-def test_bf888_first_page_has_empty_text_and_hidden_channel_number():
+def test_bf888_first_page_has_no_empty_markers_and_hidden_channel_number():
     from vrp_toga.table_model import EMPTY_MARKER, build_table_page
 
     ok, message = radio_backend.load_image(BF888_IMAGE)
@@ -69,6 +69,30 @@ def test_bf888_first_page_has_empty_text_and_hidden_channel_number():
     assert page.rows[0]["empty"] is False
     assert all(row["state"] != EMPTY_MARKER for row in page.rows)
     assert page.status == "Showing channels 1 to 5 of 16, page 1 of 4."
+
+
+def test_bf888_negative_page_size_falls_back_to_default_metadata():
+    from vrp_toga.table_model import build_table_page
+
+    ok, message = radio_backend.load_image(BF888_IMAGE)
+    assert ok, message
+
+    page = build_table_page(page=1, page_size=-5)
+
+    assert page.page == 1
+    assert page.total_pages == 1
+    assert page.first == 1
+    assert page.last == 16
+    assert len(page.rows) == 16
+
+
+def test_page_range_clamps_requested_page_to_loaded_bounds():
+    from vrp_toga.table_model import page_range
+
+    ok, message = radio_backend.load_image(BF888_IMAGE)
+    assert ok, message
+
+    assert page_range(99, page_size=5) == (16, 16)
 
 
 def test_uv5r_empty_marker_matches_hidden_empty_flag():
