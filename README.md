@@ -78,6 +78,11 @@ programmable in open-source software.
 
 - Accessible read-only channel grid (real HTML table) hosted in an embedded
   webview — works with NVDA/JAWS; large radios are paged (100 channels/page)
+- **(Preview)** An editable channel grid via the `wx-accessible-grid` library —
+  a real `<table role="grid">` with in-cell text/combo/checkbox editing, row
+  selection, and delete, read/written through CHIRP's own validation. NVDA-on-
+  Windows verification is owed before it replaces the read-only grid above;
+  try it standalone with `uv run python tools/grid_preview.py`
 - Editing in native wx dialogs (first-class screen-reader support): per-channel
   field editor, bulk operations, find, settings, banks, download/upload
 - Bulk operations (delete, delete+shift, insert, move, copy, sort, arrange) over
@@ -87,7 +92,9 @@ programmable in open-source software.
 - Radio settings editor, banks editor, and online query sources (AMSAT, SatNOGS;
   more sources are incremental)
 - Reachable three ways and kept in sync: native menu bar, in-page buttons, and
-  global Ctrl-combo keyboard shortcuts (F1 lists them)
+  global Ctrl-combo keyboard shortcuts (F1 lists them). Menu-bar Alt/F10
+  keyboard access is provided by the `wx-accessible-menubar` library, which
+  works around a focused WebView2 swallowing Alt (wx #24786)
 - High contrast and forced-colors (Windows High Contrast) support
 - Packages as a single self-contained .exe (Windows) via PyInstaller
 
@@ -96,10 +103,13 @@ programmable in open-source software.
 ```
 main.py                  Thin entry point: applies the chirp path fix, runs app.
 vrp/                     wxPython UI layer (the accessible front end).
-  app.py                 wx app/window, native menu bar, AccessibleWebView host,
-                         the window.vrp.postMessage() bridge, keyboard shortcuts,
-                         paging, and all command handlers.
+  app.py                 wx app/window, native menu bar (wx-accessible-menubar),
+                         AccessibleWebView host, the window.vrp.postMessage()
+                         bridge, keyboard shortcuts, paging, and all command
+                         handlers.
   views.py               Renders channel-grid pages (read-only) and single rows.
+  channel_grid_model.py  GridModel adapter for the wx-accessible-grid editable
+                         grid preview (see tools/grid_preview.py).
   edit_dialog.py         Native wx dialog to edit one channel.
   ops_dialog.py          Native wx dialog for bulk operations.
   find_dialog.py         Native wx Find dialog.
@@ -128,6 +138,10 @@ templates/
   channels.html          Memory channel grid (read-only, paged).
   _row_macro.html        Shared macro for one channel row.
 tests/                   Unit tests (no radio hardware needed).
+tools/
+  update_chirp.py        Fetches/tests/pins a new CHIRP commit.
+  grid_preview.py        Standalone harness for the wx-accessible-grid preview
+                         (loads a CHIRP test image; no full app or radio needed).
 build.py                 PyInstaller build script.
 pyproject.toml           uv-managed project definition (Python 3.11 pinned).
 ```
@@ -136,8 +150,11 @@ Interactive behavior is small inline `onclick`/`onkeydown` handlers in the view
 fragments (plus a global keyboard listener injected via `run_js`); both bridge
 to Python with `window.vrp.postMessage(...)`. The UI host is the
 `wx-accessible-webview` package (an `AccessibleWebView` wrapping
-`wx.html2.WebView`), and `prism`/`prismatoid` provides supplemental speech.
-There is no Flask server and no PyWebView.
+`wx.html2.WebView`); the native menu bar's keyboard access (Alt / Alt+mnemonic /
+F10 against WebView2 swallowing Alt, wx #24786) comes from `wx-accessible-menubar`;
+an in-progress editable channel grid (see Features above) uses
+`wx-accessible-grid`. `prism`/`prismatoid` provides supplemental speech. There
+is no Flask server and no PyWebView.
 
 ## Development Setup
 

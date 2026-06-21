@@ -5,16 +5,38 @@
 **Versatile Radio Programmer (VRP)** — an accessible desktop radio memory channel
 programmer. It wraps the CHIRP Python library (in ./chirp/) in a wxPython app
 whose `AccessibleWebView` (from the `wx-accessible-webview` package) renders
-semantic, screen-reader-friendly HTML. It uses `prism` (the `prismatoid`
-bindings) for supplemental speech, then compiles to a single .exe with Nuitka.
-There is NO web server and NO browser — HTML is rendered to strings and shown
-in the embedded webview; page scripts talk to Python over a JS→Python bridge.
+semantic, screen-reader-friendly HTML, with a native menu bar driven by
+`wx-accessible-menubar` and (preview/beta) an editable channel grid via
+`wx-accessible-grid` — see "Accessible UI Libraries" below. It uses `prism`
+(the `prismatoid` bindings) for supplemental speech, then packages to a single
+.exe with PyInstaller. There is NO web server and NO browser — HTML is
+rendered to strings and shown in the embedded webview; page scripts talk to
+Python over a JS→Python bridge.
 
 The CHIRP library (./chirp/) is used UNMODIFIED as a dependency. Never edit
 files inside ./chirp/. Update it with git pull only.
 
 The primary user is blind and uses NVDA on Windows. Every piece of UI code
 must be accessible to screen readers. This is not optional.
+
+## Accessible UI Libraries (sibling projects — don't reinvent inline)
+
+- `wx-accessible-webview` — `AccessibleWebView` wrapping `wx.html2.WebView`;
+  the page-rendering host (see vrp/app.py, vrp/html.py).
+- `wx-accessible-menubar` — `AccessibleMenuBar`; owns Alt / Alt+mnemonic / F10
+  menu-bar keyboard access against a focused WebView2 swallowing Alt (wx
+  #24786). Wired in `MainWindow.__init__`; `_build_menubar` still builds the
+  real `wx.MenuBar`.
+- `wx-accessible-grid` — `AccessibleGrid` + `GridModel`; an editable
+  `<table role="grid">` driven by the aria-activedescendant pattern. VRP's
+  adapter is `vrp/channel_grid_model.py` (`ChannelGridModel`); try it with
+  `uv run python tools/grid_preview.py`. **Status: preview/beta — the
+  NVDA-on-Windows pass is not done yet.** The production channels view is
+  still the read-only table + edit dialog (vrp/views.py + vrp/edit_dialog.py).
+  See PROGRESS_LOG.md "2026-06-20" for the promotion criteria.
+
+All three were extracted from this app; fix issues upstream in the library,
+not as a local workaround in vrp/app.py.
 
 ## Required Attribution (do not remove)
 
@@ -46,13 +68,18 @@ to do. Do not remove or obscure it.
   - html.py            — Jinja2 rendering to strings + attribution footer
   - speech.py          — prism speech wrapper (graceful no-op if unavailable)
   - _chirp_path.py     — makes the editable ./chirp package importable
+  - channel_grid_model.py — GridModel adapter for the wx-accessible-grid
+                         editable grid preview (see tools/grid_preview.py)
 - chirp_backend/       — all chirp library interaction (framework-agnostic):
                          radio, memory_ops, col_defs, bank_ops, query
 - static/css/main.css  — design-system styles, retained for future inlining
                          into the webview (not currently loaded)
 - templates/           — Jinja2 view fragments (welcome, channels, _row_macro)
 - tests/               — unit tests (no hardware needed)
-- build.py             — Nuitka build script
+- tools/               — update_chirp.py (CHIRP version bump) and
+                         grid_preview.py (standalone wx-accessible-grid preview
+                         harness, no full app needed)
+- build.py             — PyInstaller build script
 - chirp/               — upstream CHIRP library (DO NOT EDIT)
 
 ## Command Surfaces (keep in sync)
@@ -60,8 +87,11 @@ to do. Do not remove or obscure it.
 Every user command is reachable three ways and they must stay in sync:
 1. The native **menu bar** (`_build_menubar` in vrp/app.py) — File / Radio /
    Channels / Help. A focused WebView2 eats one-shot Alt/Ctrl accelerators
-   (wxWidgets #24786), but Alt selects the bar and an open menu works natively;
-   menu actions restore webview focus afterward (`_menu_then_focus`).
+   (wxWidgets #24786); `wx-accessible-menubar`'s `AccessibleMenuBar` (wired in
+   `MainWindow.__init__`) bridges plain `Alt`, `Alt+mnemonic`, and `F10` from an
+   in-page key listener and restores webview focus after a menu closes or the
+   window is maximized/reactivated. Individual menu-item handlers also restore
+   focus via `_menu_then_focus`.
 2. In-page **buttons** in the view fragments (bridge via `window.vrp.postMessage`).
 3. Global **Ctrl-combo shortcuts** (`_SHORTCUTS_JS` map + `APP_SHORTCUTS`),
    handled inside the page so they work despite #24786; also listed by F1.
@@ -117,7 +147,7 @@ update `docs/keyboard-map.md` and `docs/chirp-feature-coverage.md`.
 - Never import from chirp.wxui — that's the inaccessible GUI we're replacing
 - Always call directory.import_drivers() before any radio operations
 - Radio driver modules are dynamically imported; always pass
-  --include-package=chirp.drivers to Nuitka
+  --collect-submodules=chirp.drivers to PyInstaller (see build.py)
 - The Memory object fields: freq (int Hz), name (str), tmode, rtone, ctone,
   dtcs, rx_dtcs, dtcs_polarity, cross_mode, duplex, offset, mode,
   tuning_step, skip, power, comment, empty (bool), immutable (list)

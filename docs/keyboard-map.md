@@ -105,6 +105,24 @@ On invalid input the dialog stays open, speaks the reason, and focuses the bad
 field. On OK only the edited row is refreshed and focus returns to its Edit
 button. No bare single-letter shortcuts in the grid (NVDA browse mode owns a–z).
 
+## Editable grid preview (wx-accessible-grid — preview/beta, NVDA pass owed)
+
+Not yet the production channels view (see above); a standalone harness at
+`tools/grid_preview.py` (`uv run python tools/grid_preview.py`) previews the
+in-progress editable grid, driven by `vrp/channel_grid_model.py`. It renders a
+real `<table role="grid">` via the aria-activedescendant pattern so NVDA stays
+in focus mode.
+
+| Key                  | Action                                  |
+|-----------------------|------------------------------------------|
+| Arrows                | Move focus a cell at a time (across a row speaks the column; down a column speaks the channel number) |
+| `F2` / `Enter`        | Start editing the focused cell           |
+| `Enter`               | Commit the edit                          |
+| `Esc`                 | Cancel the edit                          |
+| `Space`               | Toggle the row-selection checkbox        |
+| `Delete`              | Delete the selected row(s)               |
+| Applications key      | Open the row context menu                |
+
 ## Organize Channels (move/delete/etc., Phase 3 — done)
 
 `Ctrl+M` (or the "Organize Channels…" button) opens a native wx dialog. There
