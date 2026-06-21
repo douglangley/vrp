@@ -18,7 +18,7 @@ dependencies = [
     "wx-accessible-menubar>=0.1.1",
     # Accessible, editable ARIA data grid (sibling library). The screen-reader-
     # first replacement for the read-only channel table (preview).
-    "wx-accessible-grid>=0.2.0",
+    "wx-accessible-grid>=0.3.0",
     # Unified TTS / screen-reader speech (prism). Used to speak things that
     # ARIA alone can't convey. The Python bindings ship as `prismatoid`.
     "prismatoid>=0.16.0",

@@ -477,7 +477,7 @@ requires-dist = [
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.0.0" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=4.0.0" },
     { name = "requests", specifier = ">=2.28.0" },
-    { name = "wx-accessible-grid", specifier = ">=0.2.0" },
+    { name = "wx-accessible-grid", specifier = ">=0.3.0" },
     { name = "wx-accessible-menubar", specifier = ">=0.1.1" },
     { name = "wx-accessible-webview", specifier = ">=0.2.0" },
     { name = "wxpython", specifier = ">=4.2.0" },
@@ -605,15 +605,15 @@ wheels = [
 
 [[package]]
 name = "wx-accessible-grid"
-version = "0.2.0"
+version = "0.3.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "wx-accessible-webview" },
     { name = "wxpython" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/d2/51/65972eb03b5e5f8e55754bf7cef986819e37ec826959a1af92b9ba4089f0/wx_accessible_grid-0.2.0.tar.gz", hash = "sha256:d0582e6ebb0d42036a0eadb9767489dba5e9a855207b154a41bff372c43ebe98", size = 33077, upload-time = "2026-06-21T16:14:57.622Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/c5/83/1dcedf4ed943ce99e9214a3e534215d2dca7809701aa3ce8a7579ee3b326/wx_accessible_grid-0.3.0.tar.gz", hash = "sha256:7a8690bee5c8238705fdcb09c12988b3e18b02ee4004bcdeac6abd286a81d504", size = 37290, upload-time = "2026-06-21T17:18:10.405Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/f2/56/affe2576b523cfcdafa310d5601095660446ba6b8e6e206b5a146d0f86f1/wx_accessible_grid-0.2.0-py3-none-any.whl", hash = "sha256:388b637bb7f977b768431b59812af01a02e3948b3f78f9b80c750a6b269a8ed8", size = 25236, upload-time = "2026-06-21T16:14:58.557Z" },
+    { url = "https://files.pythonhosted.org/packages/29/6e/b4adadc953bf3680538d2de01cf9483bbe165936c388a50b1c9cd80461d7/wx_accessible_grid-0.3.0-py3-none-any.whl", hash = "sha256:7e6926ace803204d19ff6eb6b69e8ef21f068479e91221d2eb0a36548ddaac6f", size = 28802, upload-time = "2026-06-21T17:18:09.475Z" },
 ]
 
 [[package]]
