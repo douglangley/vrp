@@ -48,7 +48,12 @@ def test_main_window_announces_ready_on_startup(app):
 
     win = MainWindow()
     try:
-        wx.YieldIfNeeded()  # flush the wx.CallAfter-deferred startup announce
+        # The startup announce fires on a 750ms wx.CallLater, which needs a
+        # real running event loop to dispatch — wx.YieldIfNeeded() alone
+        # doesn't reliably pump timer events. Run MainLoop() briefly and
+        # exit it once that's had time to fire.
+        wx.CallLater(900, app.ExitMainLoop)
+        app.MainLoop()
         sb = win.GetStatusBar()
         assert sb is not None
         assert sb.GetStatusText(0) == "Ready"

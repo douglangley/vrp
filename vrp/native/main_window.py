@@ -103,11 +103,14 @@ class MainWindow(wx.Frame):
         self._build_menubar()
         self._update_menu_state()
         self.grid.SetFocus()
-        # Deferred: speaking synchronously here, before app.MainLoop() starts
-        # pumping events, doesn't reliably reach prism's backend (no error,
-        # just silence) — same reason other first-paint actions in this app
-        # use wx.CallAfter instead of running inline in __init__.
-        wx.CallAfter(self.announce.announce, "Ready")
+        # Deferred and delayed: wx.CallAfter alone fires on the very next idle
+        # tick, which can race ahead of NVDA's own window-title announcement
+        # for the newly shown frame, and a non-interrupting speak request
+        # just gets silently dropped if NVDA is still mid-utterance at that
+        # moment. wx.CallLater gives the title announcement time to finish;
+        # assertive=True additionally tells prism to interrupt/flush whatever
+        # is still speaking, so "Ready" is heard either way.
+        wx.CallLater(750, self.announce.announce, "Ready", assertive=True)
 
     # -- menu construction --------------------------------------------
 
@@ -670,10 +673,20 @@ class MainWindow(wx.Frame):
                 return
             path = dlg.GetPath()
         ok, message = radio_backend.load_image(path)
-        if ok:
-            self._load_into_grid()
-            self.grid.SetFocus()
-        self.announce.announce(message)
+        if not ok:
+            self.announce.announce(message, assertive=True)
+            return
+        self._load_into_grid()
+        self.grid.SetFocus()
+        # Status bar keeps the detailed message (vendor/model/filename); the
+        # spoken cue is just the short "<name> loaded" form. Deferred and
+        # interrupting for the same reason the startup "Ready" announcement
+        # is: self.grid.SetFocus() above triggers NVDA's own announcement of
+        # the newly focused row, and a same-tick, non-interrupting speak
+        # request races that and can be silently dropped.
+        self.SetStatusText(message)
+        name = os.path.splitext(os.path.basename(path))[0]
+        wx.CallLater(750, self._speaker.speak, f"{name} loaded", interrupt=True)
 
     def on_save(self, _evt=None) -> None:
         state = radio_backend.get_state()
