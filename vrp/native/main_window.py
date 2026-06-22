@@ -103,7 +103,11 @@ class MainWindow(wx.Frame):
         self._build_menubar()
         self._update_menu_state()
         self.grid.SetFocus()
-        self.announce.announce("Ready")
+        # Deferred: speaking synchronously here, before app.MainLoop() starts
+        # pumping events, doesn't reliably reach prism's backend (no error,
+        # just silence) — same reason other first-paint actions in this app
+        # use wx.CallAfter instead of running inline in __init__.
+        wx.CallAfter(self.announce.announce, "Ready")
 
     # -- menu construction --------------------------------------------
 

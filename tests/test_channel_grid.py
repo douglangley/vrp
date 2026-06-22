@@ -48,6 +48,7 @@ def test_main_window_announces_ready_on_startup(app):
 
     win = MainWindow()
     try:
+        wx.YieldIfNeeded()  # flush the wx.CallAfter-deferred startup announce
         sb = win.GetStatusBar()
         assert sb is not None
         assert sb.GetStatusText(0) == "Ready"
