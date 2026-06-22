@@ -85,6 +85,15 @@ class MainWindow(wx.Frame):
 
         self.grid = ChannelGrid(self)
         self.grid.Bind(wx.EVT_LIST_ITEM_ACTIVATED, self.on_edit_channel)
+        # Row context menu (Applications key / Shift+F10 / right-click), a Delete
+        # key handler, and debounced multi-select feedback. The native grid had
+        # none of these — they previously lived only in the webview grid, so on
+        # Windows the context key errored and selecting gave no feedback.
+        self.grid.Bind(wx.EVT_CONTEXT_MENU, self.on_grid_context_menu)
+        self.grid.Bind(wx.EVT_KEY_DOWN, self._on_grid_key)
+        self.grid.Bind(wx.EVT_LIST_ITEM_SELECTED, self._on_grid_selection_changed)
+        self.grid.Bind(wx.EVT_LIST_ITEM_DESELECTED, self._on_grid_selection_changed)
+        self._sel_timer: wx.CallLater | None = None
         self._menu_items: dict[str, wx.MenuItem] = {}
         self._radio_gated_keys: set[str] = set()
         # Find state: query string, fields, last matched channel.
@@ -220,6 +229,103 @@ class MainWindow(wx.Frame):
         self.grid.select_channels([number])
         self.grid.focus_channel(number)
         self.announce.announce(message, assertive=not ok)
+
+    # -- context menu / delete / selection feedback -------------------
+
+    def on_grid_context_menu(self, event) -> None:
+        """Row actions menu — opened by the Applications key, Shift+F10, or a
+        right-click. A real ``wx.Menu``, so NVDA reads it and arrow-navigates it
+        for free. Without this binding the context key just errors."""
+        if not radio_backend.get_state().loaded:
+            return
+        number = self.grid.focused_channel()
+        if number is None:
+            return
+        sel = self.grid.GetSelectedItemCount()
+        menu = wx.Menu()
+
+        def add(label, handler):
+            item = menu.Append(wx.ID_ANY, label)
+            self.grid.Bind(wx.EVT_MENU, lambda _e: handler(), item)
+
+        add(f"&Edit channel {number}\tEnter", self.on_edit_channel)
+        add(
+            "&Delete selected channels\tDel" if sel > 1 else f"&Delete channel {number}\tDel",
+            self.on_delete_channels,
+        )
+        menu.AppendSeparator()
+        add("Move &up\tCtrl+Shift+Up", self.on_move_up)
+        add("Move &down\tCtrl+Shift+Down", self.on_move_down)
+        add("&Move to channel…\tCtrl+Shift+M", self.on_move_to)
+        add("&Organize channels…", self.on_organize)
+        menu.AppendSeparator()
+        add("&Go to channel…\tCtrl+Shift+G", self.on_goto)
+        add("Channel &banks…", self.on_banks)
+
+        # Keyboard invocation has no pointer position (DefaultPosition); anchor the
+        # menu on the focused row so it appears where the user is.
+        pos = event.GetPosition()
+        if pos == wx.DefaultPosition:
+            idx = self.grid.GetFocusedItem()
+            rect = self.grid.GetItemRect(idx) if idx != -1 else wx.Rect(0, 0, 0, 0)
+            client_pos = rect.GetBottomLeft()
+        else:
+            client_pos = self.grid.ScreenToClient(pos)
+        self.grid.PopupMenu(menu, client_pos)
+        menu.Destroy()
+
+    def on_delete_channels(self, _evt=None) -> None:
+        """Delete the selected (or focused) channel(s), clearing their contents.
+        Reachable from the Delete key and the row context menu."""
+        from chirp_backend import memory_ops as mo
+
+        if not radio_backend.get_state().loaded:
+            self.announce.announce("No radio image is open.", assertive=True)
+            return
+        numbers = self.grid.selected_channel_numbers()
+        if not numbers:
+            self.announce.announce("No channel selected.")
+            return
+        first, last, count = numbers[0], numbers[-1], len(numbers)
+        rng = f"channel {first}" if count == 1 else f"{count} channels, {first} to {last}"
+        if not self._confirm(
+            f"Delete {rng}? Their contents will be cleared. This cannot be undone."
+        ):
+            return
+        ok, message, _affected = mo.delete_range(numbers)
+        if not ok:
+            self.announce.announce(message, assertive=True)
+            return
+        self.grid.rebuild()
+        low, high = radio_backend.get_state().memory_bounds
+        target = min(max(first, low), high)
+        self.grid.select_channels([target])
+        self.grid.focus_channel(target)
+        self.announce.announce(f"{message} Now on channel {target}.", assertive=True)
+
+    def _on_grid_key(self, event) -> None:
+        """Delete key deletes the selection; every other key (arrows, Shift+arrow
+        range selection, type-ahead) falls through to the native list unchanged."""
+        if event.GetKeyCode() == wx.WXK_DELETE:
+            self.on_delete_channels()
+            return
+        event.Skip()
+
+    def _on_grid_selection_changed(self, event) -> None:
+        """Announce the multi-select count once the selection settles, so building
+        a Shift+arrow range is audible. A single item that just follows the cursor
+        stays quiet (NVDA already reads the focused row), avoiding announce-on-every-
+        move noise."""
+        event.Skip()
+        if self._sel_timer is not None:
+            self._sel_timer.Stop()
+        self._sel_timer = wx.CallLater(180, self._announce_selection_count)
+
+    def _announce_selection_count(self) -> None:
+        self._sel_timer = None
+        count = self.grid.GetSelectedItemCount()
+        if count >= 2:
+            self.announce.announce(f"{count} channels selected")
 
     def on_goto(self, _evt=None) -> None:
         """Go to a specific channel by number — prompt, select, and focus it."""
