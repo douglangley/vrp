@@ -103,6 +103,7 @@ class MainWindow(wx.Frame):
         self._build_menubar()
         self._update_menu_state()
         self.grid.SetFocus()
+        self.announce.announce("Ready")
 
     # -- menu construction --------------------------------------------
 
