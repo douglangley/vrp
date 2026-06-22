@@ -4,15 +4,14 @@
 #  the Windows equivalent.
 #
 #  First run: clones the CHIRP library, downloads Python 3.11 + dependencies
-#  via uv, then launches the app (native UI by default). Subsequent runs
-#  just launch (fast). Any arguments (e.g. --debug, --webview) are passed
-#  through to main.py.
+#  via uv, then launches the app (the webview UI by default on macOS, since
+#  VoiceOver reads its grid; pass --native to force the NVDA-oriented native
+#  UI instead). Subsequent runs just launch (fast). Any arguments (e.g.
+#  --debug, --native) are passed through to main.py.
 #
 #  Prerequisites (one-time):
 #    - uv   ->  curl -LsSf https://astral.sh/uv/install.sh | sh
 #    - git  ->  ships with Xcode Command Line Tools (xcode-select --install)
-#  The legacy --webview UI relies on WKWebView (ships with macOS); the
-#  default native UI doesn't need a webview at all.
 # ===========================================================================
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")"

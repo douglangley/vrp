@@ -35,9 +35,10 @@ uv run python main.py
 ```
 
 You need [uv](https://docs.astral.sh/uv/) and git. uv downloads Python 3.11
-itself, so your system Python version doesn't matter. The default UI is fully
-native (no WebView2 dependency); the legacy `--webview` UI (see "Architecture")
-needs the Microsoft Edge WebView2 runtime (preinstalled on Windows 11).
+itself, so your system Python version doesn't matter. VRP picks its UI by
+platform (native on Windows/Linux, webview on macOS — see "Architecture"), so
+on Windows the webview UI's Microsoft Edge WebView2 runtime (preinstalled on
+Windows 11) is only needed if you force it with `--webview`.
 
 To run the tests: `uv sync --extra dev` then `uv run pytest`. To build the
 standalone .exe: `build.bat` (see "Packaging with PyInstaller").
@@ -53,9 +54,11 @@ to address this.
 VRP solves the problem differently: rather than patching CHIRP's GUI, it
 uses the CHIRP *library* as a backend — keeping all the radio driver code
 exactly as the CHIRP team maintains it — and provides a new, fully accessible
-desktop front end: a wxPython app with a native channel grid (`wx.ListCtrl`)
-and native menu bar, read directly by NVDA and VoiceOver with no webview
-in the loop.
+desktop front end. Because no single channel-grid implementation reads
+correctly on every screen reader yet, VRP ships two: a native `wx.ListCtrl`
+grid that NVDA on Windows reads directly, and an accessible HTML grid in an
+embedded webview that VoiceOver on macOS reads directly. VRP picks the right
+one for your platform automatically.
 
 This means:
 - Every radio CHIRP supports, VRP supports automatically
@@ -69,9 +72,9 @@ VRP is built *on* CHIRP, not *instead of* CHIRP. Specifically:
 
 - The `chirp` Python package (installed as a dependency from the CHIRP GitHub
   repository) provides all radio hardware communication and driver code
-- VRP contributes the accessible front end: a wxPython app with a native
-  channel grid and menu bar, native wx dialogs for editing, and a thin backend
-  wrapping the CHIRP library
+- VRP contributes the accessible front end: a wxPython app with two
+  platform-appropriate channel-grid UIs, native wx dialogs for editing, and a
+  thin backend wrapping the CHIRP library
 - The CHIRP library is used **unmodified** — VRP never patches driver files
 - Both projects are GPLv3 licensed
 
@@ -85,11 +88,28 @@ programmable in open-source software.
 
 ## Features
 
-- Native channel grid (a virtual report-mode `wx.ListCtrl`) — read directly by
-  NVDA/JAWS/VoiceOver, no webview, no paging (every channel is populated at once)
+VRP has two channel-grid UIs, picked automatically by platform (see
+"Architecture"); both share the same backend, native dialogs, and feature set.
+
+**Native UI (Windows/Linux default)** — a virtual report-mode `wx.ListCtrl`,
+read directly by NVDA, with no webview involved:
+- No paging — every channel is populated at once
 - Multi-select (Shift+Arrow for a contiguous block, Ctrl+Space for individual
   rows) drives in-place reordering: move up/down a slot or move-to a chosen
   channel, with the moved block re-selected and focused afterward
+- A single native menu bar carries both mnemonics and Ctrl-combo accelerators
+  together (no WebView2 to fight); F1 lists every shortcut
+
+**Webview UI (macOS default)** — an `AccessibleWebView` hosting an editable
+`AccessibleGrid` (from `wx-accessible-grid`), read directly by VoiceOver:
+- Real in-place cell editing (text/combo) with CHIRP's own validation
+- Select All Channels (Ctrl+A) / Clear Selection on the Edit menu; row actions
+  (select, edit, delete) via the Applications key, Shift+F10, or VoiceOver's
+  VO+Shift+M
+- A `wx-accessible-menubar`-driven menu bar that works around a focused
+  WebView2 swallowing Alt (wx #24786)
+
+**Both UIs share:**
 - Editing in native wx dialogs (first-class screen-reader support): per-channel
   field editor, bulk operations, find, settings, banks, download/upload
 - Bulk operations (delete, delete+shift, insert, move, copy, sort, arrange) over
@@ -98,41 +118,38 @@ programmable in open-source software.
 - Download from / upload to radio with live progress announcements (background thread)
 - Radio settings editor, banks editor, and online query sources (AMSAT, SatNOGS;
   more sources are incremental)
-- A single native menu bar carries both mnemonics and Ctrl-combo accelerators
-  together (no WebView2 to fight); F1 lists every shortcut
 - High contrast and forced-colors (Windows High Contrast) support
 - Packages as a single self-contained .exe (Windows) via PyInstaller
-
-### Legacy webview UI (`--webview`, being retired)
-
-VRP's first UI hosted an HTML channel grid in an embedded webview; it's still
-launchable with `--webview` while the native UI above proves out parity, but
-it isn't getting new features. It has its own read-only paged HTML grid, a
-**(preview)** in-browser editable grid via the `wx-accessible-grid` library,
-and a `wx-accessible-menubar`-driven menu bar that works around a focused
-WebView2 swallowing Alt (wx #24786). See "Architecture" below for how it
-differs from the native UI.
 
 ## Architecture
 
 ```
-main.py                  Thin entry point: native UI by default, --webview for legacy.
+main.py                  Entry point: parse_mode() picks native vs. webview by
+                         platform (webview on macOS, native elsewhere);
+                         --webview/--native override either way.
 vrp/
-  native/                 DEFAULT UI: native wx.ListCtrl grid + wx.MenuBar.
+  native/                 NATIVE UI (default on Windows/Linux): native
+                         wx.ListCtrl grid + wx.MenuBar.
     app.py                Entry point (vrp.native.app.run).
     main_window.py        MainWindow: menu bar, status bar, grid, and all
                          command handlers.
     channel_grid.py       ChannelGrid: virtual report-mode wx.ListCtrl (no paging).
     grid_model.py         Pure data/selection model behind the grid (no wx).
     announce.py           Announcer: status bar + prism speech.
-  app.py                  LEGACY UI (--webview, being retired): wx app/window,
-                         native menu bar (wx-accessible-menubar), AccessibleWebView
-                         host, the window.vrp.postMessage() bridge, keyboard
-                         shortcuts, paging, and all command handlers.
-  views.py                Legacy: renders channel-grid pages (read-only) and
-                         single rows for the webview UI.
-  channel_grid_model.py   Legacy: GridModel adapter for the wx-accessible-grid
-                         editable grid preview (see tools/grid_preview.py).
+  app.py                  WEBVIEW UI (default on macOS): wx app/window, native
+                         menu bar (wx-accessible-menubar), AccessibleWebView
+                         host, the editable AccessibleGrid channel view, the
+                         window.vrp.postMessage() bridge, keyboard shortcuts,
+                         and all command handlers.
+  views.py                Webview UI: welcome-view rendering. Its read-only
+                         paged-table/row-render functions remain as an
+                         internal fallback (`if self._grid is None` branches
+                         in vrp/app.py) but aren't reached in normal
+                         operation — the production channel view is the
+                         AccessibleGrid below.
+  channel_grid_model.py   Webview UI: ChannelGridModel, the production
+                         GridModel adapter feeding the AccessibleGrid (also
+                         usable standalone via tools/grid_preview.py).
   edit_dialog.py          Native wx dialog to edit one channel (shared by both UIs).
   ops_dialog.py           Native wx dialog for bulk operations (shared).
   find_dialog.py          Native wx Find dialog (shared).
@@ -142,7 +159,7 @@ vrp/
   query_dialogs.py        Native wx query-source param + import dialogs (shared).
   prefs_dialog.py         Native wx Preferences dialog (shared).
   config.py               Persistent JSON config (preferences + recent files, shared).
-  html.py                 Legacy: Jinja2 rendering to HTML strings + CHIRP attribution.
+  html.py                 Webview UI: Jinja2 rendering to HTML strings + CHIRP attribution.
   speech.py               prism speech wrapper, graceful no-op if unavailable (shared).
   _chirp_path.py          Makes the editable ./chirp package importable (shared).
 chirp_backend/
@@ -154,43 +171,45 @@ chirp_backend/
   bank_ops.py            Bank membership operations (assign channels to banks).
   query.py               Online query-source registry + threaded fetch runner.
 static/
-  css/main.css           Legacy webview UI only: design-system styles, retained
+  css/main.css           Webview UI only: design-system styles, retained
                          for future inlining into the webview (not currently loaded).
 templates/
-  welcome.html           Legacy: welcome view (body fragment).
-  channels.html          Legacy: memory channel grid (read-only, paged).
-  _row_macro.html        Legacy: shared macro for one channel row.
+  welcome.html           Webview UI: welcome view (body fragment).
+  channels.html          Webview UI: read-only paged-table fallback (unreached
+                         in normal operation — see views.py above).
+  _row_macro.html        Shared macro for one channel row, used by channels.html.
 tests/                   Unit tests (no radio hardware needed).
 tools/
   update_chirp.py        Fetches/tests/pins a new CHIRP commit.
-  grid_preview.py        Standalone harness for the legacy wx-accessible-grid
-                         editable grid (loads a CHIRP test image; no full app
-                         or radio needed).
+  grid_preview.py        Standalone harness for the webview UI's AccessibleGrid
+                         (loads a CHIRP test image; no full app or radio needed).
 build.py                 PyInstaller build script.
 pyproject.toml           uv-managed project definition (Python 3.11 pinned).
 ```
 
-**Native UI (default):** `vrp/native/main_window.py` binds each command
-straight to a `wx.MenuBar` item — the accelerator in the item's label (e.g.
-`"&Save\tCtrl+S"`) *is* the global shortcut, since a real native menu has no
-WebView2 fighting it for Alt/Ctrl. `vrp/native/channel_grid.py` is a virtual
-`wx.ListCtrl` (`LC_VIRTUAL`) so population is instant at any radio size, with
-no paging. There's no JS bridge: handlers call `chirp_backend` directly and
-push results to the grid (`refresh_numbers`/`rebuild`) and to
+**Native UI (Windows/Linux default):** `vrp/native/main_window.py` binds each
+command straight to a `wx.MenuBar` item — the accelerator in the item's label
+(e.g. `"&Save\tCtrl+S"`) *is* the global shortcut, since a real native menu
+has no WebView2 fighting it for Alt/Ctrl. `vrp/native/channel_grid.py` is a
+virtual `wx.ListCtrl` (`LC_VIRTUAL`) so population is instant at any radio
+size, with no paging. There's no JS bridge: handlers call `chirp_backend`
+directly and push results to the grid (`refresh_numbers`/`rebuild`) and to
 `vrp/native/announce.py`'s `Announcer` (status bar + optional prism speech).
 Several native wx dialogs (edit, bulk ops, find, settings, banks,
-download/upload, preferences) are shared with the legacy UI unchanged.
+download/upload, preferences) are shared with the webview UI unchanged.
 
-**Legacy webview UI (`--webview`, being retired):** interactive behavior is
-small inline `onclick`/`onkeydown` handlers in the view fragments (plus a
-global keyboard listener injected via `run_js`); both bridge to Python with
-`window.vrp.postMessage(...)`. The UI host is the `wx-accessible-webview`
-package (an `AccessibleWebView` wrapping `wx.html2.WebView`); the native menu
-bar's keyboard access (Alt / Alt+mnemonic / F10 against WebView2 swallowing
-Alt, wx #24786) comes from `wx-accessible-menubar`; an editable channel grid
-preview (see Features above) uses `wx-accessible-grid`. `prism`/`prismatoid`
-provides supplemental speech in both UIs. There is no Flask server and no
-PyWebView in either.
+**Webview UI (macOS default):** the channel grid is `wx-accessible-grid`'s
+`AccessibleGrid` (a real, editable `<table role="grid">`, driven by
+`ChannelGridModel`) — VoiceOver reads each cell's name (channel + column
+header + value + control type) composed via `aria-labelledby`, since
+VoiceOver never receives the runtime's live-region announcement on cell move.
+Everything else (menu bar, dialogs, find, settings) is small inline
+`onclick`/`onkeydown` handlers in the view fragments (plus a global keyboard
+listener injected via `run_js`), bridged to Python with
+`window.vrp.postMessage(...)`. The native menu bar's keyboard access (Alt /
+Alt+mnemonic / F10 against WebView2 swallowing Alt, wx #24786) comes from
+`wx-accessible-menubar`. `prism`/`prismatoid` provides supplemental speech in
+both UIs. There is no Flask server and no PyWebView in either.
 
 ## Development Setup
 
