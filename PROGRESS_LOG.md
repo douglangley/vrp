@@ -6,6 +6,43 @@ architecture, keyboard map, and CHIRP feature-coverage checklist.
 
 ---
 
+## 2026-06-21 — Native UI merged to main and made the default
+
+The channel grid is now a native virtual report-mode `wx.ListCtrl`
+(`vrp/native/channel_grid.py`), driven by a pure data/selection model
+(`vrp/native/grid_model.py`) and shown in a new `MainWindow`
+(`vrp/native/main_window.py`) with a native `wx.MenuBar`. NVDA on Windows and
+VoiceOver on macOS read it directly — no WebView2, no second webview, no JS
+bridge for the grid. Announcements go through `vrp/native/announce.py`'s
+`Announcer` (status bar + optional prism speech) instead of an ARIA live
+region; the native UI's command surface collapses to one (menu items carry
+their own accelerators) instead of the webview UI's three (menu bar / in-page
+buttons / JS shortcut map), since a real `wx.MenuBar` doesn't have wx #24786's
+WebView2-swallows-Alt problem to work around.
+
+The native UI reuses the existing native wx dialogs unchanged (edit, bulk
+operations, find, settings, banks, download/upload, preferences) — only the
+channel-grid host and the menu/shortcut plumbing are new.
+
+`main.py` now launches the native UI by default; the legacy `AccessibleWebView`
+app (`vrp/app.py` + the `wx-accessible-grid` web grid from the entry below)
+stays reachable with `--webview` while it is retired. It is not getting new
+features going forward — see CLAUDE.md "What This Project Is".
+
+**Verified (macOS):** opens a CHIRP test image, the ListCtrl populates 500
+channels across 14 columns with live cell data; full suite (78 tests) green.
+
+**Open / next:**
+- NVDA-on-Windows pass for the native UI (menu accelerators, grid
+  navigation/selection, dialog focus) — the webview UI's NVDA passes don't
+  carry over since there's no webview involved.
+- Real-hardware download/upload verification, still owed from earlier phases,
+  applies equally to the native UI (same `serial_dialogs.py`).
+- Once the native UI is confirmed at parity, retire `vrp/app.py`,
+  `vrp/views.py`, `vrp/html.py`, `vrp/channel_grid_model.py`, `templates/`,
+  `static/`, and the `wx-accessible-webview`/`wx-accessible-menubar`/
+  `wx-accessible-grid` dependencies, and remove the `--webview` flag.
+
 ## 2026-06-20 — Editable channel grid via new wx-accessible-grid library
 
 The read-only-table-plus-edit-dialog model (Phase 2 rework) was the right call at

@@ -3,15 +3,27 @@
 ## What This Project Is
 
 **Versatile Radio Programmer (VRP)** — an accessible desktop radio memory channel
-programmer. It wraps the CHIRP Python library (in ./chirp/) in a wxPython app
-whose `AccessibleWebView` (from the `wx-accessible-webview` package) renders
-semantic, screen-reader-friendly HTML, with a native menu bar driven by
-`wx-accessible-menubar` and (preview/beta) an editable channel grid via
-`wx-accessible-grid` — see "Accessible UI Libraries" below. It uses `prism`
-(the `prismatoid` bindings) for supplemental speech, then packages to a single
-.exe with PyInstaller. There is NO web server and NO browser — HTML is
-rendered to strings and shown in the embedded webview; page scripts talk to
-Python over a JS→Python bridge.
+programmer. It wraps the CHIRP Python library (in ./chirp/) in a wxPython app.
+
+The **default UI** (`vrp/native/`, launched by `main.py` with no flags) is
+fully native: a virtual report-mode `wx.ListCtrl` channel grid plus a real
+native `wx.MenuBar`, read directly by NVDA on Windows and VoiceOver on macOS —
+no webview, no WebView2, no JS bridge. It uses `prism` (the `prismatoid`
+bindings) for supplemental speech, then packages to a single .exe with
+PyInstaller. There is NO web server and NO browser.
+
+A **legacy UI** (`vrp/app.py`) is still launchable with `--webview` while it is
+retired (see PROGRESS_LOG.md "2026-06-21"). It hosts an `AccessibleWebView`
+(from `wx-accessible-webview`) that renders semantic, screen-reader-friendly
+HTML — page scripts talk to Python over a JS→Python bridge — with a native menu
+bar driven by `wx-accessible-menubar` and an editable channel grid via
+`wx-accessible-grid` (see "Accessible UI Libraries" below). **Do not build new
+features on the legacy path; it exists only to be removed once parity is
+confirmed.**
+
+Several native wx dialogs (`edit_dialog.py`, `ops_dialog.py`, `find_dialog.py`,
+`serial_dialogs.py`, `settings_dialog.py`, `bank_dialog.py`, `query_dialogs.py`,
+`prefs_dialog.py`, `config.py` — all in `vrp/`) are shared by both UIs.
 
 The CHIRP library (./chirp/) is used UNMODIFIED as a dependency. Never edit
 files inside ./chirp/. Update it with git pull only.
@@ -20,6 +32,11 @@ The primary user is blind and uses NVDA on Windows. Every piece of UI code
 must be accessible to screen readers. This is not optional.
 
 ## Accessible UI Libraries (sibling projects — don't reinvent inline)
+
+**These three libraries are used only by the legacy `--webview` UI
+(`vrp/app.py`).** The default native UI (`vrp/native/`) needs none of them — a
+real `wx.ListCtrl` + `wx.MenuBar` doesn't have the WebView2-swallows-Alt problem
+or the webview-table-re-reads-on-edit problem these libraries exist to solve.
 
 - `wx-accessible-webview` — `AccessibleWebView` wrapping `wx.html2.WebView`;
   the page-rendering host (see vrp/app.py, vrp/html.py).
@@ -30,13 +47,14 @@ must be accessible to screen readers. This is not optional.
 - `wx-accessible-grid` — `AccessibleGrid` + `GridModel`; an editable
   `<table role="grid">` driven by the aria-activedescendant pattern. VRP's
   adapter is `vrp/channel_grid_model.py` (`ChannelGridModel`); try it with
-  `uv run python tools/grid_preview.py`. **Status: preview/beta — the
-  NVDA-on-Windows pass is not done yet.** The production channels view is
-  still the read-only table + edit dialog (vrp/views.py + vrp/edit_dialog.py).
-  See PROGRESS_LOG.md "2026-06-20" for the promotion criteria.
+  `uv run python tools/grid_preview.py`. This was briefly the production
+  channels view in the webview UI (see PROGRESS_LOG.md "2026-06-20") before
+  the native UI (`vrp/native/channel_grid.py`, a plain `wx.ListCtrl`) replaced
+  it as the default — see PROGRESS_LOG.md "2026-06-21".
 
 All three were extracted from this app; fix issues upstream in the library,
-not as a local workaround in vrp/app.py.
+not as a local workaround in vrp/app.py. They're maintained only as long as
+the legacy webview UI exists.
 
 ## Required Attribution (do not remove)
 
@@ -50,39 +68,73 @@ to do. Do not remove or obscure it.
 
 ## Project Structure Quick Reference
 
-- main.py              — thin entry point (applies chirp path fix, runs app)
+- main.py              — thin entry point; runs the native UI by default,
+                         or the legacy webview UI with `--webview`
 - vrp/                 — wxPython UI layer (the accessible front end)
-  - app.py             — wx app/window, native menu bar, webview host, JS↔Python
+  - native/            — **default UI**: native wx.ListCtrl grid + wx.MenuBar,
+                         no webview/JS bridge
+    - app.py           — entry point (`vrp.native.app.run`)
+    - main_window.py   — MainWindow: menu bar, status bar, grid, and all
+                         command handlers (file, edit, operations, find,
+                         download/upload)
+    - channel_grid.py  — ChannelGrid: virtual report-mode wx.ListCtrl (no
+                         paging — every channel is always populated)
+    - grid_model.py    — pure data/selection model behind the grid (no wx;
+                         unit-testable headless)
+    - announce.py      — Announcer: status bar + prism speech, the native
+                         equivalent of the webview's ARIA live region
+  - app.py             — **legacy UI** (`--webview` only, being retired): wx
+                         app/window, native menu bar, webview host, JS↔Python
                          bridge, keyboard shortcuts, paging, and all command
                          handlers (file, edit, operations, find, download/upload)
-  - views.py           — render channel-grid pages (read-only) and single rows
-  - edit_dialog.py     — native wx dialog to edit one channel
-  - ops_dialog.py      — native wx dialog for bulk operations (delete/move/…)
-  - find_dialog.py     — native wx Find dialog
-  - serial_dialogs.py  — native wx Download/Upload/progress dialogs
-  - settings_dialog.py — native wx radio settings editor (Treebook)
-  - bank_dialog.py     — native wx dialog to assign a channel to banks
-  - query_dialogs.py   — native wx query-source param + import dialogs
-  - prefs_dialog.py    — native wx Preferences dialog
-  - config.py          — persistent JSON config (preferences + recent files)
-  - html.py            — Jinja2 rendering to strings + attribution footer
-  - speech.py          — prism speech wrapper (graceful no-op if unavailable)
-  - _chirp_path.py     — makes the editable ./chirp package importable
-  - channel_grid_model.py — GridModel adapter for the wx-accessible-grid
-                         editable grid preview (see tools/grid_preview.py)
+  - views.py           — legacy: renders channel-grid pages (read-only) and
+                         single rows for the webview UI
+  - edit_dialog.py     — native wx dialog to edit one channel (shared by both UIs)
+  - ops_dialog.py      — native wx dialog for bulk operations, shared (delete/move/…)
+  - find_dialog.py     — native wx Find dialog (shared by both UIs)
+  - serial_dialogs.py  — native wx Download/Upload/progress dialogs (shared)
+  - settings_dialog.py — native wx radio settings editor, Treebook (shared)
+  - bank_dialog.py     — native wx dialog to assign a channel to banks (shared)
+  - query_dialogs.py   — native wx query-source param + import dialogs (shared)
+  - prefs_dialog.py    — native wx Preferences dialog (shared)
+  - config.py          — persistent JSON config, preferences + recent files (shared)
+  - html.py            — legacy: Jinja2 rendering to strings + attribution footer
+  - speech.py          — prism speech wrapper, graceful no-op if unavailable (shared)
+  - _chirp_path.py     — makes the editable ./chirp package importable (shared)
+  - channel_grid_model.py — legacy: GridModel adapter for the wx-accessible-grid
+                         editable grid (see tools/grid_preview.py)
 - chirp_backend/       — all chirp library interaction (framework-agnostic):
                          radio, memory_ops, col_defs, bank_ops, query
-- static/css/main.css  — design-system styles, retained for future inlining
-                         into the webview (not currently loaded)
-- templates/           — Jinja2 view fragments (welcome, channels, _row_macro)
+- static/css/main.css  — legacy webview UI only: design-system styles, retained
+                         for future inlining into the webview (not currently loaded)
+- templates/           — legacy webview UI only: Jinja2 view fragments
+                         (welcome, channels, _row_macro)
 - tests/               — unit tests (no hardware needed)
 - tools/               — update_chirp.py (CHIRP version bump) and
                          grid_preview.py (standalone wx-accessible-grid preview
-                         harness, no full app needed)
+                         harness for the legacy editable grid, no full app needed)
 - build.py             — PyInstaller build script
 - chirp/               — upstream CHIRP library (DO NOT EDIT)
 
 ## Command Surfaces (keep in sync)
+
+### Native UI (default — `vrp/native/main_window.py`)
+
+A real `wx.MenuBar` has no WebView2 to fight, so the menu item's accelerator
+(the `\tCtrl+...`/`\tF2` suffix in its label, e.g. `"&Save\tCtrl+S"`) *is* the
+global shortcut — one surface, not three. `_build_menubar`/`_add` wire each
+command exactly once: a menu item with its accelerator, bound via
+`self.Bind(wx.EVT_MENU, handler, item)`, optionally gated on a loaded radio
+(`needs_radio=True`, tracked in `_radio_gated_keys`, enabled/disabled by
+`_update_menu_state`). F1 (`on_shortcuts`) shows the `APP_SHORTCUTS` list as a
+plain-text `wx.MessageBox` — keep it in sync with the menu accelerators by hand.
+
+When adding a command: add it via `self._add(menu, key, label_with_accelerator,
+handler, needs_radio=...)` in the right `_build_*_menu`, add the same combo to
+`APP_SHORTCUTS`, and update `docs/keyboard-map.md` and
+`docs/chirp-feature-coverage.md`.
+
+### Legacy webview UI (`--webview`, `vrp/app.py` — being retired)
 
 Every user command is reachable three ways and they must stay in sync:
 1. The native **menu bar** (`_build_menubar` in vrp/app.py) — File / Radio /
@@ -96,10 +148,12 @@ Every user command is reachable three ways and they must stay in sync:
 3. Global **Ctrl-combo shortcuts** (`_SHORTCUTS_JS` map + `APP_SHORTCUTS`),
    handled inside the page so they work despite #24786; also listed by F1.
 
-When adding a command: wire the handler, add a menu item (disable it in
+When adding a command here: wire the handler, add a menu item (disable it in
 `_radio_menu_items` if it needs a loaded radio), add the shortcut to
 `_SHORTCUTS_JS` + `APP_SHORTCUTS` (+ `aria-keyshortcuts` on any button), and
-update `docs/keyboard-map.md` and `docs/chirp-feature-coverage.md`.
+update `docs/keyboard-map.md` and `docs/chirp-feature-coverage.md`. Don't add
+new commands to the legacy UI unless they're also going into the native one —
+it's being removed, not extended.
 
 ## Accessibility Rules (Enforce These Always)
 
@@ -113,13 +167,20 @@ update `docs/keyboard-map.md` and `docs/chirp-feature-coverage.md`.
    Never use div/span grids for tabular data.
 
 3. All dynamic feedback (operation results, errors, loading states, progress)
-   must be announced. Two channels exist:
-   - From Python: call `self.view.status('Message here')` — the
-     AccessibleWebView routes it to its built-in ARIA live region.
-   - From page JavaScript (e.g. grid edits): update an in-page
-     aria-live region (id="status-announcer", aria-live="polite";
-     use aria-live="assertive" for errors).
-   Every operation result and error MUST go through one of these.
+   must be announced.
+   - **Native UI (default):** call `self.announce.announce('Message here')`
+     (a `vrp.native.announce.Announcer`) — it writes the status bar and, if
+     prism speech is available, speaks it too. Pass `assertive=True` for
+     errors so they interrupt any speech in progress. The announcer is a
+     fallback, not the primary signal: handlers should still move focus to
+     the result row/field so the screen reader reads it directly.
+   - **Legacy webview UI (`--webview`):** from Python, call
+     `self.view.status('Message here')` (the AccessibleWebView routes it to
+     its built-in ARIA live region); from page JavaScript (e.g. grid edits),
+     update the in-page aria-live region (id="status-announcer",
+     aria-live="polite"; use aria-live="assertive" for errors).
+   Every operation result and error MUST go through the announcer/live-region
+   path for whichever UI it's in.
 
 4. Modal dialogs must:
    - Have role="dialog" and aria-labelledby pointing to the dialog title
@@ -163,10 +224,16 @@ returning (success: bool, message: str, affected_channels: list).
 Operations that modify the radio must call radio.set_memory() or
 radio.erase_memory() — never modify the memory map directly.
 
-After any operation, the bridge handler must return the updated channel data
-for the affected range so the view can refresh just those rows.
+After any operation, the affected range must be refreshed in whichever UI is
+active: native UI calls `self.grid.refresh_numbers(numbers)` (or `.rebuild()`
+for structural ops); legacy webview UI returns the updated channel data from
+the bridge handler so the view can refresh just those rows.
 
 ## Bridge Message Shape (JS ↔ Python)
+
+**Applies only to the legacy `--webview` UI (`vrp/app.py`).** The native UI
+(`vrp/native/`, default) has no JS bridge at all — its handlers call
+`chirp_backend` and update `ChannelGrid`/`Announcer` directly, in Python.
 
 Page scripts call `window.vrp.postMessage(JSON.stringify({action, ...}))` (the
 native wx.html2 script-message handler; `.postMessage`, not `.post`). Inline
@@ -190,7 +257,8 @@ regardless of ok value.
 Serial operations (download from radio, upload to radio) are long-running.
 They run on a wx background thread (see chirp/wxui/radiothread.py for CHIRP's
 pattern). Progress is marshalled back to the UI thread with `wx.CallAfter`,
-which calls `view.status(...)` so the user hears each progress message.
+which calls `self.announce.announce(...)` (native UI) or `view.status(...)`
+(legacy webview UI) so the user hears each progress message.
 
 Never block the wx main (UI) thread with serial I/O.
 

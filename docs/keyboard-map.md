@@ -2,14 +2,107 @@
 
 Goal: **everything** in the app is reachable and operable from the keyboard,
 including the memory grid. This file is the single source of truth for
-shortcuts and is updated as each phase lands. Conventions:
+shortcuts and is updated as each phase lands.
+
+There are two UIs (see CLAUDE.md "What This Project Is"): the **native UI**
+(default, `vrp/native/`) documented first below, and the **legacy webview UI**
+(`vrp/app.py`, launched with `--webview`, being retired) documented further
+down for as long as it exists. Conventions for both:
 
 - Global commands use `Ctrl`+key (or `Alt` for menus) to avoid clashing with
-  NVDA browse-mode single-letter quick navigation inside the webview.
+  NVDA browse-mode single-letter quick navigation.
 - Inside the grid, single-letter keys are reserved for the screen reader; grid
   commands use arrows, Enter/F2, and `Ctrl`/`Alt` combinations.
 
-### Native menu bar + in-page shortcuts (both)
+## Native UI (default)
+
+A real native `wx.MenuBar` carries Alt-mnemonics and Ctrl-combo accelerators
+together in the same menu item — there's no WebView2 in the way, so there's
+only one command surface here (contrast the legacy UI's three, below). `Alt`,
+`Alt+letter`, and `F10` all open/navigate the menu the normal Windows way;
+arrow keys move across top-level menus; NVDA reads it like any native app menu.
+
+### Menu bar + shortcuts
+
+| Menu | Item | Shortcut | Notes |
+|------|------|----------|-------|
+| File | Open Image File… | `Ctrl+O` | |
+| File | Save | `Ctrl+S` | needs a loaded radio |
+| File | Save As… | `Ctrl+Shift+S` | needs a loaded radio |
+| File | Close Image | — | needs a loaded radio |
+| File | Import from File… | — | needs a loaded radio |
+| File | Export to CSV… | — | needs a loaded radio |
+| File | Preferences… | — | |
+| File | Exit | `Ctrl+Q` | |
+| Radio | Download from Radio | `Ctrl+Shift+D` | |
+| Radio | Upload to Radio | `Ctrl+Shift+U` | needs a loaded radio |
+| Radio | Query Source ▸ … | — | needs a loaded radio; one item per registered source |
+| Radio | Settings… | `Ctrl+Shift+P` | needs a loaded radio |
+| Radio | Radio Info… | — | needs a loaded radio |
+| Channels | Edit channel… | `F2` | needs a loaded radio |
+| Channels | Go to channel… | `Ctrl+Shift+G` | needs a loaded radio |
+| Channels | Channel banks… | `Ctrl+B` | needs a loaded radio |
+| Channels | Move up | `Ctrl+Shift+Up` | needs a loaded radio |
+| Channels | Move down | `Ctrl+Shift+Down` | needs a loaded radio |
+| Channels | Move to channel… | `Ctrl+Shift+M` | needs a loaded radio |
+| Channels | Organize Channels… | `Ctrl+M` | needs a loaded radio |
+| Channels | Find… | `Ctrl+F` | needs a loaded radio |
+| Channels | Find next | `Ctrl+G` | needs a loaded radio |
+| Help | Keyboard Shortcuts | `F1` | shows this list as a plain-text message box |
+| Help | About | — | |
+
+Items marked "needs a loaded radio" are disabled until an image is open. F1's
+on-screen list (`APP_SHORTCUTS` in `vrp/native/main_window.py`) is kept in
+sync with this table by hand — update both when adding a command.
+
+### Channel grid navigation and selection
+
+The grid is a multi-select virtual `wx.ListCtrl` (`vrp/native/channel_grid.py`)
+with every channel populated at once — no paging.
+
+| Key | Action |
+|-----|--------|
+| Arrows | Move focus a row at a time |
+| `Shift+Arrow` | Extend a contiguous selection |
+| `Ctrl+Space` | Toggle the focused row into/out of a non-contiguous selection |
+| `F2` / `Enter` | Open the edit dialog for the focused channel |
+
+### Reorganizing channels
+
+Select one channel, or a group: `Shift+Arrow` extends a contiguous block;
+`Ctrl+Space` toggles individual rows for a non-contiguous set. Then:
+
+| Key | Action |
+|-----|--------|
+| `Ctrl+Shift+Up` | Move the selected channel(s) up one slot |
+| `Ctrl+Shift+Down` | Move the selected channel(s) down one slot |
+| `Ctrl+Shift+M` | Move the selected channel(s) to a chosen channel |
+| `Ctrl+M` | Organize (delete/copy/sort/insert/arrange) dialog |
+| `Ctrl+Shift+G` | Go to channel |
+| `Ctrl+F` / `Ctrl+G` | Find / Find next |
+| `Ctrl+B` | Channel banks for the focused channel |
+
+After a move, the moved block stays selected at its new position and focus
+lands on its first channel; the result is announced via the status bar and
+speech.
+
+### Dialogs (shared with the legacy UI)
+
+Editing, bulk operations, find, settings, banks, and download/upload all open
+the same native wx dialogs the legacy UI uses (see "Memory grid editing",
+"Organize Channels", etc. under the legacy section below for the detailed
+per-dialog keyboard behavior — Tab order, Enter/Esc, validation-keeps-dialog-
+open — which is identical regardless of which UI opened the dialog).
+
+---
+
+## Legacy webview UI (`--webview`, being retired)
+
+The sections below describe `vrp/app.py`, VRP's original UI, kept behind
+`--webview` only until the native UI above is confirmed at parity. New
+commands should be added to the native UI, not here.
+
+### Native menu bar + in-page shortcuts
 
 There is a native wx menu bar (File / Radio / Channels / Help) AND in-page
 buttons AND global Ctrl-combo shortcuts — all three reach the same commands.
@@ -39,7 +132,7 @@ Shortcuts / About). "Edit channel…" and "Go to channel…" prompt for a number
 (native dialog) — they're the menu equivalents of the per-row Edit button and
 the page-nav Go-to field, so every command is reachable from the menu.
 
-## Global shortcuts (handled in-page, bridged to Python)
+### Global shortcuts (handled in-page, bridged to Python)
 
 | Key             | Action                       | Status |
 |-----------------|------------------------------|--------|
@@ -58,7 +151,7 @@ the page-nav Go-to field, so every command is reachable from the menu.
 | `F1`            | Show keyboard shortcuts list | done   |
 | `Alt+F4`        | Exit (native window close)   | done   |
 
-## Menu mnemonics (caught by EVT_CHAR_HOOK, see above)
+### Menu mnemonics (caught by EVT_CHAR_HOOK, see above)
 
 | Key      | Action                  | Status |
 |----------|--------------------------|--------|
@@ -80,7 +173,7 @@ modifier, not bare Ctrl+letter, so there's no quick-nav clash). Single-letter
 shortcuts are never used (rule #8). Download/Upload and Close currently have
 in-page buttons; their shortcuts arrive with the relevant phase.
 
-## Memory grid editing (Phase 2 — done, dialog model)
+### Memory grid editing (Phase 2 — done, dialog model)
 
 The grid is a READ-ONLY semantic `<table>`. Editing a channel opens a native
 wx dialog (in-grid editing was dropped: on large radios it forced the screen
@@ -105,7 +198,7 @@ On invalid input the dialog stays open, speaks the reason, and focuses the bad
 field. On OK only the edited row is refreshed and focus returns to its Edit
 button. No bare single-letter shortcuts in the grid (NVDA browse mode owns a–z).
 
-## Editable grid preview (wx-accessible-grid — preview/beta, NVDA pass owed)
+### Editable grid preview (wx-accessible-grid — preview/beta, NVDA pass owed)
 
 Not yet the production channels view (see above); a standalone harness at
 `tools/grid_preview.py` (`uv run python tools/grid_preview.py`) previews the
@@ -123,7 +216,7 @@ in focus mode.
 | `Delete`              | Delete the selected row(s)               |
 | Applications key      | Open the row context menu                |
 
-## Organize Channels (move/delete/etc., Phase 3 — done)
+### Organize Channels (move/delete/etc., Phase 3 — done)
 
 `Ctrl+M` (or the "Organize Channels…" button) opens a native wx dialog. There
 are no per-row checkboxes (they'd bloat the DOM on large radios). Selection is a
@@ -136,7 +229,7 @@ the range, count, and that it can't be undone (no undo). After an op the
 affected page re-renders, focus lands on the result channel, and the result is
 announced.
 
-## Download / Upload (Phase 4 — done, hardware test owed)
+### Download / Upload (Phase 4 — done, hardware test owed)
 
 Radio ▸ Download from Radio (`Ctrl+Shift+D`) opens a native dialog: a serial-port
 chooser (with Refresh and an explicit "no ports" state) and a model picker that
@@ -148,7 +241,7 @@ be cancelled (result discarded); upload cannot (a half-written radio is worse).
 On download success the grid re-renders and focus moves to the first channel.
 Real-radio verification is still owed (no hardware in dev).
 
-## Preferences & Open Recent (config subsystem — done)
+### Preferences & Open Recent (config subsystem — done)
 
 Settings persist in a JSON file under the user config dir (atomic writes;
 corrupt/missing falls back to defaults). File ▸ Preferences… (a native dialog)
@@ -161,7 +254,7 @@ parent folder appended only when basenames collide), plus Clear recent files;
 empty shows a disabled "(No recent files)". A recent entry that's gone is
 announced and pruned. Menu-only (no Ctrl shortcuts).
 
-## Import / Export / Radio Info (Phase 8 — done)
+### Import / Export / Radio Info (Phase 8 — done)
 
 File ▸ Import from File… picks another radio image (native file dialog), loads
 it as an independent source (the active radio is untouched), then reuses the
@@ -175,7 +268,7 @@ menu-only (no Ctrl shortcut) and disabled until a radio is loaded. Native
 printing is intentionally not implemented — Export to CSV is the accessible
 equivalent.
 
-## Query sources (Phase 7 — framework + AMSAT/SatNOGS, network test owed)
+### Query sources (Phase 7 — framework + AMSAT/SatNOGS, network test owed)
 
 Radio ▸ Query Source ▸ (a source) opens a native param dialog (with the source's
 attribution + a descriptive Terms-of-Service link), then fetches on a background
@@ -191,7 +284,7 @@ is spec-driven (text + choice kinds). Wired now: AMSAT, SatNOGS, DMR-MARC
 (dynamic country→state cascade), RadioReference (credentials/login), and
 przemienniki.net/.eu (band/mode code mapping + coordinates).
 
-## Banks (Phase 6 — done, NVDA pass owed)
+### Banks (Phase 6 — done, NVDA pass owed)
 
 Channels ▸ Channel banks… (`Ctrl+B`) prompts for a channel, then opens a native
 dialog to assign it to banks: a CheckBox per bank for radios that allow multiple
@@ -202,7 +295,7 @@ membership; failures are reported truthfully. Only enabled on bank-capable
 radios (the menu item is disabled / `Ctrl+B` announces "no banks" otherwise).
 Bank renaming and a "channels in a bank" overview are deferred (Phase 6.1).
 
-## Radio settings (Phase 5 — done, NVDA pass owed)
+### Radio settings (Phase 5 — done, NVDA pass owed)
 
 Radio ▸ Settings… (`Ctrl+Shift+P`) opens a native dialog with a `wx.Treebook`:
 the tree lists the radio's top-level setting groups; each page is a scrolled
@@ -213,7 +306,7 @@ every value (keeps the dialog open, reveals the offending group's page, focuses
 the field, and speaks the reason on failure), then writes all changes via
 `set_settings`; Cancel/Escape discards. Initial focus lands on the tree.
 
-## Find (Phase 3 — done)
+### Find (Phase 3 — done)
 
 `Ctrl+F` (or the "Find…" button / Channels ▸ Find) opens a native dialog: a text
 field + a "Search in" chooser (All fields / Name / Frequency / Comment). It jumps
@@ -222,28 +315,9 @@ and announces the match. `Ctrl+G` (Find next) steps to the next match; the searc
 wraps, announcing "Wrapped to start" or "Only match" as appropriate. No match
 keeps the dialog open and speaks "not found"; an empty search field is rejected.
 
-## Operations (Phase 3 — planned)
+### Operations (Phase 3 — planned)
 
 Delete, insert, move up/down, move-to, copy-to, sort, arrange, find/find-next,
 goto — all keyboard-accessible, with a "Move to channel…" style dialog instead
 of any drag-and-drop. Exact bindings to be filled in when implemented.
 
-## Native UI: reorganizing channels (keyboard)
-
-The native channel grid is a multi-select list. Select one channel, or a group:
-`Shift+Arrow` extends a contiguous block; `Ctrl+Space` toggles individual rows
-for a non-contiguous set. Then:
-
-| Key                 | Action                                            |
-|---------------------|---------------------------------------------------|
-| `F2` / `Enter`      | Edit the focused channel (dialog)                 |
-| `Ctrl+Shift+Up`     | Move the selected channel(s) up one slot          |
-| `Ctrl+Shift+Down`   | Move the selected channel(s) down one slot        |
-| `Ctrl+Shift+M`      | Move the selected channel(s) to a chosen channel  |
-| `Ctrl+M`            | Organize (delete/copy/sort/insert/arrange) dialog |
-| `Ctrl+Shift+G`      | Go to channel                                     |
-| `Ctrl+F` / `Ctrl+G` | Find / Find next                                  |
-| `Ctrl+B`            | Channel banks for the focused channel             |
-
-After a move, the moved block stays selected at its new position and focus lands
-on its first channel; the result is announced via the status bar and speech.
