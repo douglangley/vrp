@@ -237,6 +237,13 @@ class MainWindow(wx.Frame):
         m_exit = file_menu.Append(wx.ID_EXIT, "E&xit")
         bar.Append(file_menu, "&File")
 
+        edit_menu = wx.Menu()
+        self._mi_select_all = edit_menu.Append(
+            wx.ID_SELECTALL, "Select &All Channels\tCtrl+A"
+        )
+        self._mi_clear_sel = edit_menu.Append(wx.ID_ANY, "&Clear Selection")
+        bar.Append(edit_menu, "&Edit")
+
         radio_menu = wx.Menu()
         m_download = radio_menu.Append(wx.ID_ANY, "&Download from Radio\tCtrl+Shift+D")
         self._mi_upload = radio_menu.Append(wx.ID_ANY, "&Upload to Radio\tCtrl+Shift+U")
@@ -281,6 +288,8 @@ class MainWindow(wx.Frame):
         # wrapper that restores webview focus afterward, so the bridged Ctrl
         # shortcuts keep working without an extra click into the page (rule #6).
         self.Bind(wx.EVT_MENU, self.on_open, m_open)
+        self.Bind(wx.EVT_MENU, self._menu_then_focus(self.on_select_all_channels), self._mi_select_all)
+        self.Bind(wx.EVT_MENU, self._menu_then_focus(self.on_clear_selection), self._mi_clear_sel)
         self.Bind(wx.EVT_MENU, self.on_operations, self._mi_ops)
         self.Bind(wx.EVT_MENU, self.on_menu_edit_channel, self._mi_edit)
         self.Bind(wx.EVT_MENU, self.on_menu_goto, self._mi_goto)
@@ -307,6 +316,7 @@ class MainWindow(wx.Frame):
 
         self._radio_menu_items = (
             self._mi_save, self._mi_save_as, self._mi_close,
+            self._mi_select_all, self._mi_clear_sel,
             self._mi_edit, self._mi_goto, self._mi_ops,
             self._mi_find, self._mi_find_next,
             self._mi_prev, self._mi_next, self._mi_upload, self._mi_settings,
@@ -446,7 +456,8 @@ class MainWindow(wx.Frame):
             description=(
                 "Use arrow keys or screen-reader table navigation to move. "
                 "F2 edits. Escape cancels editing, then leaves the grid. "
-                "Applications key opens row actions."
+                "Open the row menu for select, edit, and delete with the "
+                "Applications key, Shift+F10, or VoiceOver menu (VO+Shift+M)."
             ),
         )
         self._content_sizer.Add(self._grid.control, 1, wx.EXPAND)
@@ -461,6 +472,16 @@ class MainWindow(wx.Frame):
         control.Destroy()
         self._grid = None
         self._grid_model = None
+
+    def on_select_all_channels(self, _evt=None) -> None:
+        """Edit > Select All Channels — select every row for bulk operations."""
+        if self._grid is not None:
+            self._grid.select_all_rows()
+
+    def on_clear_selection(self, _evt=None) -> None:
+        """Edit > Clear Selection — drop all row/range selection."""
+        if self._grid is not None:
+            self._grid.clear_selection()
 
     def _on_grid_context(self, row: int, column: str) -> None:
         if self._grid is None or self._grid_model is None:

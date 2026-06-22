@@ -4,21 +4,22 @@ Goal: **everything** in the app is reachable and operable from the keyboard,
 including the memory grid. This file is the single source of truth for
 shortcuts and is updated as each phase lands.
 
-There are two UIs (see CLAUDE.md "What This Project Is"): the **native UI**
-(default, `vrp/native/`) documented first below, and the **legacy webview UI**
-(`vrp/app.py`, launched with `--webview`, being retired) documented further
-down for as long as it exists. Conventions for both:
+There are two UIs (see CLAUDE.md "What This Project Is"), picked by platform
+— neither is legacy: the **native UI** (`vrp/native/`, default on
+Windows/Linux) documented first below, and the **webview UI** (`vrp/app.py`,
+default on macOS) documented further down. `--webview`/`--native` force
+either one regardless of platform. Conventions for both:
 
 - Global commands use `Ctrl`+key (or `Alt` for menus) to avoid clashing with
   NVDA browse-mode single-letter quick navigation.
 - Inside the grid, single-letter keys are reserved for the screen reader; grid
   commands use arrows, Enter/F2, and `Ctrl`/`Alt` combinations.
 
-## Native UI (default)
+## Native UI (default on Windows/Linux)
 
 A real native `wx.MenuBar` carries Alt-mnemonics and Ctrl-combo accelerators
 together in the same menu item — there's no WebView2 in the way, so there's
-only one command surface here (contrast the legacy UI's three, below). `Alt`,
+only one command surface here (contrast the webview UI's three, below). `Alt`,
 `Alt+letter`, and `F10` all open/navigate the menu the normal Windows way;
 arrow keys move across top-level menus; NVDA reads it like any native app menu.
 
@@ -86,21 +87,23 @@ After a move, the moved block stays selected at its new position and focus
 lands on its first channel; the result is announced via the status bar and
 speech.
 
-### Dialogs (shared with the legacy UI)
+### Dialogs (shared with the webview UI)
 
 Editing, bulk operations, find, settings, banks, and download/upload all open
-the same native wx dialogs the legacy UI uses (see "Memory grid editing",
-"Organize Channels", etc. under the legacy section below for the detailed
+the same native wx dialogs the webview UI uses (see "Memory grid editing",
+"Organize Channels", etc. under the webview section below for the detailed
 per-dialog keyboard behavior — Tab order, Enter/Esc, validation-keeps-dialog-
 open — which is identical regardless of which UI opened the dialog).
 
 ---
 
-## Legacy webview UI (`--webview`, being retired)
+## Webview UI (default on macOS)
 
-The sections below describe `vrp/app.py`, VRP's original UI, kept behind
-`--webview` only until the native UI above is confirmed at parity. New
-commands should be added to the native UI, not here.
+The sections below describe `vrp/app.py`, the default UI on macOS (VoiceOver
+reads its `AccessibleGrid` channel table directly; the native UI's
+`wx.ListCtrl` doesn't read correctly under VoiceOver yet — see
+PROGRESS_LOG.md "2026-06-21 — Platform-aware UI default"). New commands
+should land on both UIs to keep them at parity.
 
 ### Native menu bar + in-page shortcuts
 
@@ -125,12 +128,14 @@ shortcuts stay live. Menu items that need a loaded radio are disabled (announced
 "unavailable") until an image is open.
 
 Menu contents: **File** (Open / Open Recent ▸ … / Save / Save As / Close /
-Import from File… / Export to CSV… / Preferences… / Exit), **Radio** (Download / Upload / Query Source ▸ … /
+Import from File… / Export to CSV… / Preferences… / Exit), **Edit** (Select
+All Channels / Clear Selection), **Radio** (Download / Upload / Query Source ▸ … /
 Settings… / Radio Info…), **Channels** (Edit channel… / Go to channel… / Channel banks… /
 Organize Channels… / Find / Find next / Previous page / Next page), **Help** (Keyboard
 Shortcuts / About). "Edit channel…" and "Go to channel…" prompt for a number
-(native dialog) — they're the menu equivalents of the per-row Edit button and
-the page-nav Go-to field, so every command is reachable from the menu.
+(native dialog) — they're the menu equivalents of activating a grid row, so
+every command is reachable from the menu even without touching the grid
+first. ("Previous page"/"Next page" are vestigial — see the note below.)
 
 ### Global shortcuts (handled in-page, bridged to Python)
 
@@ -139,8 +144,9 @@ the page-nav Go-to field, so every command is reachable from the menu.
 | `Ctrl+O`        | Open Image File…             | done   |
 | `Ctrl+S`        | Save                         | done   |
 | `Ctrl+Shift+S`  | Save As…                     | done   |
-| `Ctrl+Alt+Left` | Previous channel page        | done   |
-| `Ctrl+Alt+Right`| Next channel page            | done   |
+| `Ctrl+Alt+Left` | Previous channel page (inactive — see note below) | done |
+| `Ctrl+Alt+Right`| Next channel page (inactive — see note below)     | done |
+| `Ctrl+A`        | Select All Channels          | done   |
 | `Ctrl+M`        | Organize Channels dialog     | done   |
 | `Ctrl+F`        | Find a channel               | done   |
 | `Ctrl+G`        | Find next match              | done   |
@@ -151,21 +157,30 @@ the page-nav Go-to field, so every command is reachable from the menu.
 | `F1`            | Show keyboard shortcuts list | done   |
 | `Alt+F4`        | Exit (native window close)   | done   |
 
+Clear Selection has no shortcut (Edit menu only).
+
 ### Menu mnemonics (caught by EVT_CHAR_HOOK, see above)
 
 | Key      | Action                  | Status |
 |----------|--------------------------|--------|
 | `Alt+F`  | Open the File menu       | done   |
+| `Alt+E`  | Open the Edit menu       | done   |
 | `Alt+R`  | Open the Radio menu      | done   |
 | `Alt+C`  | Open the Channels menu   | done   |
 | `Alt+H`  | Open the Help menu       | done   |
 | `F10`    | Open the File menu       | done   |
 
-The channel grid is paged (100 channels per page). The "Channel pages" nav
-above the table has Previous/Next buttons (disabled at the first/last page) and
-a "Go to channel N" field (Enter or Go) that jumps to that channel's page and
-focuses its Edit button. Page changes announce the new range; an out-of-range
-"Go to" keeps focus in the field and speaks the valid range.
+**The channel grid is not paged.** It used to be (100 channels per page, with
+a "Channel pages" nav of Previous/Next buttons and a "Go to channel N"
+field), back when the channel view was a read-only HTML `<table>`. That model
+was superseded by the editable `AccessibleGrid` (see "Channel grid
+(AccessibleGrid)" below), which loads every channel at once — paging is dead
+code today, reachable only if `self._grid` were `None` with a radio loaded,
+which doesn't happen in normal operation. The Previous/Next page menu items
+and `Ctrl+Alt+Left`/`Right` shortcuts still exist but just announce "All
+channels are loaded in the accessible grid; page commands are not needed."
+Channels ▸ Go to channel… (menu-only, no shortcut) still works — it focuses
+the row in the grid instead of a page.
 
 Shortcuts are gated: ignored while typing in a text/search/number field, and
 only the listed Ctrl(+Shift) combos are intercepted (NVDA owns the NVDA
@@ -173,18 +188,44 @@ modifier, not bare Ctrl+letter, so there's no quick-nav clash). Single-letter
 shortcuts are never used (rule #8). Download/Upload and Close currently have
 in-page buttons; their shortcuts arrive with the relevant phase.
 
-### Memory grid editing (Phase 2 — done, dialog model)
+### Channel grid (AccessibleGrid — production)
 
-The grid is a READ-ONLY semantic `<table>`. Editing a channel opens a native
-wx dialog (in-grid editing was dropped: on large radios it forced the screen
-reader to re-read the whole table on every keystroke). Each row's **second
-column** is an "Edit channel N" button (right after the channel-number row
-header, so it's quick to reach); activating it opens the dialog with one labeled
-control per field. Native dialogs are separate top-level windows, so keyboard
-and NVDA work natively (focus trap, Escape, title all free). **Empty channels
-expose ALL fields** (so a new channel can be fully defined in one pass) with
-focus on Frequency (which carries a "required to activate" hint); immutable
-fields are disabled and labeled "(read only)".
+The channel view is `wx-accessible-grid`'s `AccessibleGrid`, driven by
+`vrp/channel_grid_model.py`. It renders a real, editable `<table role="grid">`
+via the aria-activedescendant pattern so NVDA stays in focus mode, and
+composes each cell's accessible name (channel + column header + value +
+control type) so VoiceOver — which never receives the runtime's live-region
+announcement on a VO+arrow move — still hears the full context on every
+move. Try it standalone with `uv run python tools/grid_preview.py`.
+
+| Key                  | Action                                  |
+|-----------------------|------------------------------------------|
+| Arrows                | Move focus a cell at a time (across a row speaks the column; down a column speaks the channel number) |
+| `F2` / `Enter`        | Start editing the focused cell           |
+| `Enter`               | Commit the edit                          |
+| `Esc`                 | Cancel the edit                          |
+| `Space`               | Toggle the row-selection checkbox        |
+| `Ctrl+Space`          | Toggle the focused row into/out of a non-contiguous selection |
+| `Shift+Arrow`         | Extend a contiguous selection (does NOT work under VoiceOver — see note below) |
+| `Ctrl+A`              | Select All Channels (Edit menu)          |
+| (Edit menu only)      | Clear Selection                          |
+| `Delete`              | Delete the selected row(s)               |
+| Applications key / `Shift+F10` / VoiceOver `VO+Shift+M` | Open the row context menu (select, edit, delete) |
+
+**Known VoiceOver limitation:** cell-range selection with `Shift+Arrow` does
+not work under VoiceOver — it intercepts the arrow keys before the page sees
+them. Row/channel selection still works via `Space`, `Ctrl+Space`, and the
+`VO+Shift+M` row menu (Select this channel / Select range to here).
+
+### Read-only table + edit dialog (inactive fallback)
+
+Before the `AccessibleGrid` above, the channel view was a read-only semantic
+`<table>` with a native edit dialog per row. That code (`vrp/views.py`,
+`templates/channels.html`/`_row_macro.html`, and the table-navigation/edit-
+dialog behavior below) is still present as an `if self._grid is None`
+fallback in `vrp/app.py`, but isn't reached in normal operation — a loaded
+radio always means the grid above is showing. Documented here for completeness,
+not as current behavior:
 
 | Key                | Context                  | Action                            |
 |--------------------|--------------------------|-----------------------------------|
@@ -197,24 +238,12 @@ fields are disabled and labeled "(read only)".
 On invalid input the dialog stays open, speaks the reason, and focuses the bad
 field. On OK only the edited row is refreshed and focus returns to its Edit
 button. No bare single-letter shortcuts in the grid (NVDA browse mode owns a–z).
-
-### Editable grid preview (wx-accessible-grid — preview/beta, NVDA pass owed)
-
-Not yet the production channels view (see above); a standalone harness at
-`tools/grid_preview.py` (`uv run python tools/grid_preview.py`) previews the
-in-progress editable grid, driven by `vrp/channel_grid_model.py`. It renders a
-real `<table role="grid">` via the aria-activedescendant pattern so NVDA stays
-in focus mode.
-
-| Key                  | Action                                  |
-|-----------------------|------------------------------------------|
-| Arrows                | Move focus a cell at a time (across a row speaks the column; down a column speaks the channel number) |
-| `F2` / `Enter`        | Start editing the focused cell           |
-| `Enter`               | Commit the edit                          |
-| `Esc`                 | Cancel the edit                          |
-| `Space`               | Toggle the row-selection checkbox        |
-| `Delete`              | Delete the selected row(s)               |
-| Applications key      | Open the row context menu                |
+**Empty channels expose ALL fields** in the edit dialog (so a new channel can
+be fully defined in one pass) with focus on Frequency (which carries a
+"required to activate" hint); immutable fields are disabled and labeled
+"(read only)". This dialog is also what `F2`/`Enter` on the active grid opens
+in the native UI, and what activating a row's edit affordance opens here too
+when the fallback is reached.
 
 ### Organize Channels (move/delete/etc., Phase 3 — done)
 
@@ -226,7 +255,7 @@ up, Insert blank, Move up/down, Move to…, Copy to…, Sort…, Arrange (compac
 Only the chosen operation's parameters show (shift mode, destination, sort
 column/order). Destructive/reordering ops show a native confirm dialog stating
 the range, count, and that it can't be undone (no undo). After an op the
-affected page re-renders, focus lands on the result channel, and the result is
+grid refreshes, focus lands on the result channel, and the result is
 announced.
 
 ### Download / Upload (Phase 4 — done, hardware test owed)
@@ -245,8 +274,10 @@ Real-radio verification is still owed (no hardware in dev).
 
 Settings persist in a JSON file under the user config dir (atomic writes;
 corrupt/missing falls back to defaults). File ▸ Preferences… (a native dialog)
-has **Channels per page** (25/50/100/250/500 — changing it re-renders the grid
-and re-clamps the page) and **Speak status messages aloud** (off by default;
+has **Channels per page** (25/50/100/250/500 — vestigial since the
+`AccessibleGrid` loads every channel regardless; changing it just re-shows
+the grid and announces "The accessible grid now loads all channels") and
+**Speak status messages aloud** (off by default;
 gates the *supplemental* prism speech — the screen reader always reads the live
 region regardless). File ▸ Open Recent ▸ lists the last 8 opened images
 (numbered `&1…&8`, basename label with the full path as the item's help text,
@@ -310,8 +341,8 @@ the field, and speaks the reason on failure), then writes all changes via
 
 `Ctrl+F` (or the "Find…" button / Channels ▸ Find) opens a native dialog: a text
 field + a "Search in" chooser (All fields / Name / Frequency / Comment). It jumps
-to the first matching channel (navigating to its page, focusing its Edit button)
-and announces the match. `Ctrl+G` (Find next) steps to the next match; the search
+to the first matching channel (focusing its row in the grid) and announces
+the match. `Ctrl+G` (Find next) steps to the next match; the search
 wraps, announcing "Wrapped to start" or "Only match" as appropriate. No match
 keeps the dialog open and speaks "not found"; an empty search field is rejected.
 

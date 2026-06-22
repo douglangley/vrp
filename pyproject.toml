@@ -17,8 +17,10 @@ dependencies = [
     # 0.1.1 adds webview_listener_js for the single-bridge integration.
     "wx-accessible-menubar>=0.1.1",
     # Accessible, editable ARIA data grid (sibling library). The screen-reader-
-    # first replacement for the read-only channel table (preview).
-    "wx-accessible-grid>=0.3.0",
+    # first replacement for the read-only channel table (preview). 0.4.0 composes
+    # each cell's accessible name via aria-labelledby so VoiceOver speaks the
+    # column + row header and control type on every move (it never gets the arrow).
+    "wx-accessible-grid>=0.4.0",
     # Unified TTS / screen-reader speech (prism). Used to speak things that
     # ARIA alone can't convey. The Python bindings ship as `prismatoid`.
     "prismatoid>=0.16.0",
@@ -59,8 +61,13 @@ versatile-radio-programmer = "main:main"
 # so no separate `uv pip install -e ./chirp` step is needed. The ./chirp
 # directory must exist (git clone it) before running `uv sync`.
 chirp = { path = "./chirp", editable = true }
-# wx-accessible-menubar and wx-accessible-grid are now published on PyPI, so they
-# resolve from the version constraints above — no git/path source needed.
+# wx-accessible-menubar resolves from PyPI via the version constraint above.
+# wx-accessible-grid: pinned to the git tag v0.4.0 (the VoiceOver header/name fix)
+# until that version is published to PyPI. Once it is, REMOVE this line so it
+# resolves from PyPI via the >=0.4.0 constraint above, like the other two
+# libraries. (Pinned to git, not a local path, so a fresh clone builds without a
+# sibling checkout.)
+wx-accessible-grid = { git = "https://github.com/Community-Access/wx-accessible-grid.git", tag = "v0.4.0" }
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

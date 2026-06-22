@@ -1,11 +1,19 @@
 """Versatile Radio Programmer (VRP) — application entry point.
 
 VRP is an accessible front end to the CHIRP radio programming library. It is a
-wxPython app. The default UI is the **native** wx interface (a virtual
-report-mode ``wx.ListCtrl`` channel grid plus a native menu bar — see
-``vrp/native/``), which NVDA on Windows and VoiceOver on macOS read directly.
-The legacy ``AccessibleWebView`` UI (``vrp/app.py``) is still launchable with
-``--webview`` while it is being retired.
+wxPython app with two interchangeable front ends, because no single channel
+grid reads on every screen reader (see PROGRESS_LOG.md and the memory note on
+the cross-platform grid split):
+
+* the **webview** UI (``vrp/app.py``) — the ``AccessibleWebView`` rendering the
+  ``wx-accessible-grid`` Excel-style channel grid. This is what **VoiceOver on
+  macOS** reads.
+* the **native** UI (``vrp/native/``) — a virtual report-mode ``wx.ListCtrl``
+  channel grid plus a native menu bar. This is what **NVDA on Windows** reads.
+
+The default is chosen by platform — webview on macOS, native everywhere else —
+so each screen reader gets the grid that actually reads there. Force either one
+explicitly with ``--webview`` or ``--native``.
 
 Importing ``vrp`` first applies the CHIRP import-path fix (see
 ``vrp/_chirp_path.py``) before anything imports the vendored ``chirp`` package.
@@ -14,13 +22,25 @@ Importing ``vrp`` first applies the CHIRP import-path fix (see
 import argparse
 import logging
 import os
+import sys
 
 import vrp  # noqa: F401  (import side effect: makes the vendored chirp importable)
 
 
-def parse_mode(argv: list[str]) -> str:
-    """Return 'webview' if --webview is present, else 'native' (the default)."""
-    return "webview" if "--webview" in argv else "native"
+def parse_mode(argv: list[str], platform: str | None = None) -> str:
+    """Pick which front end to launch.
+
+    An explicit ``--webview`` or ``--native`` flag always wins. Otherwise the
+    default is chosen by platform: ``webview`` on macOS (VoiceOver reads the web
+    grid) and ``native`` everywhere else (NVDA reads the native ``wx.ListCtrl``
+    grid). ``platform`` defaults to ``sys.platform`` and exists for testing.
+    """
+    if "--webview" in argv:
+        return "webview"
+    if "--native" in argv:
+        return "native"
+    plat = platform if platform is not None else sys.platform
+    return "webview" if plat == "darwin" else "native"
 
 
 # Opt-in local dev knob: point at an extracted WebView2 Fixed Version Runtime
@@ -39,10 +59,16 @@ def main() -> None:
         action="store_true",
         help="Enable debug logging.",
     )
-    parser.add_argument(
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument(
         "--webview",
         action="store_true",
-        help="Launch the legacy AccessibleWebView UI instead of the native one.",
+        help="Force the AccessibleWebView UI (the VoiceOver-friendly web grid).",
+    )
+    group.add_argument(
+        "--native",
+        action="store_true",
+        help="Force the native wx.ListCtrl UI (the NVDA-friendly native grid).",
     )
     args = parser.parse_args()
 
@@ -51,7 +77,7 @@ def main() -> None:
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
 
-    if args.webview:
+    if parse_mode(sys.argv[1:]) == "webview":
         from vrp.app import run
 
         run()
