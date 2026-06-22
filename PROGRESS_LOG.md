@@ -6,6 +6,54 @@ architecture, keyboard map, and CHIRP feature-coverage checklist.
 
 ---
 
+## 2026-06-21 — Platform-aware UI default + grid 0.4.0 (VoiceOver cell names, Edit menu)
+
+**Regression + root cause.** A morning merge ("Merge native UI to main and make
+it the default") flipped `main.py`'s default from the webview UI to the native
+`wx.ListCtrl` UI. On macOS/VoiceOver that silently muted the app (the native grid
+reads on NVDA/Windows but not VoiceOver). Forensics: every webview file was
+byte-identical to the last known-good commit (a055c92); only the launcher default
+had changed. See the cross-platform grid split note.
+
+**Fix — platform-aware default (`main.py`).** `parse_mode()` picks the UI by
+`sys.platform`: webview on macOS (VoiceOver reads the web grid), native elsewhere
+(NVDA reads the `wx.ListCtrl` grid), with `--webview` / `--native` to override.
+Entry-point test is now platform-parametrized.
+
+**wx-accessible-grid 0.4.0** (git tag `v0.4.0`, pinned in `pyproject.toml` until
+published to PyPI):
+- *Accessible name via aria-labelledby.* Each data cell's name = channel + column
+  header + value + control type, so VoiceOver speaks the headers and control type
+  on every focus move. VoiceOver never receives the VO+arrow, so the runtime's
+  live-region announcement can't fire on macOS; the static name is the channel it
+  reads. Plain-move echo trimmed so NVDA (same name on focus) doesn't
+  double-speak. Validated by a 3-lens accessibility design pass.
+- *Context menu reachable under VoiceOver.* `contextmenu` DOM event handled (not
+  just the ContextMenu key macOS lacks) so VO+Shift+M / right-click open the
+  native row menu where selection lives.
+- *Bulk APIs.* `select_all_rows()` / `clear_selection()`; Ctrl+A selects all rows.
+- *Contrast.* AA selection colors; selection never conveyed by color alone.
+
+**VRP.** Edit menu (Select All Channels, Clear Selection) wired to the grid bulk
+APIs; grid description names the row-menu triggers (Applications key / Shift+F10 /
+VoiceOver VO+Shift+M).
+
+**Tried and reverted.** A positive-only per-row "selected" token baked into the
+cell name (to read selection state on move) was implemented, then REVERTED:
+announcing selection on plain movement is the chatter bug already fixed and it
+broke selection for the VoiceOver user. Selection is announced only on the
+selection action. (See the memory note.)
+
+**Known limitation (work on later).** Cell-range selection with Shift+arrow does
+NOT work under VoiceOver — VoiceOver intercepts the arrow keys before the page
+sees them. Row/channel selection works via Space, Ctrl+Space, and the VO+Shift+M
+row menu (Select this channel / Select range to here). A VoiceOver-reachable
+cell-range command via the context menu is the likely follow-up.
+
+**Verified:** wx-accessible-grid 18 tests; VRP 79 tests; app launches clean on
+macOS (webview default). **Still owed (the bar):** a hand pass with VoiceOver on
+the Mac and NVDA on Windows before any of this is called done.
+
 ## 2026-06-20 — Editable channel grid via new wx-accessible-grid library
 
 The read-only-table-plus-edit-dialog model (Phase 2 rework) was the right call at
