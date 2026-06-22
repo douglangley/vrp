@@ -8,13 +8,21 @@ JAWS, VoiceOver).
 ## Quick start (run from source)
 
 **Windows — one step:** install the two prerequisites once, then double-click
-`run.bat` (or run it from a terminal):
+`run-win.bat` (or run it from a terminal):
 
 - **uv** — `winget install --id=astral-sh.uv`
 - **git** — https://git-scm.com/download/win
 
-`run.bat` clones the CHIRP library, downloads Python 3.11 and all dependencies
-(first run only), and launches the app. Later runs just launch.
+**macOS — one step:** install the two prerequisites once, then run
+`./run-mac.sh` from a terminal:
+
+- **uv** — `curl -LsSf https://astral.sh/uv/install.sh | sh`
+- **git** — `xcode-select --install` (Xcode Command Line Tools)
+
+`run-win.bat`/`run-mac.sh` clone the CHIRP library, download Python 3.11 and
+all dependencies (first run only), and launch the app. Later runs just
+launch. Either script forwards extra arguments to `main.py`, e.g.
+`run-win.bat --debug` or `./run-mac.sh --webview`.
 
 **Any platform — manual:**
 
@@ -245,8 +253,9 @@ as a new VRP release. To update CHIRP during development:
 uv run python tools/update_chirp.py
 ```
 
-The tested CHIRP commit is pinned in the **`CHIRP_COMMIT`** file; `run.bat` clones
-CHIRP and checks out exactly that commit, so everyone runs the same code. The
+The tested CHIRP commit is pinned in the **`CHIRP_COMMIT`** file; `run-win.bat`/
+`run-mac.sh` clone CHIRP and check out exactly that commit, so everyone runs
+the same code. The
 update script fetches the latest CHIRP, runs the test suite, and — only if it
 passes — bumps `CHIRP_COMMIT` to the new commit (rolling `./chirp` back to the
 pin on failure). After a successful bump, commit `CHIRP_COMMIT` and rebuild.

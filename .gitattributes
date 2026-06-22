@@ -1,0 +1,5 @@
+# Shell scripts must keep LF endings (a CRLF shebang line fails on macOS/Linux);
+# batch files are Windows-only and keep CRLF. Normalizes regardless of a
+# contributor's local core.autocrlf setting.
+*.sh text eol=lf
+*.bat text eol=crlf

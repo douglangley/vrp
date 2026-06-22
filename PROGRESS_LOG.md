@@ -6,6 +6,26 @@ architecture, keyboard map, and CHIRP feature-coverage checklist.
 
 ---
 
+## 2026-06-21 — Per-OS run scripts (run-win.bat / run-mac.sh) + dependency refresh
+
+`run.bat` only ever covered Windows; renamed it to **`run-win.bat`** and added
+**`run-mac.sh`**, a bash equivalent (checks for `uv`/`git`, clones and pins
+`./chirp` from `CHIRP_COMMIT`, runs `uv sync`, then `uv run python main.py
+"$@"`). Both scripts now forward extra CLI args (e.g. `--debug`, `--webview`)
+to `main.py`. `chmod +x` set on `run-mac.sh`.
+
+Confirmed the existing `uv.lock` already resolves correctly for both
+platforms: `prismatoid` carries macOS wheels and marks its `win32more`
+dependency `sys_platform == 'win32'` (so it's skipped entirely outside
+Windows), and `wxpython`/the `wx-accessible-*` libraries all publish macOS
+wheels too — no pyproject.toml changes were needed for cross-platform
+resolution. Ran `uv lock --upgrade` to pick up the latest compatible patch
+releases (certifi, coverage, pytest, win32more-core); `uv sync --extra dev`
+and the full suite (`uv run pytest`, 78 tests) stayed green on Windows
+afterward. macOS execution itself is unverified in this session (no macOS
+machine available here) — the next macOS session should run `./run-mac.sh`
+and the suite there to confirm.
+
 ## 2026-06-21 — Native UI merged to main and made the default
 
 The channel grid is now a native virtual report-mode `wx.ListCtrl`

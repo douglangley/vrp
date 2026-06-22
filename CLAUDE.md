@@ -298,8 +298,9 @@ Debug logging:  uv run python main.py --debug
 
 CHIRP is vendored at ./chirp, pinned to a tested commit recorded in the
 **`CHIRP_COMMIT`** file (currently 6dadd6b), and bundled into the exe. The
-`./chirp` tree itself is gitignored, not committed; `run.bat` clones it and
-checks out the `CHIRP_COMMIT` SHA so everyone runs identical code. To update:
+`./chirp` tree itself is gitignored, not committed; `run-win.bat`/`run-mac.sh`
+clone it and check out the `CHIRP_COMMIT` SHA so everyone runs identical code.
+To update:
 `uv run python tools/update_chirp.py` — fetches latest CHIRP, checks it out
 (detached HEAD), runs the tests, and on green **writes the new SHA to
 `CHIRP_COMMIT`** automatically (rolls ./chirp back to the old pin on failure).
