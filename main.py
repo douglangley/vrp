@@ -70,6 +70,11 @@ def main() -> None:
         action="store_true",
         help="Force the native wx.ListCtrl UI (the NVDA-friendly native grid).",
     )
+    parser.add_argument(
+        "file",
+        nargs="?",
+        help="Optional radio image (.img) to open on launch.",
+    )
     args = parser.parse_args()
 
     logging.basicConfig(
@@ -80,7 +85,7 @@ def main() -> None:
     if parse_mode(sys.argv[1:]) == "webview":
         from vrp.app import run
 
-        run()
+        run(open_path=args.file)
     else:
         from vrp.native.app import run
 

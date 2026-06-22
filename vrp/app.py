@@ -1595,7 +1595,18 @@ class VRPApp(wx.App):
         return True
 
 
-def run() -> None:
-    """Create and run the VRP application."""
+def run(open_path: str | None = None) -> None:
+    """Create and run the VRP application.
+
+    ``open_path`` optionally opens a radio image file on launch (used by the
+    command-line ``vrp <file>`` form and file associations). It is opened after
+    the window exists, so the grid comes up focused on the first channel.
+    """
     app = VRPApp(False)
+    if open_path:
+        import os
+
+        window = app.GetTopWindow()
+        if window is not None and os.path.exists(open_path):
+            wx.CallAfter(window._open_path, open_path)
     app.MainLoop()

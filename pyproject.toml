@@ -20,7 +20,7 @@ dependencies = [
     # first replacement for the read-only channel table (preview). 0.4.0 composes
     # each cell's accessible name via aria-labelledby so VoiceOver speaks the
     # column + row header and control type on every move (it never gets the arrow).
-    "wx-accessible-grid>=0.4.0",
+    "wx-accessible-grid>=0.4.1",
     # Unified TTS / screen-reader speech (prism). Used to speak things that
     # ARIA alone can't convey. The Python bindings ship as `prismatoid`.
     "prismatoid>=0.16.0",
@@ -67,7 +67,7 @@ chirp = { path = "./chirp", editable = true }
 # resolves from PyPI via the >=0.4.0 constraint above, like the other two
 # libraries. (Pinned to git, not a local path, so a fresh clone builds without a
 # sibling checkout.)
-wx-accessible-grid = { git = "https://github.com/Community-Access/wx-accessible-grid.git", tag = "v0.4.0" }
+wx-accessible-grid = { git = "https://github.com/Community-Access/wx-accessible-grid.git", tag = "v0.4.1" }
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

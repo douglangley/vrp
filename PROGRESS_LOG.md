@@ -54,6 +54,17 @@ cell-range command via the context menu is the likely follow-up.
 macOS (webview default). **Still owed (the bar):** a hand pass with VoiceOver on
 the Mac and NVDA on Windows before any of this is called done.
 
+**Update (same day) — grid 0.4.1 + command-line open.** Selection feedback and
+the grid-enter announcement are now ASSERTIVE, not polite: VoiceOver routinely
+drops polite announcements (especially as the grid opens or when a context menu
+closes), so "Channel N selected" and the on-open "Channel 1" landing were going
+unspoken — which read as "selection doesn't announce" and "it starts mid-list."
+Also added `vrp <file>` (and `run(open_path=...)`) to open an image on launch.
+VRP now pins grid **v0.4.1**. Note: VoiceOver will not move its own cursor onto a
+programmatically focused webview cell, so the grid focuses channel 1 and announces
+it assertively rather than being able to force VO's cursor there. Still owed: the
+VoiceOver/NVDA hand pass.
+
 ## 2026-06-21 — Per-OS run scripts (run-win.bat / run-mac.sh) + dependency refresh
 
 `run.bat` only ever covered Windows; renamed it to **`run-win.bat`** and added
