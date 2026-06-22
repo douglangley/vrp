@@ -53,9 +53,9 @@ the webview-table-re-reads-on-edit problem these libraries exist to solve.
   real, editable `<table role="grid">` driven by the aria-activedescendant
   pattern. VRP's adapter is `vrp/channel_grid_model.py` (`ChannelGridModel`);
   try it standalone with `uv run python tools/grid_preview.py`. Pinned to git
-  tag `v0.4.0` in `[tool.uv.sources]` (VoiceOver cell-name fixes) until that
-  version is published to PyPI — see the comment there before removing the
-  pin.
+  tag `v0.4.1` in `[tool.uv.sources]` (VoiceOver cell-name + assertive
+  selection/enter announcements) until that version is published to PyPI — see
+  the comment there before removing the pin.
 
 All three were extracted from this app; fix issues upstream in the library,
 not as a local workaround in vrp/app.py.
