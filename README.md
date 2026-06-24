@@ -247,12 +247,12 @@ uv run python build.py
 
 When `--debug` is set, a download/upload to a radio writes a byte-level
 **serial trace** (every byte sent/received, with timestamps and explicit
-`# timeout` markers) to `serial-trace.txt` in the user config directory
-(`%APPDATA%\OpenMemoryWriter\` on Windows, `$XDG_CONFIG_HOME/OpenMemoryWriter/`
-or `~/.config/OpenMemoryWriter/` elsewhere). The file is overwritten on each
-clone session; its path is logged at startup. This is the primary artifact for
-diagnosing a radio that won't talk over the cable — attach it when reporting a
-download/upload problem.
+`# timeout` markers) to `serial-trace.txt` in the current working directory —
+i.e. the project root when you launch with `uv run python main.py --debug`
+from the repo. The file is overwritten on each clone session; its path is
+logged when the clone starts. This is the primary artifact for diagnosing a
+radio that won't talk over the cable — attach it when reporting a
+download/upload problem. (It's gitignored.)
 
 Or just run **`build.bat`** (Windows) — it installs the build deps, runs the
 build with live output saved to a timestamped `build_*.log`, and reports

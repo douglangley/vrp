@@ -31,27 +31,20 @@ from chirp import util
 
 LOG = logging.getLogger(__name__)
 
-# Kept identical to vrp/config.py's directory name on purpose: the trace file
-# lives next to the user config so there's one obvious place to find it. The
-# resolution is duplicated (not imported from vrp.config) so chirp_backend
-# stays a pure, UI-agnostic layer that vrp depends on, not the reverse.
-_CONFIG_DIRNAME = "OpenMemoryWriter"
 _TRACE_FILENAME = "serial-trace.txt"
 
 
-def _config_dir() -> str:
-    if os.name == "nt":
-        base = os.environ.get("APPDATA") or os.path.expanduser("~")
-    else:
-        base = os.environ.get("XDG_CONFIG_HOME") or os.path.join(
-            os.path.expanduser("~"), ".config"
-        )
-    return os.path.join(base, _CONFIG_DIRNAME)
-
-
 def default_trace_path() -> str:
-    """Path of the per-session serial trace file (overwritten each session)."""
-    return os.path.join(_config_dir(), _TRACE_FILENAME)
+    """Path of the per-session serial trace file (overwritten each session).
+
+    Written to the current working directory — i.e. the project root when the
+    app is launched from there with ``uv run python main.py --debug`` — so the
+    trace is right where you're working and trivially found (and readable by a
+    tool/agent helping debug). For an end user launching the packaged exe by
+    double-clicking, this is the exe's directory, which is fine for a
+    debug-only artifact. Overridable per-instance via ``TracingSerial(trace_path=...)``.
+    """
+    return os.path.join(os.getcwd(), _TRACE_FILENAME)
 
 
 def get_trace_entry(direction: str, start_ts: float, data: bytes) -> list[str]:

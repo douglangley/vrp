@@ -12,10 +12,10 @@ from chirp_backend import serial_trace
 from chirp_backend.serial_trace import TracingSerial, get_trace_entry
 
 
-def test_default_trace_path_lives_in_config_dir():
+def test_default_trace_path_is_in_cwd():
     path = serial_trace.default_trace_path()
     assert os.path.basename(path) == "serial-trace.txt"
-    assert os.path.basename(os.path.dirname(path)) == "OpenMemoryWriter"
+    assert os.path.dirname(path) == os.getcwd()
 
 
 def test_get_trace_entry_marks_empty_read_as_timeout():
