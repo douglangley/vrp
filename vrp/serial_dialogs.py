@@ -14,9 +14,34 @@ Per the accessibility-lead's Phase 4 model:
 
 from __future__ import annotations
 
+import re
 import threading
 
 import wx
+
+
+def _normalize_for_search(text: str) -> str:
+    """Lowercase and drop non-alphanumerics so 'uv5r' matches 'UV-5R'."""
+    return re.sub(r"[^a-z0-9]", "", text.lower())
+
+
+def filter_models(models: list[dict], query: str) -> list[dict]:
+    """Return the models whose label matches ``query``.
+
+    Matching is case- and punctuation-insensitive, and multi-term: the query is
+    split on whitespace and *every* term must appear in the label once both are
+    normalized (lowercased, non-alphanumerics stripped). So 'uv5r' matches
+    'Baofeng UV-5R Mini' (the hyphen no longer blocks the match — the original
+    bug) and 'baofeng 5r' matches any Baofeng whose model contains '5r'. An
+    empty/whitespace query returns all models.
+    """
+    terms = [t for t in (_normalize_for_search(p) for p in query.split()) if t]
+    if not terms:
+        return list(models)
+    return [
+        m for m in models
+        if all(term in _normalize_for_search(m["label"]) for term in terms)
+    ]
 
 
 def show_radio_prompts(parent, prompts: dict, *, pre_title: str = "Instructions") -> bool:
@@ -163,10 +188,7 @@ class DownloadDialog(wx.Dialog):
         self._update_ok()
 
     def _on_filter(self, _event) -> None:
-        q = self.filter.GetValue().strip().lower()
-        self._filtered = (
-            [m for m in self._models if q in m["label"].lower()] if q else list(self._models)
-        )
+        self._filtered = filter_models(self._models, self.filter.GetValue())
         self.list.Set([m["label"] for m in self._filtered])
         if self._filtered:
             self.list.SetSelection(0)
