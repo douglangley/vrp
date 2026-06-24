@@ -29,6 +29,7 @@ _DEFAULTS = {
     "channels_per_page": 100,
     "speak_status_messages": False,  # screen reader already reads the live region
     "recent_files": [],
+    "last_serial_port": None,  # device string (e.g. "COM4") last used for a clone
 }
 
 
@@ -91,6 +92,16 @@ class Config:
 
     def set(self, key: str, value) -> None:
         self._data[key] = value
+        self.save()
+
+    # -- serial port -------------------------------------------------------
+
+    def get_last_serial_port(self):
+        """The device last used for a download/upload, or None."""
+        return self._data.get("last_serial_port")
+
+    def set_last_serial_port(self, port: str) -> None:
+        self._data["last_serial_port"] = port
         self.save()
 
     # -- recent files ------------------------------------------------------

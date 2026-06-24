@@ -6,6 +6,28 @@ architecture, keyboard map, and CHIRP feature-coverage checklist.
 
 ---
 
+## 2026-06-24 — Serial dialogs: land on port, remember last port
+
+UX pass on the shared Download/Upload dialogs (`vrp/serial_dialogs.py`):
+- **Initial focus is now the serial port** (was the model filter on Download).
+  Tab order flows port → Refresh → model filter → list → Download, matching
+  control creation order. `PortPicker.focus()` focuses the port choice (or the
+  Refresh button when no ports are present).
+- **The last-used serial port is remembered and preselected.** Stored in the
+  existing config (`%APPDATA%\VRP\config.json` via `vrp/config.py`:
+  `get/set_last_serial_port`) — VRP already has a settings store, so no separate
+  VRPSettings.json was added. Both dialogs preselect it on open (falling back to
+  the first port), and save the chosen port when the user starts a clone. A
+  manual Refresh keeps the current pick if it's still present
+  (`_select_index`, pure + unit-tested). So a repeat clone on the same cable is
+  just Enter.
+- Note: the Upload dialog has no model search (it uploads the loaded radio), so
+  the earlier model-search fix applies only to Download; the port improvements
+  apply to both.
+
+Tests: config last-port round-trip + `_select_index` cases; headless smoke
+confirms both dialogs preselect a saved COM4. 120 passing.
+
 ## 2026-06-24 — Fix: Download dialog model search broke on punctuation
 
 The Download-from-Radio model filter did a raw case-folded substring match

@@ -54,6 +54,13 @@ def test_clear_recent(tmp_path):
     assert c.recent() == []
 
 
+def test_last_serial_port_round_trips(tmp_path):
+    path = str(tmp_path / "c.json")
+    assert Config(path=path).get_last_serial_port() is None  # default
+    Config(path=path).set_last_serial_port("COM7")
+    assert Config(path=path).get_last_serial_port() == "COM7"  # persisted
+
+
 def test_default_path_uses_vrp_dir(monkeypatch, tmp_path):
     _point_config_base(monkeypatch, tmp_path)
     p = cfg._default_path()
