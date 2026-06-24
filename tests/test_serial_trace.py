@@ -48,6 +48,28 @@ def test_open_creates_trace_file(mock_open, tmp_path):
 @mock.patch("serial.Serial.open")
 @mock.patch("serial.Serial.write")
 @mock.patch("serial.Serial.read")
+def test_log_present_and_noop_when_tracing_disabled(
+    mock_read, mock_write, mock_open, tmp_path
+):
+    # Regression: CHIRP drivers call radio.pipe.log(...) during sync. With a
+    # plain serial.Serial that raised AttributeError; TracingSerial must always
+    # expose .log() (and write/read) even with tracing off, writing no file.
+    mock_read.return_value = b"x"
+    path = str(tmp_path / "trace.txt")
+    trace = TracingSerial(trace_path=path, trace_enabled=False)
+    trace.open()
+    assert trace._tracef is None
+    assert not os.path.exists(path)  # no file written when disabled
+    trace.log("Sending request for 0x0000")  # must not raise
+    trace.write(b"foo")              # must not raise
+    assert trace.read(1) == b"x"     # pass-through still works
+    trace.close()
+    assert not os.path.exists(path)
+
+
+@mock.patch("serial.Serial.open")
+@mock.patch("serial.Serial.write")
+@mock.patch("serial.Serial.read")
 def test_write_and_read_are_logged(mock_read, mock_write, mock_open, tmp_path):
     mock_read.side_effect = [b"123", b""]  # second read yields a timeout
     path = str(tmp_path / "trace.txt")

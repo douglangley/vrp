@@ -495,14 +495,18 @@ def _open_radio_serial(port: str, radio_class, *, trace: bool = False):
 
     ``radio_class`` may be a driver class or an instance — BAUD_RATE,
     HARDWARE_FLOW, WANTS_RTS and WANTS_DTR are class-level constants readable
-    from either. ``trace`` swaps in TracingSerial (byte-level trace file) for
-    debugging; see chirp_backend.serial_trace.
+    from either.
+
+    Always a TracingSerial, never a plain serial.Serial: CHIRP drivers call
+    ``radio.pipe.log(...)`` during sync (CHIRP's GUI always wraps the port in
+    its SerialTrace), so the pipe must always expose ``.log()`` or the clone
+    crashes with AttributeError. ``trace`` only controls whether the byte-level
+    trace FILE is written (under --debug); the .log()/write/read methods are
+    present either way. See chirp_backend.serial_trace.
     """
-    import serial
     from chirp_backend.serial_trace import TracingSerial
 
-    cls = TracingSerial if trace else serial.Serial
-    pipe = cls()
+    pipe = TracingSerial(trace_enabled=trace)
     pipe.baudrate = radio_class.BAUD_RATE
     pipe.timeout = 0.25
     pipe.rtscts = radio_class.HARDWARE_FLOW
