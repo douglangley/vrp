@@ -56,3 +56,26 @@ def test_detect_propagates_radio_error():
     # A real detection failure must NOT silently fall back to the user's pick.
     with pytest.raises(errors.RadioError):
         radio_backend._detect_radio_class(_DetectionFails, mock.Mock())
+
+
+def test_download_rejects_non_clone_mode_radio(monkeypatch):
+    """A live (non-clone) radio fails clearly, before any port is opened."""
+    from chirp import directory
+
+    class _LiveRadio:  # not a CloneModeRadio subclass
+        VENDOR = "Acme"
+        MODEL = "Live-1"
+
+    monkeypatch.setattr(directory, "get_radio", lambda _id: _LiveRadio)
+    opened = []
+    monkeypatch.setattr(
+        radio_backend, "_open_radio_serial",
+        lambda *a, **k: opened.append(True),
+    )
+
+    ok, message = radio_backend.download_from_radio(
+        "COM4", "any_id", lambda c, t, m: None
+    )
+    assert ok is False
+    assert "live connection" in message
+    assert opened == []  # guarded before the serial port was touched

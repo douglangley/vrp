@@ -530,7 +530,7 @@ def download_from_radio(
     call from a background thread. Returns (success, message).
     """
     _ensure_chirp()
-    from chirp import directory
+    from chirp import chirp_common, directory
 
     try:
         radio_class = directory.get_radio(driver_id)
@@ -538,6 +538,18 @@ def download_from_radio(
         return False, f"Unknown radio: {driver_id}"
 
     label = f"{radio_class.VENDOR} {radio_class.MODEL}"
+
+    # The model picker lists every CHIRP driver, including "live" radios that
+    # talk over an always-on connection instead of doing a one-shot memory
+    # clone (they have no sync_in). Guard before opening the port so the user
+    # gets a clear message instead of a cryptic mid-clone AttributeError.
+    # (Live-radio support itself is out of scope — see the serial plan.)
+    if not issubclass(radio_class, chirp_common.CloneModeRadio):
+        return False, (
+            f"{label} uses a live connection, not a memory clone, so VRP "
+            f"can't download from it yet."
+        )
+
     pipe = None
     try:
         progress_callback(0, 100, f"Connecting to {label} on {port}...")
