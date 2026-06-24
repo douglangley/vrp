@@ -6,6 +6,50 @@ architecture, keyboard map, and CHIRP feature-coverage checklist.
 
 ---
 
+## 2026-06-23 — Fix: port picker's default selection could land on the wrong COM port
+
+**Symptom.** A real-hardware **upload** attempt (Task 7e, the owed test from the
+entry below) produced `serial-trace.txt` showing VRP open **COM10** and send the
+exact, correct CHIRP ident magic for the Baofeng UV-5R Mini
+(`PROGRAMCOLORPROU` / `chirp.drivers.baofeng_uv17Pro.MSTRING_UV17PROGPS`, at
+115200 baud — matches `UV17Pro.BAUD_RATE` exactly, so the bytes on the wire
+were not the bug). The reply was a single byte `0x50` (`'P'`) — the first byte
+of what was just sent, echoed back — instead of the expected `0x06` ACK
+(`_fingerprint`). `_do_ident()` correctly raised
+`RadioError("Unexpected response from radio")`. The prior verified download
+(see entry below) had used **COM4**, not COM10.
+
+**Root cause.** `chirp_backend/radio.py::list_serial_ports()` sorted ports
+with plain string comparison: `sorted(ports, key=lambda p: p.device)`. Python
+string order is character-by-character, so `'COM10' < 'COM4'` (`'1' < '4'`) —
+confirmed interactively: `sorted(['COM4','COM10','COM2','COM9'])` →
+`['COM10','COM2','COM4','COM9']`. `vrp/serial_dialogs.py::PortPicker.refresh()`
+always pre-selects index 0 of that list. On any machine with both a
+single- and a double-digit port enumerated (COM10+ shows up easily —
+Bluetooth virtual ports, FTDI hubs, a second adapter), the dialog's *default*
+selection silently lands on whichever port string-sorts first, not the
+radio's actual port. Nothing in the code names a specific port — the bug is
+in the ordering, not a hardcoded value — but an unreliable default made the
+wrong port the path of least resistance, which is almost certainly what put
+this upload attempt on COM10.
+
+**Fix.** Added `_natural_sort_key()` to `chirp_backend/radio.py` (splits each
+device string into text/digit runs via regex, compares digit runs as `int`)
+and used it as `list_serial_ports()`'s sort key. Ports now order
+`COM2, COM4, COM9, COM10, ...`. The key isn't COM-specific, so it also fixes
+the equivalent problem on Linux (`/dev/ttyUSB2` vs `/dev/ttyUSB10`, etc.).
+Test: `tests/test_serial_ports_list.py::test_list_serial_ports_sorts_numerically`
+(fakes `serial.tools.list_ports.comports()` with COM10/COM2/COM4/COM9 and
+asserts numeric output order). Full suite: 104 passed.
+
+**Not yet independently re-verified against real hardware** (no hardware
+access here) — flagging for whoever next attempts Task 7e (upload, still
+owed): confirm the port dropdown now defaults sensibly when more than one
+serial device is enumerated, and separately confirm upload itself completes
+once the right port is selected (this fix only changes which port is
+*pre-selected by default*; the dropdown was always manually overridable, so
+this would not by itself have blocked anyone who explicitly chose COM4).
+
 ## 2026-06-23 — Serial clone hardening + real-hardware download VERIFIED
 
 Phase 4's download/upload had never run against a real radio (no hardware in

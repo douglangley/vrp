@@ -15,6 +15,7 @@ CHIRP library notes:
 
 import logging
 import os
+import re
 import threading
 from dataclasses import dataclass, field
 from typing import Callable, Generator, Optional
@@ -360,6 +361,20 @@ def apply_radio_settings(settings) -> tuple[bool, str]:
             return False, f"Failed to save settings: {e}"
 
 
+def _natural_sort_key(device: str) -> tuple:
+    """Sort key splitting digits from text so 'COM10' sorts after 'COM9'.
+
+    Plain string sort puts 'COM10' before 'COM4' (comparing '1' < '4'
+    character-by-character), so on a machine with both a single- and a
+    double-digit port connected, the picker's default (first list entry)
+    silently lands on the wrong device.
+    """
+    return tuple(
+        int(chunk) if chunk.isdigit() else chunk.lower()
+        for chunk in re.split(r"(\d+)", device)
+    )
+
+
 def list_serial_ports() -> list[dict]:
     """
     List available serial ports.
@@ -370,7 +385,7 @@ def list_serial_ports() -> list[dict]:
         ports = serial.tools.list_ports.comports()
         return [
             {"port": p.device, "description": p.description, "hwid": p.hwid}
-            for p in sorted(ports, key=lambda p: p.device)
+            for p in sorted(ports, key=lambda p: _natural_sort_key(p.device))
         ]
     except ImportError:
         return []
