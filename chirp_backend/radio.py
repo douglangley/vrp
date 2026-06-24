@@ -30,6 +30,17 @@ def _ensure_chirp() -> None:
     if _chirp_loaded:
         return
     try:
+        # CHIRP driver code calls the gettext builtin _() directly (e.g. the
+        # RadioPrompts strings in get_prompts(), and clone-progress/error
+        # messages). CHIRP's own CLI and GUI install _ before using drivers;
+        # running CHIRP headless from VRP we must too, or those calls raise
+        # NameError: name '_' is not defined. Identity = no translation, the
+        # same shim chirpc uses. Guarded so a real translation install (if VRP
+        # adds one later) is never clobbered.
+        import builtins
+        if not hasattr(builtins, "_"):
+            builtins._ = lambda s: s  # type: ignore[attr-defined]
+
         from chirp import directory
         directory.import_drivers()
         _chirp_loaded = True

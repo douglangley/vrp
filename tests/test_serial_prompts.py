@@ -63,6 +63,18 @@ def test_get_clone_prompts_for_loaded_radio_with_no_radio():
     assert d == {"experimental": None, "info": None, "pre": None}
 
 
+def test_get_clone_prompts_real_driver_uses_gettext_without_raising():
+    # Regression: real driver get_prompts() bodies call the gettext builtin _()
+    # directly (CHIRP's CLI/GUI install it; VRP must too via _ensure_chirp).
+    # The Task-4 fakes used plain strings and missed this NameError. The UV-5R
+    # Mini (chirp.drivers.baofeng_uv17Pro.UV5RMini) sets _()-wrapped
+    # experimental + pre_download text, so it exercises the path.
+    prompts = radio_backend.get_clone_prompts("Baofeng_UV-5R_Mini")
+    assert set(prompts) == {"experimental", "info", "pre"}
+    assert isinstance(prompts["experimental"], str) and prompts["experimental"]
+    assert isinstance(prompts["pre"], str) and prompts["pre"]
+
+
 # -- UI: native dialog sequence (wx.MessageBox mocked) ----------------------
 
 def test_show_radio_prompts_runs_all_in_order(monkeypatch):
