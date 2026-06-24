@@ -10,7 +10,7 @@ This script implements the dev-side update loop: fetch the latest CHIRP, check
 it out, run the VRP test suite against it, and — only if the tests pass — bump
 the CHIRP_COMMIT pin to the new commit. On failure it rolls ./chirp back to the
 currently-pinned commit. After a successful bump, commit CHIRP_COMMIT and
-rebuild (build.bat).
+rebuild (uv run python build.py).
 
 Run:  uv run python tools/update_chirp.py
 """
@@ -62,7 +62,7 @@ def main() -> int:
         with open(PIN_FILE, "w", encoding="utf-8") as f:
             f.write(new + "\n")
         print(f"\nTests pass. Updated the pin (CHIRP_COMMIT -> {new[:12]}).")
-        print("Commit CHIRP_COMMIT and rebuild: build.bat")
+        print("Commit CHIRP_COMMIT and rebuild: uv run python build.py")
     else:
         print(f"\nTests FAILED against CHIRP {new[:12]}. Rolling ./chirp back to "
               f"the pinned commit {old[:12]}...")

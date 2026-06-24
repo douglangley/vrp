@@ -324,13 +324,18 @@ and rebuild. End users never pull/rebuild — updates ship as new VRP releases.
 
 ## Building
 
+Building a release .exe is a deliberate developer/release step, not something
+testers or end users run — **everyone runs from source via `run-win.bat` /
+`run-mac.sh`** (see "Running from source" / the run scripts). There is no
+double-click build wrapper (the old `build.bat` was removed because a tester
+ran it by mistake). To cut a release build:
+
 uv sync --extra build
 uv run python build.py
 Output: dist/<appname>.exe (Windows) or dist/<appname> (Linux)
 
-Or run `build.bat` (Windows): installs build deps, builds with live output +
-timestamped `build_*.log`, reports success/failure. Usually well under a
-minute (552 drivers bundled, not compiled — see "Notes" below).
+Usually well under a minute (552 drivers bundled, not compiled — see "Notes"
+below).
 
 Notes:
 - Packager is **PyInstaller** (switched from Nuitka — compiling 552 CHIRP

@@ -12,11 +12,18 @@ from __future__ import annotations
 import json
 import logging
 import os
+import shutil
 import tempfile
 
 LOG = logging.getLogger(__name__)
 
 MAX_RECENT = 8
+
+# App config directory name. "OpenMemoryWriter" was the project's pre-rename
+# name; any config found there is migrated forward to the current "VRP" dir.
+_APP_DIRNAME = "VRP"
+_LEGACY_DIRNAME = "OpenMemoryWriter"
+
 _DEFAULTS = {
     "version": 1,
     "channels_per_page": 100,
@@ -25,16 +32,30 @@ _DEFAULTS = {
 }
 
 
-def _default_path() -> str:
+def _config_base() -> str:
     # Plain per-user config location — deliberately NOT wx.StandardPaths, which
     # spins up an implicit wx.App (~6s) when no App exists (e.g. headless tests).
     if os.name == "nt":
-        base = os.environ.get("APPDATA") or os.path.expanduser("~")
-    else:
-        base = os.environ.get("XDG_CONFIG_HOME") or os.path.join(
-            os.path.expanduser("~"), ".config"
-        )
-    return os.path.join(base, "OpenMemoryWriter", "config.json")
+        return os.environ.get("APPDATA") or os.path.expanduser("~")
+    return os.environ.get("XDG_CONFIG_HOME") or os.path.join(
+        os.path.expanduser("~"), ".config"
+    )
+
+
+def _default_path() -> str:
+    base = _config_base()
+    path = os.path.join(base, _APP_DIRNAME, "config.json")
+    # One-time migration from the pre-rename config dir, so existing testers/
+    # users keep their preferences and recent files when the dir name changed.
+    legacy = os.path.join(base, _LEGACY_DIRNAME, "config.json")
+    if not os.path.exists(path) and os.path.exists(legacy):
+        try:
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            shutil.copy2(legacy, path)
+            LOG.info("Migrated config %s -> %s", legacy, path)
+        except Exception as e:  # noqa: BLE001 — best effort; fall back to defaults
+            LOG.warning("Config migration failed (%s); using defaults", e)
+    return path
 
 
 class Config:

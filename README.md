@@ -41,7 +41,9 @@ on Windows the webview UI's Microsoft Edge WebView2 runtime (preinstalled on
 Windows 11) is only needed if you force it with `--webview`.
 
 To run the tests: `uv sync --extra dev` then `uv run pytest`. To build the
-standalone .exe: `build.bat` (see "Packaging with PyInstaller").
+standalone .exe (a deliberate release step — testers and end users should just
+run from source with the run scripts above): `uv sync --extra build` then
+`uv run python build.py` (see "Packaging with PyInstaller").
 
 ## Why VRP exists
 
@@ -254,11 +256,11 @@ logged when the clone starts. This is the primary artifact for diagnosing a
 radio that won't talk over the cable — attach it when reporting a
 download/upload problem. (It's gitignored.)
 
-Or just run **`build.bat`** (Windows) — it installs the build deps, runs the
-build with live output saved to a timestamped `build_*.log`, and reports
-success/failure. The build bundles all 552 CHIRP drivers but, unlike the
-previous Nuitka-based build, doesn't compile them — it usually finishes in
-under a minute.
+The build bundles all 552 CHIRP drivers but, unlike the previous Nuitka-based
+build, doesn't compile them — it usually finishes in under a minute. (There is
+no double-click `build.bat` wrapper; building is a deliberate release step run
+with `uv run python build.py`. Testers and end users run from source via
+`run-win.bat` / `run-mac.sh`.)
 
 `build.py` excludes `prism`/`win32more`/`numpy` (prism pulls in the whole
 win32more Windows-API surface; speech is opt-in and no-ops without it), and
