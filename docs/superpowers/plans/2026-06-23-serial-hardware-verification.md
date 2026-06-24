@@ -4,10 +4,10 @@
 
 **Status:** ◐ in progress — started 2026-06-23. Tracked from
 [ROADMAP.md](ROADMAP.md). **Done:** Task 1 (serial trace), Task 2 (port
-setup — RTS/DTR/flow control + timeout), Task 3 (`detect_from_serial`).
-**Next:** Task 4 (`get_prompts()` through the dialogs — has an open product
-question on prompt vs. overwrite-confirm ordering for upload; the first UI
-task, so accessibility-lead review applies).
+setup — RTS/DTR/flow control + timeout), Task 3 (`detect_from_serial`),
+Task 4 (`get_prompts()` through native dialogs). **Next:** Task 5 (final
+suite + re-read of clone call order), then Tasks 6–7 (driver id + the
+hardware go/no-go on COM4 — the user's step).
 
 **Goal:** Get VRP's Radio ▸ Download from Radio / Upload to Radio commands
 working end-to-end against a real radio on a real serial port, using CHIRP's
@@ -230,11 +230,23 @@ the agent needing console/hardware access.
 - [ ] `uv run pytest` green.
 - [ ] Commit.
 
-## Task 4: Surface `get_prompts()` through the dialogs
+## Task 4: Surface `get_prompts()` through the dialogs ✅ DONE
 
 **Files:** Modify `chirp_backend/radio.py` (new helper — keeps the
 chirp-touching code in the existing seam), `vrp/serial_dialogs.py` and/or
 `vrp/native/main_window.py::on_download`/`on_upload`. New tests.
+
+> Implemented: `_prompts_dict` / `get_clone_prompts(driver_id)` /
+> `get_clone_prompts_for_loaded_radio()` in `chirp_backend/radio.py` (UI layer
+> never touches `RadioPrompts`/`directory` directly);
+> `serial_dialogs.show_radio_prompts(parent, prompts, *, pre_title)` shows
+> native `wx.MessageBox` dialogs in order (experimental Yes/No default-No →
+> info → pre). Wired into `on_download` (before `_run_clone`) and `on_upload`.
+> **Upload ordering decided (user, 2026-06-23): driver prompts FIRST, then the
+> "overwrite ALL channels" confirm.** Tests in `tests/test_serial_prompts.py`.
+> Accessibility: these are native OS message boxes (screen-reader-accessible,
+> modal, Escape→negative, focus returns to parent), so no web accessibility-
+> lead review applied; offer a Desktop Accessibility Specialist pass at Task 7.
 
 - [ ] **Layering note:** every file under `vrp/` other than
   `settings_dialog.py` (one narrow, pre-existing exception for a type

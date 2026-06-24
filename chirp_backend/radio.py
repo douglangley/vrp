@@ -396,6 +396,49 @@ def list_radio_models() -> list[dict]:
     return result
 
 
+def _prompts_dict(radio_class_or_instance, *, upload: bool) -> dict:
+    """Flatten a driver's RadioPrompts into a UI-friendly dict.
+
+    ``pre`` already resolves to pre_upload/pre_download for the given direction
+    so the UI layer never needs to know which attribute maps to which way. Both
+    a driver class and a radio instance expose get_prompts() (it's a
+    classmethod), so either may be passed.
+    """
+    prompts = radio_class_or_instance.get_prompts()
+    return {
+        "experimental": getattr(prompts, "experimental", None),
+        "info": getattr(prompts, "info", None),
+        "pre": getattr(
+            prompts, "pre_upload" if upload else "pre_download", None
+        ),
+    }
+
+
+def get_clone_prompts(driver_id: str) -> dict:
+    """Download-direction clone prompts for a driver id (see _prompts_dict).
+
+    Returns all-None on an unknown id rather than raising — a missing prompt
+    must never block a download the user already initiated.
+    """
+    _ensure_chirp()
+    from chirp import directory
+
+    try:
+        radio_class = directory.get_radio(driver_id)
+    except Exception:  # noqa: BLE001
+        return {"experimental": None, "info": None, "pre": None}
+    return _prompts_dict(radio_class, upload=False)
+
+
+def get_clone_prompts_for_loaded_radio() -> dict:
+    """Upload-direction clone prompts for the currently loaded radio."""
+    with _state_lock:
+        if not _state.loaded:
+            return {"experimental": None, "info": None, "pre": None}
+        radio = _state.radio
+    return _prompts_dict(radio, upload=True)
+
+
 def _make_status_fn(progress_callback: Callable[[int, int, str], None]):
     """Adapt CHIRP's status_fn (called with a Status object) to our callback.
 

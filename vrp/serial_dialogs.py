@@ -19,6 +19,44 @@ import threading
 import wx
 
 
+def show_radio_prompts(parent, prompts: dict, *, pre_title: str = "Instructions") -> bool:
+    """Show a driver's clone prompts as native dialogs, in order, BEFORE the
+    serial port is opened. Returns True to proceed, False if the user backs out.
+
+    Native ``wx.MessageBox`` dialogs are modal and screen-reader accessible for
+    free (NVDA/VoiceOver announce the title, message text, and buttons; Escape
+    maps to the negative button; focus returns to ``parent`` on close). Order:
+      1. ``experimental`` — Yes/No, default **No**: the user must explicitly
+         accept the risk of an experimental driver to continue.
+      2. ``info`` — OK/Cancel.
+      3. ``pre`` — OK/Cancel; often literal required steps on the radio itself
+         (e.g. "set the radio to clone mode, then click OK").
+    A prompt whose text is empty/None is skipped; with no prompts set this is a
+    no-op that returns True immediately.
+    """
+    experimental = prompts.get("experimental")
+    if experimental:
+        msg = (
+            f"{experimental}\n\n"
+            "This is an experimental driver. Do you accept the risk and want "
+            "to continue?"
+        )
+        if wx.MessageBox(
+            msg, "Experimental driver",
+            wx.YES_NO | wx.NO_DEFAULT | wx.ICON_WARNING, parent,
+        ) != wx.YES:
+            return False
+
+    for key, title in (("info", "Radio information"), ("pre", pre_title)):
+        text = prompts.get(key)
+        if text:
+            if wx.MessageBox(
+                text, title, wx.OK | wx.CANCEL | wx.ICON_INFORMATION, parent,
+            ) != wx.OK:
+                return False
+    return True
+
+
 class PortPicker(wx.Panel):
     """Serial-port chooser with Refresh and an explicit no-ports state."""
 
