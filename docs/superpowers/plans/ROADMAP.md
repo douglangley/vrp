@@ -15,9 +15,10 @@ Status marks: ☐ not started · ◐ in progress · ☑ done.
   **verified on real hardware** (Baofeng UV-5R Mini over COM4, 2026-06-23) and
   the serial backend was hardened against CHIRP's reference clone code
   (flow-control setup, submodel detection, driver prompts, gettext `_` shim,
-  clone-mode guard, byte-level trace). **Still owed: a real-hardware Upload
-  test** — the write path uses the same pipe/prompt machinery but `sync_out`
-  is untested on hardware. Detailed plan + findings:
+  clone-mode guard, byte-level trace). Now in broader testing — handed to a
+  second tester (different machine, COM10). **Still owed:** a real-hardware
+  **upload** test (`sync_out` untested on hardware), a no-`--debug` download
+  confirmation, and models beyond the UV-5R Mini. Detailed plan + findings:
   [2026-06-23-serial-hardware-verification.md](2026-06-23-serial-hardware-verification.md).
 
 ## Other open work

@@ -114,12 +114,17 @@ sync (8 driver families — CHIRP's GUI *always* wraps the port in its
 `_open_radio_serial` now *always* returns a `TracingSerial`; a new
 `trace_enabled` flag gates only whether the trace *file* is written (still
 `--debug`-only) — `.log()`/write/read are always present and no-op when
-tracing is off. Regression tests added (105 passing). The `--debug` download
-stays verified; the no-`--debug` path needs a quick hardware re-confirm.
+tracing is off. Regression tests added (105 passing). Re-ran a `--debug`
+download after the fix: still a clean UV-5R Mini dump. Pushed to `main`
+(`eb9c602`) and handed to a second tester (different machine, COM10) for
+broader confirmation — specifically the no-`--debug` path (the `--debug` trace
+can't exercise it, since `--debug` used `TracingSerial` even before the fix)
+and a port other than COM4.
 
-**Still owed:** real-hardware **upload** test (write path; same pipe/prompt
-machinery, untested `sync_out`) — flagged for whoever tests next. NVDA pass on
-the prompt dialogs is desirable but they're native message boxes.
+**Still owed:** (1) real-hardware **upload** test (write path; same pipe/prompt
+machinery, untested `sync_out`); (2) a no-`--debug` download confirmation
+(expected from the COM10 tester); (3) models beyond the UV-5R Mini. NVDA pass
+on the prompt dialogs is desirable but they're native message boxes.
 
 ## 2026-06-21 — Platform-aware UI default + grid 0.4.0 (VoiceOver cell names, Edit menu)
 
