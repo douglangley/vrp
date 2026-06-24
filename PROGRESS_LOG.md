@@ -6,6 +6,19 @@ architecture, keyboard map, and CHIRP feature-coverage checklist.
 
 ---
 
+## 2026-06-24 — Fix: Download dialog model search broke on punctuation
+
+The Download-from-Radio model filter did a raw case-folded substring match
+against the driver label, so typing `uv5r` matched **nothing** and `UV5`
+matched only 2 unrelated models (`Baojie BJ-UV55`, `Ruyage UV58Plus`) — because
+the real labels carry a hyphen (`Baofeng UV-5R`). New `filter_models()` in
+`vrp/serial_dialogs.py` normalizes both the query and each label (lowercase +
+strip non-alphanumerics) and treats whitespace as multiple required terms, so
+`uv5r` now matches `Baofeng UV-5R` / `UV-5R Mini` / `UV-5RH` / … and
+`baofeng 5r` matches any Baofeng whose model contains `5r`. Extracted as a pure
+function and unit-tested, including a regression against the real CHIRP labels.
+114 passing.
+
 ## 2026-06-24 — Remove build.bat (run-from-source only) + rename config dir to VRP
 
 **Removed `build.bat`.** A tester ran the old double-click `build.bat` (which
