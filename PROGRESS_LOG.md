@@ -6,6 +6,64 @@ architecture, keyboard map, and CHIRP feature-coverage checklist.
 
 ---
 
+## 2026-06-23 — Serial clone hardening + real-hardware download VERIFIED
+
+Phase 4's download/upload had never run against a real radio (no hardware in
+prior sessions). With a radio now available, reviewed the serial backend
+against CHIRP's own clone code (`chirp/wxui/clone.py`, `chirp_common.py`),
+fixed the gaps, and verified a real download. Work tracked in
+`docs/superpowers/plans/2026-06-23-serial-hardware-verification.md`; master
+list in `docs/superpowers/plans/ROADMAP.md` (new).
+
+**What was wrong / fixed (`chirp_backend/radio.py` unless noted):**
+- **Serial port setup ignored the driver's flow-control prefs.** The old
+  `serial.Serial(port, baud, timeout=1)` auto-opened immediately with RTS/DTR
+  at pyserial defaults. New `_open_radio_serial()` mirrors CHIRP's
+  `open_serial`: construct closed, set baud/`timeout=0.25`/`rtscts`=
+  HARDWARE_FLOW/`rts`=WANTS_RTS/`dtr`=WANTS_DTR, then assign port and open.
+- **No submodel auto-detection.** `_detect_radio_class()` now calls
+  `detect_from_serial()` before `sync_in()` (download): a returned class
+  replaces the user's pick, `NotImplementedError` keeps it, `RadioError`
+  propagates as a real failure.
+- **Driver prompts were never shown.** Many drivers carry required manual
+  steps (experimental risk, info, pre-download/upload instructions) via
+  `get_prompts()`. Backend `get_clone_prompts*()` flatten them;
+  `serial_dialogs.show_radio_prompts()` shows them as native, screen-reader-
+  accessible `wx.MessageBox` dialogs before the port opens. Wired into
+  `on_download`/`on_upload` (native UI). Upload order (user decision): driver
+  prompts first, then VRP's "overwrite ALL channels" confirm.
+- **`NameError: name '_' is not defined`** — driver `get_prompts()`/clone
+  code calls the gettext builtin `_()`; CHIRP's CLI/GUI install it but VRP
+  never did, so `get_clone_prompts()` crashed for real drivers (would have
+  broken Download before it started). `_ensure_chirp()` now installs an
+  identity `_` builtin (guarded), same shim chirpc uses.
+- **Non-clone (live) radios** in the picker now fail with a clear message
+  before opening the port (`issubclass(..., CloneModeRadio)` guard), instead
+  of a cryptic mid-clone `AttributeError`. (Live-radio support still oos.)
+- **Byte-level serial trace** for debugging: `chirp_backend/serial_trace.py`
+  `TracingSerial` (ported from CHIRP's `serialtrace`, NOT imported from
+  `chirp.wxui`) hex-dumps every byte in/out to `serial-trace.txt` in the CWD
+  when `--debug` is set. Gitignored.
+
+**Reviewed and confirmed NOT gaps:** `NEEDS_COMPAT_SERIAL` only affects the
+in-memory map representation in `load_mmap`, not the pipe; drivers call
+`radio.status_fn(status)` for both directions, so our `status_fn` hook drives
+upload progress too (CHIRP's upload dialog sets a differently-named
+`_status_fn` — a latent no-op there that doesn't affect us).
+
+**Verified (real hardware):** Baofeng UV-5R Mini
+(`chirp.drivers.baofeng_uv17Pro.UV5RMini`, 115200 baud) downloaded over COM4.
+The serial trace shows a clean handshake (PROGRAMCOLORPRO → ACK → ident block
+reading "5RMINI" → SEND! → ACK), a full sequential memory dump 0x0000–0xa180
+(~41 KB) with no mid-stream timeouts, and a clean close — `sync_in()` returned
+normally and the grid populated. Tests: 103 passing (mocked-serial unit tests
+for port setup, detection branches, prompt flow incl. a real-driver
+`get_prompts()` regression, and the trace).
+
+**Still owed:** real-hardware **upload** test (write path; same pipe/prompt
+machinery, untested `sync_out`) — flagged for whoever tests next. NVDA pass on
+the prompt dialogs is desirable but they're native message boxes.
+
 ## 2026-06-21 — Platform-aware UI default + grid 0.4.0 (VoiceOver cell names, Edit menu)
 
 **Regression + root cause.** A morning merge ("Merge native UI to main and make

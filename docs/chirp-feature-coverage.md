@@ -52,8 +52,8 @@ update (`git pull` ./chirp) in case new dialogs appear.
 
 | Feature                          | VRP phase | Status |
 |----------------------------------|-----------|--------|
-| Download from Radio              | 4         | ☑ (HW test owed) |
-| Upload to Radio                  | 4         | ☑ (HW test owed) |
+| Download from Radio              | 4         | ☑ (verified on real hardware — Baofeng UV-5R Mini, COM4, 2026-06-23) |
+| Upload to Radio                  | 4         | ☑ (code complete + hardened; real-hardware upload not yet run) |
 | Query framework + import         | 7         | ☑ (HW/network test owed) |
 | Query: AMSAT                     | 7         | ☑      |
 | Query: SatNOGS                   | 7         | ☑      |

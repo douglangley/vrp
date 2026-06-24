@@ -11,12 +11,13 @@ Status marks: ☐ not started · ◐ in progress · ☑ done.
 
 ## Current priority
 
-- ◐ **Serial port hardware verification.** The Download from Radio / Upload
-  to Radio commands (Phase 4) have never been run against real hardware in
-  any dev session (no hardware available) — this is the most complex
-  remaining unverified subsystem in the app. The user has a confirmed-working
-  serial connection on COM4 (verified working with RT Systems software), so
-  this is now unblocked. Detailed plan:
+- ◐ **Serial port hardware verification.** Download from Radio is now
+  **verified on real hardware** (Baofeng UV-5R Mini over COM4, 2026-06-23) and
+  the serial backend was hardened against CHIRP's reference clone code
+  (flow-control setup, submodel detection, driver prompts, gettext `_` shim,
+  clone-mode guard, byte-level trace). **Still owed: a real-hardware Upload
+  test** — the write path uses the same pipe/prompt machinery but `sync_out`
+  is untested on hardware. Detailed plan + findings:
   [2026-06-23-serial-hardware-verification.md](2026-06-23-serial-hardware-verification.md).
 
 ## Other open work
