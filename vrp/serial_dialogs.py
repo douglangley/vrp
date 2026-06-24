@@ -5,7 +5,10 @@ Per the accessibility-lead's Phase 4 model:
   "Anytone AT-D878, 1 of 4" against the filtered count, far better than
   "5 of 552"). Never a 552-item combo.
 - Port picker = a wx.Choice of full "COMx - description" labels, with a Refresh
-  button and an explicit zero-ports state (disabled choice + guidance text).
+  button and an explicit zero-ports state (disabled choice + guidance text). The
+  dialog opens focused on the port, with the last-used port (persisted in
+  config) preselected so a repeat clone is Enter-away; tab order then flows to
+  the model filter, the list, and the Download/Upload button.
 - Progress = a modeless dialog with a gauge + status text; the spoken progress
   comes from the host live region (NVDA doesn't reliably speak wx.Gauge), so the
   app throttles and announces via view.status. Download may be cancelled (the
@@ -18,6 +21,8 @@ import re
 import threading
 
 import wx
+
+from vrp.config import get_config
 
 
 def _normalize_for_search(text: str) -> str:
@@ -82,13 +87,25 @@ def show_radio_prompts(parent, prompts: dict, *, pre_title: str = "Instructions"
     return True
 
 
+def _select_index(devices: list[str], *, current=None, preferred=None) -> int:
+    """Which port index to select: keep the current one if it's still present
+    (e.g. after a manual Refresh), else the preferred (last-used) port, else 0."""
+    if current and current in devices:
+        return devices.index(current)
+    if preferred and preferred in devices:
+        return devices.index(preferred)
+    return 0
+
+
 class PortPicker(wx.Panel):
     """Serial-port chooser with Refresh and an explicit no-ports state."""
 
-    def __init__(self, parent, list_ports_fn, on_change=None) -> None:
+    def __init__(self, parent, list_ports_fn, on_change=None,
+                 preferred_port=None) -> None:
         super().__init__(parent)
         self._list_ports_fn = list_ports_fn
         self._on_change = on_change
+        self._preferred = preferred_port
         self._devices: list[str] = []
 
         row = wx.BoxSizer(wx.HORIZONTAL)
@@ -112,6 +129,7 @@ class PortPicker(wx.Panel):
         self.refresh()
 
     def refresh(self) -> None:
+        prev = self.get_port()  # preserve the user's pick across a manual Refresh
         ports = self._list_ports_fn() or []
         self._devices = [p["port"] for p in ports]
         self.choice.Clear()
@@ -120,7 +138,9 @@ class PortPicker(wx.Panel):
                 label = f"{p['port']} - {p.get('description', '')}".strip(" -")
                 self.choice.Append(label)
             self.choice.Enable(True)
-            self.choice.SetSelection(0)
+            self.choice.SetSelection(
+                _select_index(self._devices, current=prev, preferred=self._preferred)
+            )
             self.status.SetLabel(f"{len(ports)} serial port(s) found.")
         else:
             self.choice.Append("No serial ports detected")
@@ -131,6 +151,13 @@ class PortPicker(wx.Panel):
                 "cable, then choose Refresh."
             )
         self._changed()
+
+    def focus(self) -> None:
+        """Put keyboard focus on the port chooser (or Refresh if no ports)."""
+        if self.has_ports():
+            self.choice.SetFocus()
+        else:
+            self.refresh_btn.SetFocus()
 
     def has_ports(self) -> bool:
         return bool(self._devices)
@@ -155,7 +182,10 @@ class DownloadDialog(wx.Dialog):
         self._filtered = list(models)
 
         outer = wx.BoxSizer(wx.VERTICAL)
-        self.port = PortPicker(self, list_ports_fn, on_change=self._update_ok)
+        self.port = PortPicker(
+            self, list_ports_fn, on_change=self._update_ok,
+            preferred_port=get_config().get_last_serial_port(),
+        )
         outer.Add(self.port, 0, wx.EXPAND | wx.ALL, 10)
 
         box = wx.StaticBoxSizer(wx.VERTICAL, self, "Radio model")
@@ -184,7 +214,9 @@ class DownloadDialog(wx.Dialog):
         self.filter.Bind(wx.EVT_KEY_DOWN, self._on_filter_key)
         self.list.Bind(wx.EVT_LISTBOX, lambda _e: self._update_ok())
         self.Bind(wx.EVT_BUTTON, self._on_ok, id=wx.ID_OK)
-        self.filter.SetFocus()
+        # Land on the serial port first (tab order then flows port -> filter ->
+        # list -> Download, matching control creation order).
+        self.port.focus()
         self._update_ok()
 
     def _on_filter(self, _event) -> None:
@@ -225,6 +257,7 @@ class DownloadDialog(wx.Dialog):
             wx.MessageBox("Choose a radio model.", "Download", wx.OK | wx.ICON_ERROR, self)
             self.list.SetFocus()
             return
+        get_config().set_last_serial_port(self.port.get_port())
         event.Skip()
 
 
@@ -234,7 +267,10 @@ class UploadDialog(wx.Dialog):
     def __init__(self, parent, list_ports_fn) -> None:
         super().__init__(parent, title="Upload to radio")
         outer = wx.BoxSizer(wx.VERTICAL)
-        self.port = PortPicker(self, list_ports_fn, on_change=self._update_ok)
+        self.port = PortPicker(
+            self, list_ports_fn, on_change=self._update_ok,
+            preferred_port=get_config().get_last_serial_port(),
+        )
         outer.Add(self.port, 0, wx.EXPAND | wx.ALL, 10)
         buttons = self.CreateStdDialogButtonSizer(wx.OK | wx.CANCEL)
         self._ok = self.FindWindowById(wx.ID_OK)
@@ -243,6 +279,7 @@ class UploadDialog(wx.Dialog):
         outer.Add(buttons, 0, wx.EXPAND | wx.ALL, 8)
         self.SetSizerAndFit(outer)
         self.Bind(wx.EVT_BUTTON, self._on_ok, id=wx.ID_OK)
+        self.port.focus()  # land on the serial port
         self._update_ok()
 
     def get_port(self):
@@ -257,6 +294,7 @@ class UploadDialog(wx.Dialog):
         if not self.port.has_ports():
             wx.MessageBox("No serial port selected.", "Upload", wx.OK | wx.ICON_ERROR, self)
             return
+        get_config().set_last_serial_port(self.port.get_port())
         event.Skip()
 
 
