@@ -193,12 +193,16 @@ class DownloadDialog(wx.Dialog):
         self.filter = wx.TextCtrl(self)
         self.filter.SetName("Model filter")
         box.Add(self.filter, 0, wx.EXPAND | wx.ALL, 4)
+        # A real preceding StaticText is what NVDA/VoiceOver read as the list's
+        # name; SetName() alone is ignored by screen readers (and the nearest
+        # other label, "Filter:", would otherwise misname the list).
+        box.Add(wx.StaticText(self, label="Radio model:"), 0, wx.LEFT | wx.TOP, 4)
         self.list = wx.ListBox(self, choices=[m["label"] for m in self._models])
         self.list.SetName("Radio model")
         if self._models:
             self.list.SetSelection(0)
         box.Add(self.list, 1, wx.EXPAND | wx.ALL, 4)
-        self.count = wx.StaticText(self, label=f"{len(self._models)} models")
+        self.count = wx.StaticText(self, label=self._count_label(len(self._models)))
         self.count.SetName("Model count")
         box.Add(self.count, 0, wx.ALL, 4)
         outer.Add(box, 1, wx.EXPAND | wx.LEFT | wx.RIGHT, 10)
@@ -215,22 +219,42 @@ class DownloadDialog(wx.Dialog):
         self.list.Bind(wx.EVT_LISTBOX, lambda _e: self._update_ok())
         self.Bind(wx.EVT_BUTTON, self._on_ok, id=wx.ID_OK)
         # Land on the serial port first (tab order then flows port -> filter ->
-        # list -> Download, matching control creation order).
-        self.port.focus()
+        # list -> Download, matching control creation order). Done from
+        # EVT_INIT_DIALOG via CallAfter so it runs AFTER wx's own default focus
+        # placement (which would otherwise clobber it, esp. on macOS).
+        self.Bind(wx.EVT_INIT_DIALOG, self._on_init_dialog)
         self._update_ok()
+
+    @staticmethod
+    def _count_label(n: int) -> str:
+        return "1 model matches" if n == 1 else f"{n} models match"
+
+    def _on_init_dialog(self, event) -> None:
+        event.Skip()  # let wx's default init (data transfer, focus) run first
+        wx.CallAfter(self.port.focus)
 
     def _on_filter(self, _event) -> None:
         self._filtered = filter_models(self._models, self.filter.GetValue())
-        self.list.Set([m["label"] for m in self._filtered])
-        if self._filtered:
-            self.list.SetSelection(0)
-        self.count.SetLabel(f"{len(self._filtered)} models match")
+        # Freeze/Thaw around the full rebuild: at ~552 items this suppresses
+        # flicker and the burst of accessibility events NVDA would otherwise
+        # try to announce on every keystroke.
+        self.list.Freeze()
+        try:
+            self.list.Set([m["label"] for m in self._filtered])
+            if self._filtered:
+                self.list.SetSelection(0)
+        finally:
+            self.list.Thaw()
+        self.count.SetLabel(self._count_label(len(self._filtered)))
         self._update_ok()
 
     def _on_filter_key(self, event) -> None:
         # Down-arrow from the filter drops into the list without clearing it.
         if event.GetKeyCode() == wx.WXK_DOWN and self._filtered:
             self.list.SetFocus()
+            if self.list.GetSelection() == wx.NOT_FOUND:
+                self.list.SetSelection(0)  # so the screen reader announces a row
+            # consume Down: focus moved into the list intentionally
         else:
             event.Skip()
 
@@ -279,8 +303,14 @@ class UploadDialog(wx.Dialog):
         outer.Add(buttons, 0, wx.EXPAND | wx.ALL, 8)
         self.SetSizerAndFit(outer)
         self.Bind(wx.EVT_BUTTON, self._on_ok, id=wx.ID_OK)
-        self.port.focus()  # land on the serial port
+        # Land on the serial port, from EVT_INIT_DIALOG so it runs after wx's
+        # own default focus placement (see DownloadDialog._on_init_dialog).
+        self.Bind(wx.EVT_INIT_DIALOG, self._on_init_dialog)
         self._update_ok()
+
+    def _on_init_dialog(self, event) -> None:
+        event.Skip()
+        wx.CallAfter(self.port.focus)
 
     def get_port(self):
         return self.port.get_port()
@@ -304,18 +334,33 @@ class CloneProgressDialog(wx.Dialog):
     def __init__(self, parent, title: str, allow_cancel: bool = True) -> None:
         super().__init__(parent, title=title)
         self._cancelled = threading.Event()
+        self._allow_cancel = allow_cancel
 
         outer = wx.BoxSizer(wx.VERTICAL)
         self.text = wx.StaticText(self, label="Starting…")
-        self.text.SetName("Progress")
+        self.text.SetName("Status")
         outer.Add(self.text, 0, wx.ALL, 12)
         self.gauge = wx.Gauge(self, range=100, size=(300, -1))
+        self.gauge.SetName("Progress")
         outer.Add(self.gauge, 0, wx.EXPAND | wx.LEFT | wx.RIGHT, 12)
         if allow_cancel:
             cancel = wx.Button(self, wx.ID_CANCEL, "Cancel")
             outer.Add(cancel, 0, wx.ALIGN_RIGHT | wx.ALL, 8)
             cancel.Bind(wx.EVT_BUTTON, self._on_cancel)
         self.SetSizerAndFit(outer)
+        # The dialog is modeless and the worker thread holds a reference to it
+        # (it marshals progress back via wx.CallAfter). A user pressing the
+        # title-bar X / Alt+F4 would otherwise Destroy it out from under the
+        # worker -> "wrapped C/C++ object deleted" crash. Intercept the close:
+        # treat it as Cancel when cancellable, and never self-destroy here —
+        # destruction stays the UI thread's job once the clone finishes.
+        self.Bind(wx.EVT_CLOSE, self._on_close)
+
+    def _on_close(self, event) -> None:
+        if self._allow_cancel and not self._cancelled.is_set():
+            self._cancelled.set()
+            self.text.SetLabel("Cancelling…")
+        event.Veto()
 
     def update(self, cur: int, total: int, msg: str) -> None:
         if total:
