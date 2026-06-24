@@ -104,6 +104,19 @@ normally and the grid populated. Tests: 103 passing (mocked-serial unit tests
 for port setup, detection branches, prompt flow incl. a real-driver
 `get_prompts()` regression, and the trace).
 
+**Follow-up (same day) — `pipe.log` AttributeError on non-`--debug` runs.**
+The verified download above was a `--debug` run, which used `TracingSerial`. A
+plain `run-win.bat` (no `--debug`) then crashed: `'Serial' object has no
+attribute 'log'`. Root cause: CHIRP drivers call `radio.pipe.log(...)` during
+sync (8 driver families — CHIRP's GUI *always* wraps the port in its
+`SerialTrace`), so the pipe must always expose `.log()`. Our code only used
+`TracingSerial` under `--debug` and a plain `serial.Serial` otherwise. Fix:
+`_open_radio_serial` now *always* returns a `TracingSerial`; a new
+`trace_enabled` flag gates only whether the trace *file* is written (still
+`--debug`-only) — `.log()`/write/read are always present and no-op when
+tracing is off. Regression tests added (105 passing). The `--debug` download
+stays verified; the no-`--debug` path needs a quick hardware re-confirm.
+
 **Still owed:** real-hardware **upload** test (write path; same pipe/prompt
 machinery, untested `sync_out`) — flagged for whoever tests next. NVDA pass on
 the prompt dialogs is desirable but they're native message boxes.

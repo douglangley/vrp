@@ -63,16 +63,32 @@ def get_trace_entry(direction: str, start_ts: float, data: bytes) -> list[str]:
 
 
 class TracingSerial(serial.Serial):
-    """A ``serial.Serial`` that hex-dumps all traffic to a trace file."""
+    """A ``serial.Serial`` that hex-dumps all traffic to a trace file.
 
-    def __init__(self, *args, trace_path: str | None = None, **kwargs) -> None:
+    Always use this in place of ``serial.Serial`` for radio clones — CHIRP
+    drivers call ``radio.pipe.log(...)`` directly during sync (8 driver
+    families do), because CHIRP's own GUI always wraps the port in its
+    ``SerialTrace``; a plain ``serial.Serial`` has no ``.log()`` and the clone
+    crashes with ``AttributeError``. The ``.log()``/write/read trace methods
+    are always present here, but only actually write to a file when
+    ``trace_enabled`` is set (i.e. under ``--debug``); otherwise they are
+    no-ops and this behaves like a plain ``serial.Serial``.
+    """
+
+    def __init__(
+        self, *args, trace_path: str | None = None,
+        trace_enabled: bool = True, **kwargs,
+    ) -> None:
         self._tracef = None
         self._trace_start = 0.0
         self._trace_path = trace_path or default_trace_path()
+        self._trace_enabled = trace_enabled
         super().__init__(*args, **kwargs)
 
     def open(self) -> None:
         super().open()
+        if not self._trace_enabled:
+            return  # methods stay present, but no trace file is written
         try:
             os.makedirs(os.path.dirname(self._trace_path), exist_ok=True)
             self._trace_start = time.monotonic()

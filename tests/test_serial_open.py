@@ -32,7 +32,7 @@ class _FakeRadio:
 
 
 def test_open_radio_serial_applies_driver_settings(monkeypatch):
-    monkeypatch.setattr("serial.Serial", _RecordingSerial)
+    monkeypatch.setattr("chirp_backend.serial_trace.TracingSerial", _RecordingSerial)
 
     pipe = radio_backend._open_radio_serial("COM4", _FakeRadio)
 
@@ -46,7 +46,7 @@ def test_open_radio_serial_applies_driver_settings(monkeypatch):
 
 
 def test_open_radio_serial_sets_port_and_opens_last(monkeypatch):
-    monkeypatch.setattr("serial.Serial", _RecordingSerial)
+    monkeypatch.setattr("chirp_backend.serial_trace.TracingSerial", _RecordingSerial)
 
     pipe = radio_backend._open_radio_serial("COM4", _FakeRadio)
 
@@ -59,21 +59,23 @@ def test_open_radio_serial_sets_port_and_opens_last(monkeypatch):
     assert names[-1] == "open"
 
 
-def test_open_radio_serial_uses_tracing_serial_when_tracing(monkeypatch):
-    used = {}
+def test_open_radio_serial_always_uses_tracing_serial(monkeypatch):
+    # Even without --debug we must use TracingSerial (it carries the .log()
+    # method CHIRP drivers call during sync); only the trace FILE is gated.
+    captured = {}
 
     class _TraceRecorder(_RecordingSerial):
         def __init__(self, *a, **k):
-            used["constructed"] = True
+            captured["trace_enabled"] = k.get("trace_enabled")
             super().__init__(*a, **k)
 
     monkeypatch.setattr(
         "chirp_backend.serial_trace.TracingSerial", _TraceRecorder
     )
-    # Make sure the plain path is NOT used when trace=True.
-    monkeypatch.setattr("serial.Serial", _RecordingSerial)
 
-    pipe = radio_backend._open_radio_serial("COM4", _FakeRadio, trace=True)
-
-    assert used.get("constructed") is True
+    pipe = radio_backend._open_radio_serial("COM4", _FakeRadio, trace=False)
     assert isinstance(pipe, _TraceRecorder)
+    assert captured["trace_enabled"] is False  # methods present, file off
+
+    radio_backend._open_radio_serial("COM4", _FakeRadio, trace=True)
+    assert captured["trace_enabled"] is True
