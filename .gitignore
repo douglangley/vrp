@@ -42,3 +42,6 @@ Thumbs.db
 
 # Dev run logs (grid preview, smoke output)
 logs/
+
+# Debug serial trace (written to CWD by main.py --debug during a clone)
+serial-trace.txt

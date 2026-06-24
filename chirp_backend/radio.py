@@ -30,6 +30,17 @@ def _ensure_chirp() -> None:
     if _chirp_loaded:
         return
     try:
+        # CHIRP driver code calls the gettext builtin _() directly (e.g. the
+        # RadioPrompts strings in get_prompts(), and clone-progress/error
+        # messages). CHIRP's own CLI and GUI install _ before using drivers;
+        # running CHIRP headless from VRP we must too, or those calls raise
+        # NameError: name '_' is not defined. Identity = no translation, the
+        # same shim chirpc uses. Guarded so a real translation install (if VRP
+        # adds one later) is never clobbered.
+        import builtins
+        if not hasattr(builtins, "_"):
+            builtins._ = lambda s: s  # type: ignore[attr-defined]
+
         from chirp import directory
         directory.import_drivers()
         _chirp_loaded = True
@@ -396,6 +407,49 @@ def list_radio_models() -> list[dict]:
     return result
 
 
+def _prompts_dict(radio_class_or_instance, *, upload: bool) -> dict:
+    """Flatten a driver's RadioPrompts into a UI-friendly dict.
+
+    ``pre`` already resolves to pre_upload/pre_download for the given direction
+    so the UI layer never needs to know which attribute maps to which way. Both
+    a driver class and a radio instance expose get_prompts() (it's a
+    classmethod), so either may be passed.
+    """
+    prompts = radio_class_or_instance.get_prompts()
+    return {
+        "experimental": getattr(prompts, "experimental", None),
+        "info": getattr(prompts, "info", None),
+        "pre": getattr(
+            prompts, "pre_upload" if upload else "pre_download", None
+        ),
+    }
+
+
+def get_clone_prompts(driver_id: str) -> dict:
+    """Download-direction clone prompts for a driver id (see _prompts_dict).
+
+    Returns all-None on an unknown id rather than raising — a missing prompt
+    must never block a download the user already initiated.
+    """
+    _ensure_chirp()
+    from chirp import directory
+
+    try:
+        radio_class = directory.get_radio(driver_id)
+    except Exception:  # noqa: BLE001
+        return {"experimental": None, "info": None, "pre": None}
+    return _prompts_dict(radio_class, upload=False)
+
+
+def get_clone_prompts_for_loaded_radio() -> dict:
+    """Upload-direction clone prompts for the currently loaded radio."""
+    with _state_lock:
+        if not _state.loaded:
+            return {"experimental": None, "info": None, "pre": None}
+        radio = _state.radio
+    return _prompts_dict(radio, upload=True)
+
+
 def _make_status_fn(progress_callback: Callable[[int, int, str], None]):
     """Adapt CHIRP's status_fn (called with a Status object) to our callback.
 
@@ -412,6 +466,69 @@ def _make_status_fn(progress_callback: Callable[[int, int, str], None]):
     return status_fn
 
 
+def _open_radio_serial(port: str, radio_class, *, trace: bool = False):
+    """Open the serial port for a clone, configured for the driver class.
+
+    Mirrors the real-port branch of CHIRP's own ``chirp.wxui.clone.open_serial``
+    (VRP never uses ``serial_for_url`` strings or the fake-serial dev backends):
+    construct the port object CLOSED, set baud/timeout and the driver's
+    RTS/DTR/flow-control preferences as properties, THEN assign ``port`` and
+    open. Passing ``port=`` to the constructor would auto-open immediately,
+    before those properties are applied — which is the bug this fixes (the old
+    bare ``serial.Serial(port, baud, timeout=1)`` left RTS/DTR at pyserial's
+    defaults and ignored the driver's HARDWARE_FLOW/WANTS_RTS/WANTS_DTR).
+
+    ``radio_class`` may be a driver class or an instance — BAUD_RATE,
+    HARDWARE_FLOW, WANTS_RTS and WANTS_DTR are class-level constants readable
+    from either. ``trace`` swaps in TracingSerial (byte-level trace file) for
+    debugging; see chirp_backend.serial_trace.
+    """
+    import serial
+    from chirp_backend.serial_trace import TracingSerial
+
+    cls = TracingSerial if trace else serial.Serial
+    pipe = cls()
+    pipe.baudrate = radio_class.BAUD_RATE
+    pipe.timeout = 0.25
+    pipe.rtscts = radio_class.HARDWARE_FLOW
+    pipe.rts = radio_class.WANTS_RTS
+    pipe.dtr = radio_class.WANTS_DTR
+    pipe.port = port
+    pipe.open()
+    LOG.debug(
+        "Serial opened: %s (baud=%s rts=%s dtr=%s rtscts=%s)",
+        port, pipe.baudrate, pipe.rts, pipe.dtr, pipe.rtscts,
+    )
+    return pipe
+
+
+def _detect_radio_class(radio_class, pipe):
+    """Return the radio class to actually use, honoring live submodel detection.
+
+    Some driver families talk to the connected radio to pin down the exact
+    submodel; CHIRP's own download dialog calls this and uses the detected
+    class instead of the user's pick. Mirrors that:
+      - returns a (possibly different) class -> use it;
+      - raises NotImplementedError -> no detection available/needed (the common
+        case), keep the user's pick;
+      - raises errors.RadioError -> detection ran and explicitly failed; let it
+        propagate so the caller reports the failure and closes the port (don't
+        silently fall back to the user's pick on a real detection failure).
+    """
+    try:
+        detected = radio_class.detect_from_serial(pipe)
+    except NotImplementedError:
+        return radio_class
+    if detected is not None and detected is not radio_class:
+        LOG.info(
+            "Detected %s.%s from serial (user picked %s.%s)",
+            detected.__module__, detected.__name__,
+            radio_class.__module__, radio_class.__name__,
+        )
+        return detected
+    return radio_class
+
+
 def download_from_radio(
     port: str,
     driver_id: str,
@@ -424,8 +541,7 @@ def download_from_radio(
     call from a background thread. Returns (success, message).
     """
     _ensure_chirp()
-    from chirp import directory
-    import serial
+    from chirp import chirp_common, directory
 
     try:
         radio_class = directory.get_radio(driver_id)
@@ -433,10 +549,28 @@ def download_from_radio(
         return False, f"Unknown radio: {driver_id}"
 
     label = f"{radio_class.VENDOR} {radio_class.MODEL}"
+
+    # The model picker lists every CHIRP driver, including "live" radios that
+    # talk over an always-on connection instead of doing a one-shot memory
+    # clone (they have no sync_in). Guard before opening the port so the user
+    # gets a clear message instead of a cryptic mid-clone AttributeError.
+    # (Live-radio support itself is out of scope — see the serial plan.)
+    if not issubclass(radio_class, chirp_common.CloneModeRadio):
+        return False, (
+            f"{label} uses a live connection, not a memory clone, so VRP "
+            f"can't download from it yet."
+        )
+
     pipe = None
     try:
         progress_callback(0, 100, f"Connecting to {label} on {port}...")
-        pipe = serial.Serial(port, radio_class.BAUD_RATE, timeout=1)
+        pipe = _open_radio_serial(
+            port, radio_class, trace=LOG.isEnabledFor(logging.DEBUG)
+        )
+        # Honor a driver's live submodel detection before reading (a RadioError
+        # here propagates to the handler below, which closes the pipe).
+        radio_class = _detect_radio_class(radio_class, pipe)
+        label = f"{radio_class.VENDOR} {radio_class.MODEL}"
         radio = radio_class(pipe)
         radio.status_fn = _make_status_fn(progress_callback)
         radio.sync_in()
@@ -474,12 +608,12 @@ def upload_to_radio(
             return False, "No radio loaded"
         radio = _state.radio
 
-    import serial
-
     pipe = None
     try:
         progress_callback(0, 100, f"Connecting to radio on {port}...")
-        pipe = serial.Serial(port, radio.BAUD_RATE, timeout=1)
+        pipe = _open_radio_serial(
+            port, radio, trace=LOG.isEnabledFor(logging.DEBUG)
+        )
         radio.set_pipe(pipe)
         radio.status_fn = _make_status_fn(progress_callback)
         radio.sync_out()
