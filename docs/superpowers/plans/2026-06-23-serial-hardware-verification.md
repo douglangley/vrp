@@ -3,7 +3,9 @@
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Status:** ◐ in progress — started 2026-06-23. Tracked from
-[ROADMAP.md](ROADMAP.md).
+[ROADMAP.md](ROADMAP.md). **Done:** Task 1 (serial trace), Task 2 (port
+setup — RTS/DTR/flow control + timeout). **Next:** Task 3
+(`detect_from_serial`).
 
 **Goal:** Get VRP's Radio ▸ Download from Radio / Upload to Radio commands
 working end-to-end against a real radio on a real serial port, using CHIRP's
@@ -161,9 +163,14 @@ the agent needing console/hardware access.
 - [ ] Document the trace-file path + that it's debug-only in README.
 - [ ] Commit.
 
-## Task 2: Fix serial port setup (RTS/DTR/flow control + timeout)
+## Task 2: Fix serial port setup (RTS/DTR/flow control + timeout) ✅ DONE
 
 **Files:** Modify `chirp_backend/radio.py`. New test in `tests/`.
+
+> Implemented: `_open_radio_serial(port, radio_class, *, trace=False)` in
+> `chirp_backend/radio.py`, used by both `download_from_radio` and
+> `upload_to_radio`; `trace` is gated on `LOG.isEnabledFor(logging.DEBUG)`
+> (i.e. `--debug`). Tests in `tests/test_serial_open.py`.
 
 - [ ] Add `_open_radio_serial(port: str, radio_class, *, trace: bool = False) -> serial.Serial`:
   mirrors the **non-URL** branch of `open_serial()` in
