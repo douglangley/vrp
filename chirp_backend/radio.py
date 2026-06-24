@@ -448,6 +448,33 @@ def _open_radio_serial(port: str, radio_class, *, trace: bool = False):
     return pipe
 
 
+def _detect_radio_class(radio_class, pipe):
+    """Return the radio class to actually use, honoring live submodel detection.
+
+    Some driver families talk to the connected radio to pin down the exact
+    submodel; CHIRP's own download dialog calls this and uses the detected
+    class instead of the user's pick. Mirrors that:
+      - returns a (possibly different) class -> use it;
+      - raises NotImplementedError -> no detection available/needed (the common
+        case), keep the user's pick;
+      - raises errors.RadioError -> detection ran and explicitly failed; let it
+        propagate so the caller reports the failure and closes the port (don't
+        silently fall back to the user's pick on a real detection failure).
+    """
+    try:
+        detected = radio_class.detect_from_serial(pipe)
+    except NotImplementedError:
+        return radio_class
+    if detected is not None and detected is not radio_class:
+        LOG.info(
+            "Detected %s.%s from serial (user picked %s.%s)",
+            detected.__module__, detected.__name__,
+            radio_class.__module__, radio_class.__name__,
+        )
+        return detected
+    return radio_class
+
+
 def download_from_radio(
     port: str,
     driver_id: str,
@@ -474,6 +501,10 @@ def download_from_radio(
         pipe = _open_radio_serial(
             port, radio_class, trace=LOG.isEnabledFor(logging.DEBUG)
         )
+        # Honor a driver's live submodel detection before reading (a RadioError
+        # here propagates to the handler below, which closes the pipe).
+        radio_class = _detect_radio_class(radio_class, pipe)
+        label = f"{radio_class.VENDOR} {radio_class.MODEL}"
         radio = radio_class(pipe)
         radio.status_fn = _make_status_fn(progress_callback)
         radio.sync_in()

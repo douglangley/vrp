@@ -4,8 +4,10 @@
 
 **Status:** ◐ in progress — started 2026-06-23. Tracked from
 [ROADMAP.md](ROADMAP.md). **Done:** Task 1 (serial trace), Task 2 (port
-setup — RTS/DTR/flow control + timeout). **Next:** Task 3
-(`detect_from_serial`).
+setup — RTS/DTR/flow control + timeout), Task 3 (`detect_from_serial`).
+**Next:** Task 4 (`get_prompts()` through the dialogs — has an open product
+question on prompt vs. overwrite-confirm ordering for upload; the first UI
+task, so accessibility-lead review applies).
 
 **Goal:** Get VRP's Radio ▸ Download from Radio / Upload to Radio commands
 working end-to-end against a real radio on a real serial port, using CHIRP's
@@ -203,9 +205,16 @@ the agent needing console/hardware access.
 - [ ] `uv run pytest` green.
 - [ ] Commit.
 
-## Task 3: `detect_from_serial()` before `sync_in()`
+## Task 3: `detect_from_serial()` before `sync_in()` ✅ DONE
 
 **Files:** Modify `chirp_backend/radio.py::download_from_radio`. New test.
+
+> Implemented: `_detect_radio_class(radio_class, pipe)` in
+> `chirp_backend/radio.py`, called in `download_from_radio` between opening the
+> pipe and constructing the radio. NotImplementedError keeps the user's pick;
+> a returned class replaces it (label updated too); `errors.RadioError`
+> propagates to the existing handler (which closes the pipe and reports the
+> failure). Tests in `tests/test_serial_detect.py`.
 
 - [ ] After opening the pipe and before constructing the radio used for
   `sync_in()`, call `radio_class.detect_from_serial(pipe)`:
