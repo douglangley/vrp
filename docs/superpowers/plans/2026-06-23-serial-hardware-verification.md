@@ -6,10 +6,12 @@
 [ROADMAP.md](ROADMAP.md). **Done:** Task 1 (serial trace), Task 2 (port
 setup), Task 3 (`detect_from_serial`), Task 4 (`get_prompts()` dialogs),
 Task 5 (suite + call-order re-read), Task 6 (driver id =
-`Baofeng_UV-5R_Mini`), **Task 7 DOWNLOAD verified on real hardware** (UV-5R
-Mini over COM4, 2026-06-23), plus two review fixes found via the real radio
-(clone-mode guard; gettext `_` shim). **Owed:** real-hardware **upload** test
-(Task 7e) — same pipe/prompt path, untested `sync_out`. Merged to `main`.
+`Baofeng_UV-5R_Mini`), **Task 7 DOWNLOAD and UPLOAD both verified on real
+hardware** (UV-5R Mini over COM4 — download 2026-06-23, upload 2026-06-24),
+plus review fixes found via the real radio (clone-mode guard; gettext `_`
+shim) and a desktop-a11y/wx review of the dialogs. **Remaining is broader
+coverage only** (a second machine/port — COM10 tester; models beyond the UV-5R
+Mini), not a blocker. Merged to `main`.
 
 > Note: the standalone `chirpc` CLI (Task 7f cross-check) fails to launch in
 > this dev environment (exits 1 with no output, even `--help`). It's optional;

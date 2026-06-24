@@ -11,14 +11,14 @@ Status marks: ☐ not started · ◐ in progress · ☑ done.
 
 ## Current priority
 
-- ◐ **Serial port hardware verification.** Download from Radio is now
-  **verified on real hardware** (Baofeng UV-5R Mini over COM4, 2026-06-23) and
-  the serial backend was hardened against CHIRP's reference clone code
-  (flow-control setup, submodel detection, driver prompts, gettext `_` shim,
-  clone-mode guard, byte-level trace). Now in broader testing — handed to a
-  second tester (different machine, COM10). **Still owed:** a real-hardware
-  **upload** test (`sync_out` untested on hardware), a no-`--debug` download
-  confirmation, and models beyond the UV-5R Mini. Detailed plan + findings:
+- ☑ **Serial port hardware verification.** Both **Download and Upload are
+  verified on real hardware** (Baofeng UV-5R Mini over COM4 — download
+  2026-06-23, upload 2026-06-24), and the serial backend was hardened against
+  CHIRP's reference clone code (flow-control setup, submodel detection, driver
+  prompts, gettext `_` shim, clone-mode guard, byte-level trace; plus a
+  desktop-a11y/wx review of the dialogs). Remaining is just **broader
+  coverage**, not a blocker: confirmation on a second machine/port (handed to a
+  COM10 tester) and models beyond the UV-5R Mini. Detailed plan + findings:
   [2026-06-23-serial-hardware-verification.md](2026-06-23-serial-hardware-verification.md).
 
 ## Other open work

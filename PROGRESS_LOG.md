@@ -6,6 +6,16 @@ architecture, keyboard map, and CHIRP feature-coverage checklist.
 
 ---
 
+## 2026-06-24 — Upload to radio VERIFIED on real hardware
+
+Real-hardware **upload** confirmed working (Baofeng UV-5R Mini over COM4) — the
+last owed item from the Phase 4 serial work. Both directions (download
+2026-06-23, upload 2026-06-24) now verified on hardware. The serial subsystem
+is functionally complete on this radio; remaining serial work is broader
+coverage only (a second machine/port — the COM10 tester — and models beyond the
+UV-5R Mini), not a blocker. Updated `docs/chirp-feature-coverage.md` (Upload
+row), `ROADMAP.md`, and the serial plan's status accordingly.
+
 ## 2026-06-24 — Desktop a11y + wxPython review of the serial dialogs
 
 Formal review of `vrp/serial_dialogs.py` by the Desktop Accessibility
