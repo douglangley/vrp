@@ -4,10 +4,15 @@
 
 **Status:** ◐ in progress — started 2026-06-23. Tracked from
 [ROADMAP.md](ROADMAP.md). **Done:** Task 1 (serial trace), Task 2 (port
-setup — RTS/DTR/flow control + timeout), Task 3 (`detect_from_serial`),
-Task 4 (`get_prompts()` through native dialogs). **Next:** Task 5 (final
-suite + re-read of clone call order), then Tasks 6–7 (driver id + the
-hardware go/no-go on COM4 — the user's step).
+setup), Task 3 (`detect_from_serial`), Task 4 (`get_prompts()` dialogs),
+Task 5 (final suite green @ 102 + clone call-order re-read), plus a review
+fix (clone-mode guard for non-clone radios). **Next:** Tasks 6–7 — driver id
++ the hardware go/no-go on COM4 (the user's step; radio is now plugged in).
+
+> Note: the standalone `chirpc` CLI (Task 7f cross-check) fails to launch in
+> this dev environment (exits 1 with no output, even `--help`). It's optional;
+> `radio_backend.list_radio_models()` is the authoritative driver-id source
+> the app's picker actually uses, so Task 6 uses that instead.
 
 **Goal:** Get VRP's Radio ▸ Download from Radio / Upload to Radio commands
 working end-to-end against a real radio on a real serial port, using CHIRP's
@@ -292,7 +297,14 @@ chirp-touching code in the existing seam), `vrp/serial_dialogs.py` and/or
 - [ ] `uv run pytest` green.
 - [ ] Commit.
 
-## Task 5: Full test suite + review
+## Task 5: Full test suite + review ✅ DONE
+
+> 102 passed. Clone call order re-read and confirmed to match CHIRP: open port
+> → detect (download only) → clone-mode guard → construct radio → set
+> `status_fn` → `sync_in`/`sync_out` → close pipe; prompts shown before the
+> port opens. Review also confirmed `NEEDS_COMPAT_SERIAL` is mmap-only (not a
+> pipe concern) and `radio.status_fn` is the right hook for both directions.
+
 
 - [ ] `uv run pytest` — full suite green (existing + new tests from 1-4, all
   headless/mocked, no hardware needed).
