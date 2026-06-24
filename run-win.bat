@@ -62,7 +62,11 @@ if not exist "chirp\chirp\__init__.py" (
 )
 
 echo Installing/updating dependencies (first run downloads Python 3.11 + packages)...
-call uv sync
+REM --inexact: install the run dependencies but DON'T uninstall anything else
+REM already in the venv. Without it, plain "uv sync" prunes the env to exactly
+REM the base deps, removing dev tools like pytest every time a developer runs
+REM the app (testers are unaffected — a fresh env has nothing extra to keep).
+call uv sync --inexact
 if errorlevel 1 (
   echo.
   echo Dependency installation failed. See the messages above.

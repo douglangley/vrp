@@ -300,7 +300,13 @@ no separate `uv pip install -e ./chirp` step.
 
 ## Testing
 
-Run tests with: uv run pytest
+Run tests with: `uv sync --extra dev` (once, to install pytest) then
+`uv run python -m pytest`. Use `python -m pytest`, not `uv run pytest`: the
+latter falls back to any pytest on PATH (e.g. a global one under a different
+Python with no `pyserial`) if the venv doesn't have it, silently running the
+suite in the wrong environment. `python -m pytest` always uses the project
+venv and errors clearly if pytest is missing. The run scripts use
+`uv sync --inexact`, so launching the app no longer prunes pytest from the venv.
 Tests use chirp/tests/images/ image files — no radio hardware needed.
 Every memory operation in memory_ops.py must have a corresponding test.
 
