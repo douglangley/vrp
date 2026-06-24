@@ -40,7 +40,7 @@ platform (native on Windows/Linux, webview on macOS — see "Architecture"), so
 on Windows the webview UI's Microsoft Edge WebView2 runtime (preinstalled on
 Windows 11) is only needed if you force it with `--webview`.
 
-To run the tests: `uv sync --extra dev` then `uv run pytest`. To build the
+To run the tests: `uv sync --extra dev` then `uv run python -m pytest`. To build the
 standalone .exe (a deliberate release step — testers and end users should just
 run from source with the run scripts above): `uv sync --extra build` then
 `uv run python build.py` (see "Packaging with PyInstaller").
@@ -234,7 +234,9 @@ git clone --depth=1 https://github.com/kk7ds/chirp.git
 uv sync --extra dev
 
 # Run tests (no radio hardware needed — uses chirp/tests/images/)
-uv run pytest
+# Use `python -m pytest`, not `uv run pytest`, so it always runs in the project
+# venv rather than falling back to a global pytest on PATH.
+uv run python -m pytest
 
 # Run the desktop app
 uv run python main.py
@@ -300,7 +302,8 @@ CHIRP ships test image files in `chirp/tests/images/` — one .img per supported
 radio model. These can be loaded directly to test the UI and all memory
 operations without any hardware. The test suite in `tests/` uses these.
 
-Run the suite with `uv run pytest` (it's fast — about two seconds).
+Run the suite with `uv sync --extra dev` then `uv run python -m pytest` (it's
+fast — about two seconds).
 
 ## Packaging with PyInstaller
 

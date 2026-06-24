@@ -57,7 +57,11 @@ if [ ! -f "chirp/chirp/__init__.py" ]; then
 fi
 
 echo "Installing/updating dependencies (first run downloads Python 3.11 + packages)..."
-if ! uv sync; then
+# --inexact: install the run dependencies but DON'T uninstall anything else
+# already in the venv. Without it, plain "uv sync" prunes the env to exactly the
+# base deps, removing dev tools like pytest every time a developer runs the app
+# (testers are unaffected — a fresh env has nothing extra to keep).
+if ! uv sync --inexact; then
   echo
   echo "Dependency installation failed. See the messages above."
   exit 1
