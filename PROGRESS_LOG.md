@@ -6,6 +6,39 @@ architecture, keyboard map, and CHIRP feature-coverage checklist.
 
 ---
 
+## 2026-06-24 — Desktop a11y + wxPython review of the serial dialogs
+
+Formal review of `vrp/serial_dialogs.py` by the Desktop Accessibility
+Specialist and wxPython Specialist agents. Applied fixes:
+- **Crash fix:** the modeless `CloneProgressDialog` had no `EVT_CLOSE` handler,
+  so a title-bar X / Alt+F4 during a clone would `Destroy()` it while the
+  worker thread still references it (it marshals progress via `wx.CallAfter`)
+  → "wrapped C/C++ object deleted". Now intercepts close: treats it as Cancel
+  when cancellable, always `Veto()`s, and leaves destruction to the UI thread
+  on completion.
+- **Mislabeled list:** the model `wx.ListBox`'s nearest label was "Filter:" and
+  `SetName()` is ignored by screen readers, so NVDA announced the list as
+  "Filter". Added a real "Radio model:" `StaticText` before it.
+- **Reliable initial focus:** moved the "land on the port" focus call out of
+  `__init__` (pre-Show, can be clobbered by wx's default focus; unreliable on
+  macOS) into `EVT_INIT_DIALOG` + `wx.CallAfter`, in both dialogs.
+- **Filter list rebuild** wrapped in `Freeze()/Thaw()` (552 items rebuilt per
+  keystroke caused flicker + a11y-event churn); assert a list selection when
+  Down-arrowing in so the row is announced; pluralized the count
+  ("1 model matches" / "N models match"); gave the gauge/status distinct names.
+
+**Deferred (needs a real NVDA pass, not shippable blind):** the reviewer
+flagged the live "N models match" count as not auto-spoken while typing in the
+filter. The list already announces "row, X of N" when the user arrows into it
+(working count feedback), and auto-speaking the count via prism risks
+double-speak with NVDA — so the right approach needs on-device testing. Left as
+a follow-up rather than shipping an unverifiable change. Other nice-to-haves
+(indeterminate-gauge `Pulse()`, upload "cannot cancel" affordance) also
+deferred.
+
+Tests: 120 passing; headless smoke confirms both dialogs build, the count
+pluralizes, and the progress dialog has its close guard.
+
 ## 2026-06-24 — Serial dialogs: land on port, remember last port
 
 UX pass on the shared Download/Upload dialogs (`vrp/serial_dialogs.py`):
