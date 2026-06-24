@@ -1,8 +1,17 @@
 """Tests for the persistent config store (vrp/config.py)."""
 
+import json
 import os
 
+from vrp import config as cfg
 from vrp.config import Config, MAX_RECENT
+
+
+def _point_config_base(monkeypatch, tmp_path):
+    # Cover both platforms' base-dir env vars so _config_base() resolves to
+    # tmp_path regardless of os.name.
+    monkeypatch.setenv("APPDATA", str(tmp_path))
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
 
 
 def test_defaults_on_missing_file(tmp_path):
@@ -43,3 +52,40 @@ def test_clear_recent(tmp_path):
     c.add_recent("/tmp/a.img")
     c.clear_recent()
     assert c.recent() == []
+
+
+def test_default_path_uses_vrp_dir(monkeypatch, tmp_path):
+    _point_config_base(monkeypatch, tmp_path)
+    p = cfg._default_path()
+    assert os.path.basename(os.path.dirname(p)) == "VRP"  # not OpenMemoryWriter
+    assert os.path.basename(p) == "config.json"
+
+
+def test_migrates_legacy_openmemorywriter_config(monkeypatch, tmp_path):
+    _point_config_base(monkeypatch, tmp_path)
+    legacy = tmp_path / "OpenMemoryWriter"
+    legacy.mkdir()
+    (legacy / "config.json").write_text(
+        json.dumps({"channels_per_page": 250}), encoding="utf-8"
+    )
+    p = cfg._default_path()  # triggers migration
+    assert os.path.basename(os.path.dirname(p)) == "VRP"
+    assert os.path.exists(p)
+    assert json.loads(open(p, encoding="utf-8").read())["channels_per_page"] == 250
+
+
+def test_no_migration_when_new_config_already_exists(monkeypatch, tmp_path):
+    _point_config_base(monkeypatch, tmp_path)
+    new = tmp_path / "VRP"
+    new.mkdir()
+    (new / "config.json").write_text(
+        json.dumps({"channels_per_page": 50}), encoding="utf-8"
+    )
+    legacy = tmp_path / "OpenMemoryWriter"
+    legacy.mkdir()
+    (legacy / "config.json").write_text(
+        json.dumps({"channels_per_page": 250}), encoding="utf-8"
+    )
+    p = cfg._default_path()
+    # Existing VRP config must NOT be overwritten by the legacy one.
+    assert json.loads(open(p, encoding="utf-8").read())["channels_per_page"] == 50

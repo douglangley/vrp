@@ -157,10 +157,9 @@ the agent needing console/hardware access.
   (`serial-trace.txt`), one file per clone session, overwritten each time.
   This is the project root when launched with `uv run python main.py --debug`,
   so the trace sits right where you're working and is trivially found/readable.
-  (Revised from the original "alongside the config dir / OpenMemoryWriter"
-  plan at the user's request, 2026-06-23 — the config dir, named
-  `OpenMemoryWriter` for `config.json`, is the wrong home for a debug trace.)
-  Gitignored.
+  (Revised from the original "alongside the user config dir" plan at the
+  user's request, 2026-06-23 — the config dir is the wrong home for a debug
+  trace.) Gitignored.
 - [ ] Use `TracingSerial` (not plain `serial.Serial`) in the port-open helper
   added in Task 2, gated on `--debug` (no point tracing every normal run).
 - [ ] Log the resolved trace-file path at INFO level when a clone starts, so

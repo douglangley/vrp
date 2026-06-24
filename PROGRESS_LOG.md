@@ -6,6 +6,31 @@ architecture, keyboard map, and CHIRP feature-coverage checklist.
 
 ---
 
+## 2026-06-24 — Remove build.bat (run-from-source only) + rename config dir to VRP
+
+**Removed `build.bat`.** A tester ran the old double-click `build.bat` (which
+packages an .exe) instead of running from source, and got a stale/confusing
+result. Everyone now runs from source via `run-win.bat` / `run-mac.sh`;
+building a release .exe stays available but is a deliberate developer step
+(`uv sync --extra build` + `uv run python build.py`), not a double-click
+wrapper. Updated the references that pointed at `build.bat` (README, CLAUDE.md,
+`tools/update_chirp.py`) to the `build.py` invocation. `build.py` itself is
+unchanged.
+
+**Renamed the user config directory `OpenMemoryWriter` → `VRP`.** The config
+dir still carried the project's pre-rename name (`%APPDATA%\OpenMemoryWriter\`
+/ `~/.config/OpenMemoryWriter/`), leaking it via `config.json`. `vrp/config.py`
+now uses `VRP`, with a one-time best-effort migration: on first run, if the new
+`VRP/config.json` doesn't exist but a legacy `OpenMemoryWriter/config.json`
+does, it's copied forward, so existing testers keep their preferences and
+recent files. Tests cover the new path, the migration, and that an existing
+new config is never overwritten by the legacy one. (`_LEGACY_DIRNAME =
+"OpenMemoryWriter"` remains in `config.py` only to drive that migration;
+historical PROGRESS_LOG entries that mention the old name are left intact as an
+accurate record.)
+
+Suite: 108 passing.
+
 ## 2026-06-23 — Fix: port picker's default selection could land on the wrong COM port
 
 **Symptom.** A real-hardware **upload** attempt (Task 7e, the owed test from the
