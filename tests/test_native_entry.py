@@ -1,29 +1,27 @@
 """UI selection at startup.
 
-The default front end is chosen by platform — the webview UI on macOS (so
-VoiceOver reads the web grid) and the native UI everywhere else (so NVDA reads
-the native ``wx.ListCtrl`` grid). Explicit ``--webview`` / ``--native`` flags
-override the platform default either way.
+The native UI is the default on every platform: its
+``wx.dataview.DataViewListCtrl`` grid wraps a native control on each OS
+(SysListView32 on Windows, NSTableView on macOS), so both NVDA and VoiceOver
+read it. The webview UI stays available via ``--webview`` while it is retired;
+``--native`` forces the native UI explicitly.
 """
 
 from main import parse_mode
 
 
-def test_platform_default_macos_is_webview():
-    assert parse_mode([], platform="darwin") == "webview"
-    assert parse_mode(["--debug"], platform="darwin") == "webview"
-
-
-def test_platform_default_non_macos_is_native():
+def test_platform_default_is_native_everywhere():
+    assert parse_mode([], platform="darwin") == "native"
     assert parse_mode([], platform="win32") == "native"
     assert parse_mode([], platform="linux") == "native"
+    assert parse_mode(["--debug"], platform="darwin") == "native"
     assert parse_mode(["--debug"], platform="win32") == "native"
 
 
-def test_explicit_flags_override_platform():
-    # --webview wins even on a platform that would otherwise default to native.
-    assert parse_mode(["--webview"], platform="win32") == "webview"
+def test_explicit_flags_override_default():
+    # --webview opts back into the webview UI on any platform, including macOS.
+    assert parse_mode(["--webview"], platform="darwin") == "webview"
     assert parse_mode(["--webview", "--debug"], platform="win32") == "webview"
-    # --native wins even on macOS, which would otherwise default to webview.
+    # --native is the default but still honored explicitly.
     assert parse_mode(["--native"], platform="darwin") == "native"
-    assert parse_mode(["--native", "--debug"], platform="darwin") == "native"
+    assert parse_mode(["--native", "--debug"], platform="win32") == "native"

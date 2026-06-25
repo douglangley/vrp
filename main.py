@@ -5,15 +5,16 @@ wxPython app with two interchangeable front ends, because no single channel
 grid reads on every screen reader (see PROGRESS_LOG.md and the memory note on
 the cross-platform grid split):
 
+* the **native** UI (``vrp/native/``) — a ``wx.dataview.DataViewListCtrl``
+  channel grid plus a native menu bar. Its grid wraps a native control on each
+  OS (SysListView32 on Windows, NSTableView on macOS), so **both NVDA and
+  VoiceOver** read it. This is the default on every platform.
 * the **webview** UI (``vrp/app.py``) — the ``AccessibleWebView`` rendering the
-  ``wx-accessible-grid`` Excel-style channel grid. This is what **VoiceOver on
-  macOS** reads.
-* the **native** UI (``vrp/native/``) — a virtual report-mode ``wx.ListCtrl``
-  channel grid plus a native menu bar. This is what **NVDA on Windows** reads.
+  ``wx-accessible-grid`` Excel-style channel grid. Kept available via
+  ``--webview`` while the webview stack is retired.
 
-The default is chosen by platform — webview on macOS, native everywhere else —
-so each screen reader gets the grid that actually reads there. Force either one
-explicitly with ``--webview`` or ``--native``.
+The native UI is the default everywhere; force the webview explicitly with
+``--webview`` (or the native UI with ``--native``).
 
 Importing ``vrp`` first applies the CHIRP import-path fix (see
 ``vrp/_chirp_path.py``) before anything imports the vendored ``chirp`` package.
@@ -31,16 +32,18 @@ def parse_mode(argv: list[str], platform: str | None = None) -> str:
     """Pick which front end to launch.
 
     An explicit ``--webview`` or ``--native`` flag always wins. Otherwise the
-    default is chosen by platform: ``webview`` on macOS (VoiceOver reads the web
-    grid) and ``native`` everywhere else (NVDA reads the native ``wx.ListCtrl``
-    grid). ``platform`` defaults to ``sys.platform`` and exists for testing.
+    default is the **native** UI on every platform: its
+    ``wx.dataview.DataViewListCtrl`` channel grid wraps a native control on each
+    OS (SysListView32 on Windows, NSTableView on macOS), so NVDA *and* VoiceOver
+    both read it. The webview UI remains available with ``--webview``.
+    ``platform`` is accepted for tests/overrides but no longer changes the
+    default (it used to route macOS to the webview, before the grid migration).
     """
     if "--webview" in argv:
         return "webview"
     if "--native" in argv:
         return "native"
-    plat = platform if platform is not None else sys.platform
-    return "webview" if plat == "darwin" else "native"
+    return "native"
 
 
 # Opt-in local dev knob: point at an extracted WebView2 Fixed Version Runtime
