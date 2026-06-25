@@ -1305,20 +1305,27 @@ class MainWindow(wx.Frame):
     # -- serial download / upload -----------------------------------------
 
     def on_download(self, _event=None) -> None:
-        from vrp.serial_dialogs import DownloadDialog
+        from vrp.serial_dialogs import DownloadDialog, show_radio_prompts
 
         models = radio_backend.list_radio_models()
         dlg = DownloadDialog(self, radio_backend.list_serial_ports, models)
         ok = dlg.ShowModal() == wx.ID_OK
         port, driver_id, label = dlg.get_selection() if ok else (None, None, "")
         dlg.Destroy()
-        if ok and port and driver_id:
-            self._run_clone("download", port, driver_id=driver_id, label=label)
-        else:
+        if not (ok and port and driver_id):
             self._restore_content_focus()
+            return
+        # Show any driver-required prompts (experimental/info/pre-download
+        # instructions) before opening the port; the user can still back out.
+        prompts = radio_backend.get_clone_prompts(driver_id)
+        if not show_radio_prompts(self, prompts, pre_title="Download instructions"):
+            self._announce("Download canceled.")
+            self._restore_content_focus()
+            return
+        self._run_clone("download", port, driver_id=driver_id, label=label)
 
     def on_upload(self, _event=None) -> None:
-        from vrp.serial_dialogs import UploadDialog
+        from vrp.serial_dialogs import UploadDialog, show_radio_prompts
 
         state = radio_backend.get_state()
         if not state.loaded:
@@ -1329,6 +1336,13 @@ class MainWindow(wx.Frame):
         port = dlg.get_port() if ok else None
         dlg.Destroy()
         if not (ok and port):
+            self._restore_content_focus()
+            return
+        # Driver prompts first (what the user must DO), then VRP's destructive
+        # overwrite confirmation (are you SURE) — matches the native UI.
+        prompts = radio_backend.get_clone_prompts_for_loaded_radio()
+        if not show_radio_prompts(self, prompts, pre_title="Upload instructions"):
+            self._announce("Upload canceled.")
             self._restore_content_focus()
             return
         label = f"{state.radio.VENDOR} {state.radio.MODEL}"
