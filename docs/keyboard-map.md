@@ -41,6 +41,7 @@ arrow keys move across top-level menus; NVDA reads it like any native app menu.
 | Radio | Settings… | `Ctrl+Shift+P` | needs a loaded radio |
 | Radio | Radio Info… | — | needs a loaded radio |
 | Channels | Edit channel… | `F2` | needs a loaded radio |
+| Channels | Delete channel(s) | `Del` | needs a loaded radio; clears the selected channel(s) |
 | Channels | Go to channel… | `Ctrl+Shift+G` | needs a loaded radio |
 | Channels | Channel banks… | `Ctrl+B` | needs a loaded radio |
 | Channels | Move up | `Ctrl+Shift+Up` | needs a loaded radio |
@@ -58,8 +59,10 @@ sync with this table by hand — update both when adding a command.
 
 ### Channel grid navigation and selection
 
-The grid is a multi-select virtual `wx.ListCtrl` (`vrp/native/channel_grid.py`)
-with every channel populated at once — no paging.
+The grid is a multi-select `wx.dataview.DataViewListCtrl`
+(`vrp/native/channel_grid.py`) with every channel populated at once — no paging.
+It wraps a native control on each platform (SysListView32 on Windows,
+NSTableView on macOS), so NVDA and VoiceOver both read its rows and cells.
 
 | Key | Action |
 |-----|--------|
@@ -67,6 +70,7 @@ with every channel populated at once — no paging.
 | `Shift+Arrow` | Extend a contiguous selection |
 | `Ctrl+Space` | Toggle the focused row into/out of a non-contiguous selection |
 | `F2` / `Enter` | Open the edit dialog for the focused channel |
+| `Del` | Delete the selected channel(s) (Channels-menu accelerator) |
 
 ### Reorganizing channels
 
