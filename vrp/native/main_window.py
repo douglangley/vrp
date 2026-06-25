@@ -25,6 +25,7 @@ import time
 
 import wx
 import wx.adv
+import wx.dataview as dv
 
 from chirp_backend import radio as radio_backend
 from vrp import __version__
@@ -44,6 +45,7 @@ APP_SHORTCUTS = [
     ("Ctrl+Shift+U", "Upload to radio"),
     ("Ctrl+Shift+P", "Edit radio settings"),
     ("F2 / Enter", "Edit the focused channel"),
+    ("Del", "Delete the selected channel(s)"),
     ("Ctrl+Shift+G", "Go to channel"),
     ("Ctrl+B", "Channel banks for the focused channel"),
     ("Ctrl+Shift+Up", "Move selected channel(s) up"),
@@ -84,15 +86,15 @@ class MainWindow(wx.Frame):
         )
 
         self.grid = ChannelGrid(self)
-        self.grid.Bind(wx.EVT_LIST_ITEM_ACTIVATED, self.on_edit_channel)
-        # Row context menu (Applications key / Shift+F10 / right-click), a Delete
-        # key handler, and debounced multi-select feedback. The native grid had
-        # none of these — they previously lived only in the webview grid, so on
-        # Windows the context key errored and selecting gave no feedback.
-        self.grid.Bind(wx.EVT_CONTEXT_MENU, self.on_grid_context_menu)
-        self.grid.Bind(wx.EVT_KEY_DOWN, self._on_grid_key)
-        self.grid.Bind(wx.EVT_LIST_ITEM_SELECTED, self._on_grid_selection_changed)
-        self.grid.Bind(wx.EVT_LIST_ITEM_DESELECTED, self._on_grid_selection_changed)
+        self.grid.Bind(dv.EVT_DATAVIEW_ITEM_ACTIVATED, self.on_edit_channel)
+        # Row context menu (right-click; Applications key / Shift+F10 on Windows)
+        # and debounced multi-select feedback. The native grid had none of these —
+        # they previously lived only in the webview grid. Delete is NOT bound to a
+        # grid key event here: a focused NSTableView can swallow EVT_KEY_DOWN on
+        # macOS, so Delete lives on the Channels-menu "Delete channel(s)\tDel"
+        # accelerator instead, which fires reliably regardless of grid focus.
+        self.grid.Bind(dv.EVT_DATAVIEW_ITEM_CONTEXT_MENU, self.on_grid_context_menu)
+        self.grid.Bind(dv.EVT_DATAVIEW_SELECTION_CHANGED, self._on_grid_selection_changed)
         self._sel_timer: wx.CallLater | None = None
         self._menu_items: dict[str, wx.MenuItem] = {}
         self._radio_gated_keys: set[str] = set()
@@ -182,6 +184,11 @@ class MainWindow(wx.Frame):
     def _build_channels_menu(self) -> wx.Menu:
         m = wx.Menu()
         self._add(m, "edit", "&Edit channel…\tF2", self.on_edit_channel, needs_radio=True)
+        # Delete needs a menu accelerator, not just the in-grid Del key: a focused
+        # native DataViewListCtrl (NSTableView) can swallow EVT_KEY_DOWN on macOS,
+        # and macOS has no keyboard context-menu, so the accelerator is the only
+        # reliable, discoverable Delete path cross-platform.
+        self._add(m, "delete", "&Delete channel(s)\tDel", self.on_delete_channels, needs_radio=True)
         self._add(m, "goto", "&Go to channel…\tCtrl+Shift+G", self.on_goto, needs_radio=True)
         self._add(m, "banks", "Channel &banks…\tCtrl+B", self.on_banks, needs_radio=True)
         m.AppendSeparator()
@@ -249,7 +256,7 @@ class MainWindow(wx.Frame):
         number = self.grid.focused_channel()
         if number is None:
             return
-        sel = self.grid.GetSelectedItemCount()
+        sel = self.grid.selected_count()
         menu = wx.Menu()
 
         def add(label, handler):
@@ -270,16 +277,9 @@ class MainWindow(wx.Frame):
         add("&Go to channel…\tCtrl+Shift+G", self.on_goto)
         add("Channel &banks…", self.on_banks)
 
-        # Keyboard invocation has no pointer position (DefaultPosition); anchor the
-        # menu on the focused row so it appears where the user is.
-        pos = event.GetPosition()
-        if pos == wx.DefaultPosition:
-            idx = self.grid.GetFocusedItem()
-            rect = self.grid.GetItemRect(idx) if idx != -1 else wx.Rect(0, 0, 0, 0)
-            client_pos = rect.GetBottomLeft()
-        else:
-            client_pos = self.grid.ScreenToClient(pos)
-        self.grid.PopupMenu(menu, client_pos)
+        # DataView places the menu sensibly on the focused row; exact pixel
+        # position is irrelevant to a screen-reader user.
+        self.grid.popup_row_menu(menu)
         menu.Destroy()
 
     def on_delete_channels(self, _evt=None) -> None:
@@ -311,14 +311,6 @@ class MainWindow(wx.Frame):
         self.grid.focus_channel(target)
         self.announce.announce(f"{message} Now on channel {target}.", assertive=True)
 
-    def _on_grid_key(self, event) -> None:
-        """Delete key deletes the selection; every other key (arrows, Shift+arrow
-        range selection, type-ahead) falls through to the native list unchanged."""
-        if event.GetKeyCode() == wx.WXK_DELETE:
-            self.on_delete_channels()
-            return
-        event.Skip()
-
     def _on_grid_selection_changed(self, event) -> None:
         """Announce the multi-select count once the selection settles, so building
         a Shift+arrow range is audible. A single item that just follows the cursor
@@ -331,7 +323,7 @@ class MainWindow(wx.Frame):
 
     def _announce_selection_count(self) -> None:
         self._sel_timer = None
-        count = self.grid.GetSelectedItemCount()
+        count = self.grid.selected_count()
         if count >= 2:
             self.announce.announce(f"{count} channels selected")
 
