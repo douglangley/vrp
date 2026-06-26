@@ -3,27 +3,40 @@
 ## What This Project Is
 
 **Versatile Radio Programmer (VRP)** — an accessible desktop radio memory channel
-programmer. It wraps the CHIRP Python library (in ./chirp/) in a wxPython app
-with **two interchangeable front ends**, because no single channel-grid
-implementation reads correctly on every screen reader (see PROGRESS_LOG.md
-"2026-06-21 — Platform-aware UI default"):
+programmer. It wraps the CHIRP Python library (in ./chirp/) in a wxPython app.
 
-- **Native UI** (`vrp/native/`) — a virtual report-mode `wx.ListCtrl` channel
-  grid plus a real native `wx.MenuBar`, no webview/WebView2/JS bridge. This is
-  what **NVDA on Windows** reads. Default on Windows and Linux.
+**The direction: native wx controls for everything, on both Windows and macOS.**
+The channel grid was the one control that historically did not read on every
+screen reader, which is why a second (webview) UI existed. That blocker is now
+solved — see PROGRESS_LOG.md "2026-06-25 — Native UI is the default on every
+platform" and "2026-06-24 — native-grid VoiceOver feasibility" — so the **native
+UI is the default on every platform** and the webview is being retired as a
+channel-grid front end. Its remaining intended role is rendering **in-app help
+and documentation pages** (where an HTML view is genuinely the right tool), not
+the channel table or any other control.
+
+- **Native UI** (`vrp/native/`) — the default everywhere. A
+  `wx.dataview.DataViewListCtrl` channel grid plus a real native `wx.MenuBar`,
+  no webview/WebView2/JS bridge. `DataViewListCtrl` wraps a real native control
+  on each OS (SysListView32 on Windows, NSTableView on macOS), so **both NVDA on
+  Windows and VoiceOver on macOS** read it directly. (The previous virtual
+  `wx.ListCtrl` fell back to wx's generic, custom-drawn control on macOS, which
+  exposed nothing to NSAccessibility and was silent under VoiceOver — see
+  `docs/research/2026-06-24-native-grid-voiceover-feasibility.md`.)
 - **Webview UI** (`vrp/app.py`) — an `AccessibleWebView` (from
   `wx-accessible-webview`) hosting an editable `AccessibleGrid` (from
   `wx-accessible-grid`) for the channel table, a menu bar via
-  `wx-accessible-menubar`, and a JS→Python bridge for everything else. This is
-  what **VoiceOver on macOS** reads (the native `wx.ListCtrl` does not read
-  correctly under VoiceOver yet). Default on macOS.
+  `wx-accessible-menubar`, and a JS→Python bridge. **Retained behind `--webview`
+  while the webview channel-grid stack is retired** — it is not the default on
+  any platform anymore. Don't add new channel-grid features here; the native
+  grid is the production grid. The webview stack is being repurposed toward
+  help/docs rendering only.
 
-`main.py`'s `parse_mode()` picks the default by `sys.platform`; `--webview` or
-`--native` forces either one regardless of platform. **Neither front end is
-legacy** — don't skip accessibility work on one because the other is "the
-real" UI. Both use `prism` (the `prismatoid` bindings) for supplemental
-speech, then package to a single .exe with PyInstaller. There is NO web
-server and NO browser in either.
+`main.py`'s `parse_mode()` returns the native UI on every platform; `--webview`
+forces the webview UI and `--native` the native UI (the explicit override still
+works either way). Both use `prism` (the `prismatoid` bindings) for supplemental
+speech, then package to a single .exe with PyInstaller. There is NO web server
+and NO browser in either.
 
 Several native wx dialogs (`edit_dialog.py`, `ops_dialog.py`, `find_dialog.py`,
 `serial_dialogs.py`, `settings_dialog.py`, `bank_dialog.py`, `query_dialogs.py`,
@@ -37,10 +50,12 @@ must be accessible to screen readers. This is not optional.
 
 ## Accessible UI Libraries (sibling projects — don't reinvent inline)
 
-**These three libraries are used only by the webview UI (`vrp/app.py`, the
-macOS default).** The native UI (`vrp/native/`) needs none of them — a real
-`wx.ListCtrl` + `wx.MenuBar` doesn't have the WebView2-swallows-Alt problem or
-the webview-table-re-reads-on-edit problem these libraries exist to solve.
+**These three libraries are used only by the webview UI (`vrp/app.py`, retained
+behind `--webview` while retired).** The native UI (`vrp/native/`, the default
+everywhere) needs none of them — a real `wx.dataview.DataViewListCtrl` +
+`wx.MenuBar` doesn't have the WebView2-swallows-Alt problem or the
+webview-table-re-reads-on-edit problem these libraries exist to solve. They stay
+relevant going forward only for the webview's intended help/docs role.
 
 - `wx-accessible-webview` — `AccessibleWebView` wrapping `wx.html2.WebView`;
   the page-rendering host (see vrp/app.py, vrp/html.py).
@@ -48,13 +63,15 @@ the webview-table-re-reads-on-edit problem these libraries exist to solve.
   menu-bar keyboard access against a focused WebView2 swallowing Alt (wx
   #24786). Wired in `MainWindow.__init__`; `_build_menubar` still builds the
   real `wx.MenuBar`.
-- `wx-accessible-grid` — `AccessibleGrid` + `GridModel`; the **production**
-  channel grid for the webview UI (`MainWindow._show_grid` in vrp/app.py) — a
-  real, editable `<table role="grid">` driven by the aria-activedescendant
-  pattern. VRP's adapter is `vrp/channel_grid_model.py` (`ChannelGridModel`);
-  try it standalone with `uv run python tools/grid_preview.py`. Resolves from
-  PyPI (`>=0.4.1`): VoiceOver cell-name + assertive selection/enter
-  announcements.
+- `wx-accessible-grid` — `AccessibleGrid` + `GridModel`; the channel grid for
+  the **webview UI only** (`MainWindow._show_grid` in vrp/app.py) — a real,
+  editable `<table role="grid">` driven by the aria-activedescendant pattern.
+  The **production** channel grid is now the native `DataViewListCtrl`
+  (`vrp/native/channel_grid.py`), not this; `AccessibleGrid` is only reachable
+  under `--webview`. VRP's adapter is `vrp/channel_grid_model.py`
+  (`ChannelGridModel`); try it standalone with
+  `uv run python tools/grid_preview.py`. Resolves from PyPI (`>=0.4.1`):
+  VoiceOver cell-name + assertive selection/enter announcements.
 
 All three were extracted from this app; fix issues upstream in the library,
 not as a local workaround in vrp/app.py.
@@ -73,22 +90,26 @@ the right thing to do. Do not remove or obscure it from either UI.
 
 ## Project Structure Quick Reference
 
-- main.py              — thin entry point; `parse_mode()` picks native vs.
-                         webview by platform (`--webview`/`--native` override)
+- main.py              — thin entry point; `parse_mode()` returns the native UI
+                         on every platform (`--webview`/`--native` override)
 - vrp/                 — wxPython UI layer (the accessible front end)
-  - native/            — **native UI** (default on Windows/Linux): native
-                         wx.ListCtrl grid + wx.MenuBar, no webview/JS bridge
+  - native/            — **native UI** (the default on every platform): native
+                         wx.dataview.DataViewListCtrl grid + wx.MenuBar, no
+                         webview/JS bridge
     - app.py           — entry point (`vrp.native.app.run`)
     - main_window.py   — MainWindow: menu bar, status bar, grid, and all
                          command handlers (file, edit, operations, find,
                          download/upload)
-    - channel_grid.py  — ChannelGrid: virtual report-mode wx.ListCtrl (no
-                         paging — every channel is always populated)
+    - channel_grid.py  — ChannelGrid: wx.dataview.DataViewListCtrl wrapping a
+                         native control per OS (SysListView32/NSTableView) so
+                         NVDA *and* VoiceOver read it; no paging — every channel
+                         is always populated
     - grid_model.py    — pure data/selection model behind the grid (no wx;
                          unit-testable headless)
     - announce.py      — Announcer: status bar + prism speech, the native
                          equivalent of the webview's ARIA live region
-  - app.py             — **webview UI** (default on macOS): wx app/window,
+  - app.py             — **webview UI** (retained behind `--webview`, retired;
+                         intended future role: help/docs rendering): wx app/window,
                          native menu bar, webview host, the editable
                          AccessibleGrid channel view, JS↔Python bridge,
                          keyboard shortcuts, and all command handlers (file,
@@ -131,7 +152,7 @@ the right thing to do. Do not remove or obscure it from either UI.
 
 ## Command Surfaces (keep in sync)
 
-### Native UI (default on Windows/Linux — `vrp/native/main_window.py`)
+### Native UI (the default on every platform — `vrp/native/main_window.py`)
 
 A real `wx.MenuBar` has no WebView2 to fight, so the menu item's accelerator
 (the `\tCtrl+...`/`\tF2` suffix in its label, e.g. `"&Save\tCtrl+S"`) *is* the
@@ -147,9 +168,14 @@ handler, needs_radio=...)` in the right `_build_*_menu`, add the same combo to
 `APP_SHORTCUTS`, and update `docs/keyboard-map.md` and
 `docs/chirp-feature-coverage.md`.
 
-### Webview UI (default on macOS — `vrp/app.py`)
+### Webview UI (retained behind `--webview`, retired — `vrp/app.py`)
 
-Every user command is reachable three ways and they must stay in sync:
+This UI is no longer the default on any platform. Don't add new channel-grid
+commands here; land them in the native UI. The three-surface scheme below is
+documented because the code still works under `--webview`, and because the
+webview's intended future role (help/docs rendering) reuses the same
+menu-bar/bridge plumbing. Every user command here is reachable three ways and
+they must stay in sync:
 1. The native **menu bar** (`_build_menubar` in vrp/app.py) — File / Edit /
    Radio / Channels / Help. A focused WebView2 eats one-shot Alt/Ctrl
    accelerators (wxWidgets #24786); `wx-accessible-menubar`'s
@@ -164,31 +190,36 @@ Every user command is reachable three ways and they must stay in sync:
 When adding a command here: wire the handler, add a menu item (disable it in
 `_radio_menu_items` if it needs a loaded radio), add the shortcut to
 `_SHORTCUTS_JS` + `APP_SHORTCUTS` (+ `aria-keyshortcuts` on any button), and
-update `docs/keyboard-map.md` and `docs/chirp-feature-coverage.md`. Add the
-equivalent command to the native UI too (and vice versa) so the two front
-ends stay at feature parity — see CLAUDE.md "What This Project Is".
+update `docs/keyboard-map.md` and `docs/chirp-feature-coverage.md`. New commands
+land in the **native UI** (the default everywhere); only mirror them here if the
+webview still needs to keep working under `--webview` — see CLAUDE.md "What This
+Project Is".
 
 ## Accessibility Rules (Enforce These Always)
 
 1. Every <button>, <input>, <select>, <a> must have an accessible name.
    Use aria-label if visible text is absent or insufficient.
 
-2. The memory channel table must be a real <table> element with:
-   - <thead> containing <th scope="col"> for every column
-   - <tbody> with <tr> rows
-   - Row number in a <th scope="row"> cell
-   Never use div/span grids for tabular data.
+2. Tabular data must expose real rows, columns, and headers to the
+   accessibility API — never a div/span grid.
+   - **Native UI (the production channel table):** the grid is a
+     `wx.dataview.DataViewListCtrl`, which wraps a native list-view per OS and
+     reports rows/columns/headers to MSAA/UIA (NVDA) and NSAccessibility
+     (VoiceOver) for free.
+   - **Webview UI and any HTML you render (incl. future help/docs pages):** use
+     a real `<table>` with `<thead>` + `<th scope="col">` per column, `<tbody>`
+     with `<tr>` rows, and the row number in a `<th scope="row">` cell.
 
 3. All dynamic feedback (operation results, errors, loading states, progress)
    must be announced.
-   - **Native UI (Windows/Linux default):** call
+   - **Native UI (the default everywhere):** call
      `self.announce.announce('Message here')` (a
      `vrp.native.announce.Announcer`) — it writes the status bar and, if
      prism speech is available, speaks it too. Pass `assertive=True` for
      errors so they interrupt any speech in progress. The announcer is a
      fallback, not the primary signal: handlers should still move focus to
      the result row/field so the screen reader reads it directly.
-   - **Webview UI (macOS default):** from Python, call
+   - **Webview UI (`--webview`):** from Python, call
      `self.view.status('Message here')` (the AccessibleWebView routes it to
      its built-in ARIA live region); from page JavaScript (e.g. grid edits),
      update the in-page aria-live region (id="status-announcer",
@@ -246,8 +277,8 @@ AccessibleGrid) so the view can refresh just those rows.
 
 ## Bridge Message Shape (JS ↔ Python)
 
-**Applies only to the webview UI (`vrp/app.py`, the macOS default).** The
-native UI (`vrp/native/`) has no JS bridge at all — its handlers call
+**Applies only to the webview UI (`vrp/app.py`, behind `--webview`).** The
+native UI (`vrp/native/`, the default everywhere) has no JS bridge at all — its handlers call
 `chirp_backend` and update `ChannelGrid`/`Announcer` directly, in Python.
 
 Page scripts call `window.vrp.postMessage(JSON.stringify({action, ...}))` (the

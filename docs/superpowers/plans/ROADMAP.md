@@ -25,11 +25,13 @@ Status marks: ☐ not started · ◐ in progress · ☑ done.
 
 Accessibility / screen-reader passes owed (no blocker, just need a hand pass):
 - ☐ NVDA-on-Windows pass for the native UI (menu accelerators, grid
-  navigation/selection, dialog focus) — owed since the native UI became the
-  Windows/Linux default (PROGRESS_LOG "2026-06-21").
-- ☐ VoiceOver hand pass on the webview UI's `wx-accessible-grid` 0.4.1
-  (cell names, assertive selection/enter announcements) — owed since
-  PROGRESS_LOG "2026-06-21".
+  navigation/selection, dialog focus) — must be **re-run** after the grid
+  migrated to `DataViewListCtrl` (PROGRESS_LOG "2026-06-25"), since that changes
+  the control NVDA reads.
+- ☐ **VoiceOver hand pass on the native UI's `DataViewListCtrl` grid** — the
+  migration (PROGRESS_LOG "2026-06-25") is designed to read under VoiceOver via
+  NSTableView, but the actual on-device VoiceOver pass on macOS is still owed
+  and is what makes "native everywhere" final.
 - ☐ NVDA pass on the radio settings editor (Treebook tree↔panel F6 hop, 
   non-1-step SpinCtrls).
 - ☐ NVDA pass on the banks editor (membership readout, checkbox/radiobox state).
@@ -55,10 +57,14 @@ Smaller deferred items (chirp-feature-coverage.md "☐"/"◐" rows):
 Platform follow-through:
 - ☐ macOS run-from-source smoke test (`run-mac.sh` + full suite) — flagged
   as unverified in PROGRESS_LOG "2026-06-21 — Per-OS run scripts".
-- ☐ Once the native UI is confirmed at parity on every platform: retire
-  `vrp/app.py`, `vrp/views.py`, `vrp/html.py`, `vrp/channel_grid_model.py`,
-  `templates/`, `static/`, and the `wx-accessible-webview`/
-  `wx-accessible-menubar`/`wx-accessible-grid` dependencies; drop `--webview`.
-  Blocked on the VoiceOver pass above — native `wx.ListCtrl` still doesn't
-  read correctly under VoiceOver (PROGRESS_LOG "2026-06-21 — Platform-aware
-  UI default").
+- ◐ Retire the webview channel-grid stack. The native UI is now the default on
+  every platform (PROGRESS_LOG "2026-06-25"), so this is unblocked in principle
+  — gated only on the owed VoiceOver hand pass on the native grid above. Plan:
+  - Decide the webview's future. The current direction is to **repurpose** the
+    `wx-accessible-webview` host for in-app **help/docs** rendering rather than
+    delete it outright; the channel-grid pieces (`AccessibleGrid`,
+    `vrp/channel_grid_model.py`, `vrp/views.py`, `templates/`, `static/`) are
+    what gets retired.
+  - Once VoiceOver confirms the native grid: remove the webview *channel-grid*
+    code and the `--webview` default path, keeping only whatever the help/docs
+    role needs (or drop the webview entirely if help/docs lands differently).

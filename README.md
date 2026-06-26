@@ -35,10 +35,10 @@ uv run python main.py
 ```
 
 You need [uv](https://docs.astral.sh/uv/) and git. uv downloads Python 3.11
-itself, so your system Python version doesn't matter. VRP picks its UI by
-platform (native on Windows/Linux, webview on macOS — see "Architecture"), so
-on Windows the webview UI's Microsoft Edge WebView2 runtime (preinstalled on
-Windows 11) is only needed if you force it with `--webview`.
+itself, so your system Python version doesn't matter. VRP runs its native wx UI
+on every platform by default (see "Architecture"), so the webview UI's Microsoft
+Edge WebView2 runtime (preinstalled on Windows 11) is only needed if you force
+the old UI with `--webview`.
 
 To run the tests: `uv sync --extra dev` then `uv run python -m pytest`. To build the
 standalone .exe (a deliberate release step — testers and end users should just
@@ -56,11 +56,13 @@ to address this.
 VRP solves the problem differently: rather than patching CHIRP's GUI, it
 uses the CHIRP *library* as a backend — keeping all the radio driver code
 exactly as the CHIRP team maintains it — and provides a new, fully accessible
-desktop front end. Because no single channel-grid implementation reads
-correctly on every screen reader yet, VRP ships two: a native `wx.ListCtrl`
-grid that NVDA on Windows reads directly, and an accessible HTML grid in an
-embedded webview that VoiceOver on macOS reads directly. VRP picks the right
-one for your platform automatically.
+desktop front end built from native wx controls. Its channel grid is a
+`wx.dataview.DataViewListCtrl`, which wraps a real native list-view on each OS
+(SysListView32 on Windows, NSTableView on macOS), so **both NVDA on Windows and
+VoiceOver on macOS** read it directly. This native UI is the default on every
+platform. (An older embedded-webview UI, which hosted an accessible HTML grid,
+is still reachable with `--webview` while it is retired; its remaining intended
+role is rendering in-app help and documentation.)
 
 This means:
 - Every radio CHIRP supports, VRP supports automatically
@@ -90,20 +92,27 @@ programmable in open-source software.
 
 ## Features
 
-VRP has two channel-grid UIs, picked automatically by platform (see
-"Architecture"); both share the same backend, native dialogs, and feature set.
+VRP's production UI is built from native wx controls and is the default on every
+platform; an older webview UI is retained behind `--webview` while retired. Both
+share the same backend, native dialogs, and feature set.
 
-**Native UI (Windows/Linux default)** — a virtual report-mode `wx.ListCtrl`,
-read directly by NVDA, with no webview involved:
+**Native UI (the default everywhere)** — a `wx.dataview.DataViewListCtrl`
+channel grid that wraps a native list-view per OS (SysListView32 on Windows,
+NSTableView on macOS), read directly by **both NVDA and VoiceOver**, with no
+webview involved:
 - No paging — every channel is populated at once
 - Multi-select (Shift+Arrow for a contiguous block, Ctrl+Space for individual
   rows) drives in-place reordering: move up/down a slot or move-to a chosen
   channel, with the moved block re-selected and focused afterward
+- Channel editing happens in a native wx dialog (F2/Enter); the grid itself is
+  read-only/navigable
 - A single native menu bar carries both mnemonics and Ctrl-combo accelerators
   together (no WebView2 to fight); F1 lists every shortcut
 
-**Webview UI (macOS default)** — an `AccessibleWebView` hosting an editable
-`AccessibleGrid` (from `wx-accessible-grid`), read directly by VoiceOver:
+**Webview UI (`--webview`, retired)** — an `AccessibleWebView` hosting an
+editable `AccessibleGrid` (from `wx-accessible-grid`), read by VoiceOver; no
+longer the default on any platform, kept working while retired (intended future
+role: help/docs rendering):
 - Real in-place cell editing (text/combo) with CHIRP's own validation
 - Select All Channels (Ctrl+A) / Clear Selection on the Edit menu; row actions
   (select, edit, delete) via the Applications key, Shift+F10, or VoiceOver's
@@ -126,23 +135,24 @@ read directly by NVDA, with no webview involved:
 ## Architecture
 
 ```
-main.py                  Entry point: parse_mode() picks native vs. webview by
-                         platform (webview on macOS, native elsewhere);
-                         --webview/--native override either way.
+main.py                  Entry point: parse_mode() returns the native UI on
+                         every platform; --webview/--native override.
 vrp/
-  native/                 NATIVE UI (default on Windows/Linux): native
-                         wx.ListCtrl grid + wx.MenuBar.
+  native/                 NATIVE UI (the default on every platform): native
+                         wx.dataview.DataViewListCtrl grid + wx.MenuBar.
     app.py                Entry point (vrp.native.app.run).
     main_window.py        MainWindow: menu bar, status bar, grid, and all
                          command handlers.
-    channel_grid.py       ChannelGrid: virtual report-mode wx.ListCtrl (no paging).
+    channel_grid.py       ChannelGrid: wx.dataview.DataViewListCtrl wrapping a
+                         native list-view per OS (SysListView32/NSTableView), so
+                         NVDA and VoiceOver both read it; no paging.
     grid_model.py         Pure data/selection model behind the grid (no wx).
     announce.py           Announcer: status bar + prism speech.
-  app.py                  WEBVIEW UI (default on macOS): wx app/window, native
-                         menu bar (wx-accessible-menubar), AccessibleWebView
-                         host, the editable AccessibleGrid channel view, the
-                         window.vrp.postMessage() bridge, keyboard shortcuts,
-                         and all command handlers.
+  app.py                  WEBVIEW UI (retained behind --webview, retired): wx
+                         app/window, native menu bar (wx-accessible-menubar),
+                         AccessibleWebView host, the editable AccessibleGrid
+                         channel view, the window.vrp.postMessage() bridge,
+                         keyboard shortcuts, and all command handlers.
   views.py                Webview UI: welcome-view rendering. Its read-only
                          paged-table/row-render functions remain as an
                          internal fallback (`if self._grid is None` branches
@@ -189,18 +199,21 @@ build.py                 PyInstaller build script.
 pyproject.toml           uv-managed project definition (Python 3.11 pinned).
 ```
 
-**Native UI (Windows/Linux default):** `vrp/native/main_window.py` binds each
-command straight to a `wx.MenuBar` item — the accelerator in the item's label
-(e.g. `"&Save\tCtrl+S"`) *is* the global shortcut, since a real native menu
-has no WebView2 fighting it for Alt/Ctrl. `vrp/native/channel_grid.py` is a
-virtual `wx.ListCtrl` (`LC_VIRTUAL`) so population is instant at any radio
-size, with no paging. There's no JS bridge: handlers call `chirp_backend`
-directly and push results to the grid (`refresh_numbers`/`rebuild`) and to
-`vrp/native/announce.py`'s `Announcer` (status bar + optional prism speech).
-Several native wx dialogs (edit, bulk ops, find, settings, banks,
-download/upload, preferences) are shared with the webview UI unchanged.
+**Native UI (the default on every platform):** `vrp/native/main_window.py` binds
+each command straight to a `wx.MenuBar` item — the accelerator in the item's
+label (e.g. `"&Save\tCtrl+S"`) *is* the global shortcut, since a real native
+menu has no WebView2 fighting it for Alt/Ctrl. `vrp/native/channel_grid.py` is a
+`wx.dataview.DataViewListCtrl`, which wraps a native list-view per OS
+(SysListView32 on Windows, NSTableView on macOS) so NVDA *and* VoiceOver read
+its rows/cells; it's populated with every channel at once, no paging. Channel
+editing is in a native dialog (F2/Enter), so the grid stays read-only/navigable.
+There's no JS bridge: handlers call `chirp_backend` directly and push results to
+the grid (`refresh_numbers`/`rebuild`) and to `vrp/native/announce.py`'s
+`Announcer` (status bar + optional prism speech). Several native wx dialogs
+(edit, bulk ops, find, settings, banks, download/upload, preferences) are shared
+with the webview UI unchanged.
 
-**Webview UI (macOS default):** the channel grid is `wx-accessible-grid`'s
+**Webview UI (`--webview`, retired):** the channel grid is `wx-accessible-grid`'s
 `AccessibleGrid` (a real, editable `<table role="grid">`, driven by
 `ChannelGridModel`) — VoiceOver reads each cell's name (channel + column
 header + value + control type) composed via `aria-labelledby`, since

@@ -6,6 +6,61 @@ architecture, keyboard map, and CHIRP feature-coverage checklist.
 
 ---
 
+## 2026-06-25 — Native UI is the default on every platform + docs reconciled
+
+**Direction set.** VRP is moving to **native wx controls for everything on both
+Windows and macOS**; the webview is no longer a channel-grid front end. Its
+remaining intended role is rendering in-app **help and documentation** pages
+(where an HTML view is genuinely the right tool). This entry records the code
+changes that already landed (commits #3–#5) and the documentation pass that
+brings every current-state doc in line with them.
+
+**Code (already merged — recorded here for the log):**
+- `feat(native): migrate channel grid to DataViewListCtrl for VoiceOver` (#3).
+  `vrp/native/channel_grid.py` is now a `wx.dataview.DataViewListCtrl` instead of
+  the virtual report-mode `wx.ListCtrl`. The old generic `wx.ListCtrl` backend
+  on macOS exposed nothing to NSAccessibility and was **silent under VoiceOver**
+  (the original reason a separate webview UI existed). `DataViewListCtrl` wraps a
+  real native list-view per OS — SysListView32 (Windows/NVDA) and **NSTableView
+  (macOS/VoiceOver)** — so both screen readers read its rows/cells. Rationale and
+  the candidate-control analysis are in
+  `docs/research/2026-06-24-native-grid-voiceover-feasibility.md`. The grid is
+  populated eagerly (`AppendItem` per row, no paging); editing stays in the
+  native `edit_dialog`, so the grid is read-only/navigable.
+- `feat(native): default to the native UI on every platform` (#5). `main.py`'s
+  `parse_mode()` now returns `"native"` on every platform; `--webview` /
+  `--native` still override. The webview UI (`vrp/app.py`) is retained behind
+  `--webview` while retired.
+- `fix(serial): show driver pre-clone prompts in webview download/upload` (#4).
+
+**Docs reconciled (this pass).** The docs had drifted: `CLAUDE.md`,
+`docs/architecture.md`, and `README.md` still called the native grid a virtual
+`wx.ListCtrl` and named the webview the macOS default, while
+`docs/keyboard-map.md` already described a `DataViewListCtrl`. Updated all of
+them to one consistent story — native `DataViewListCtrl`, read by NVDA *and*
+VoiceOver, default on every platform; webview retained behind `--webview` while
+retired, with help/docs as its intended future role:
+- `CLAUDE.md` — "What This Project Is", the accessible-UI-libraries section,
+  project-structure tree, both Command-Surfaces headers, Accessibility Rule 2
+  (tabular data) and Rule 3 (announcements), and the Bridge-message section.
+- `docs/architecture.md` — intro, the native-UI tree + interaction-model +
+  key-choices sections, and the webview-UI heading/intro.
+- `README.md` — "Why VRP exists", Features (both UI bullets), the architecture
+  tree, the two architecture prose paragraphs, and the quick-start UI note.
+- `docs/keyboard-map.md` — the two-UI intro and both section headings.
+- `docs/superpowers/plans/ROADMAP.md` — the owed VoiceOver pass now targets the
+  native `DataViewListCtrl` grid; the "retire webview" item is unblocked in
+  principle (gated only on that hand pass) and notes the help/docs repurposing.
+
+Historical docs left intact as a record: `PROGRESS_LOG.md` prior entries, the
+`docs/superpowers/plans|specs/2026-06-18-native-ui*` planning docs, and the
+research doc.
+
+**Still owed (the bar):** the on-device **VoiceOver hand pass** on the native
+`DataViewListCtrl` grid on macOS, and a **re-run NVDA pass** on Windows (the
+control NVDA reads changed). The migration is designed to read on both but
+neither has had its confirming hand pass yet.
+
 ## 2026-06-24 — Upload to radio VERIFIED on real hardware
 
 Real-hardware **upload** confirmed working (Baofeng UV-5R Mini over COM4) — the

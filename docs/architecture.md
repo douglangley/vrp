@@ -3,42 +3,51 @@
 Versatile Radio Programmer is a wxPython desktop app that puts an accessible front end
 on the CHIRP radio programming library. It does **not** run a web server.
 
-There are two UIs sharing one backend, because no single channel-grid
-implementation reads correctly on every screen reader (see PROGRESS_LOG.md
-"2026-06-21 — Platform-aware UI default"):
+**The direction is native wx controls for everything, on both Windows and
+macOS.** The channel grid was historically the one control that didn't read on
+every screen reader, which is why a second (webview) UI existed. That blocker is
+solved — the grid is now a `wx.dataview.DataViewListCtrl` that wraps a native
+list-view per OS — so there is one production UI on every platform, with the
+webview retained behind a flag while it is retired:
 
-- **Native UI (`vrp/native/`)** — a native `wx.ListCtrl` channel grid and a
-  native `wx.MenuBar`. No webview, no WebView2, no JS bridge. This is what
-  **NVDA on Windows** reads. Default on Windows and Linux.
+- **Native UI (`vrp/native/`)** — the default on **every platform**. A
+  `wx.dataview.DataViewListCtrl` channel grid and a native `wx.MenuBar`. No
+  webview, no WebView2, no JS bridge. `DataViewListCtrl` wraps a real native
+  control per OS (SysListView32 on Windows, NSTableView on macOS), so **both
+  NVDA on Windows and VoiceOver on macOS** read it directly (see
+  `docs/research/2026-06-24-native-grid-voiceover-feasibility.md` for why the
+  old virtual `wx.ListCtrl` was silent under VoiceOver and this isn't).
 - **Webview UI (`vrp/app.py`)** — an `AccessibleWebView` hosting an editable
   `AccessibleGrid` (from `wx-accessible-grid`) for the channel table, bridged
-  to Python over `window.vrp.postMessage`. This is what **VoiceOver on
-  macOS** reads (the native `wx.ListCtrl` doesn't read correctly under
-  VoiceOver yet). Default on macOS.
+  to Python over `window.vrp.postMessage`. **Retained behind `--webview` while
+  retired**; no longer the default on any platform. Its intended future role is
+  rendering **in-app help and documentation pages** (where an HTML view is the
+  right tool), not the channel grid.
 
-`main.py`'s `parse_mode()` picks the default by `sys.platform`; `--webview`
-or `--native` forces either one regardless of platform. **Neither is
-legacy** — both are actively maintained, and a new command should land on
-both unless it's genuinely specific to one grid's widget API.
+`main.py`'s `parse_mode()` returns the native UI on every platform; `--webview`
+or `--native` forces either one. New channel-grid commands land in the native
+UI; only mirror them into the webview if it must keep working under `--webview`.
 
 Both UIs reuse the same native wx dialogs (edit, bulk operations, find,
 settings, banks, download/upload, preferences) and the same `chirp_backend/`.
 
-## Native UI (default on Windows/Linux)
+## Native UI (the default on every platform)
 
 ```
-main.py  (entry; parse_mode() picks native here unless --webview forces it)
+main.py  (entry; parse_mode() returns native unless --webview forces the webview)
   └─ vrp/native/app.py : run() → MainWindow (wx.Frame)
        ├─ native wx.MenuBar (File / Radio / Channels / Help) — built by
        │    _build_menubar/_add in main_window.py. Each item's label carries
        │    its accelerator (e.g. "&Save\tCtrl+S"); wx wires Alt-mnemonics and
        │    Ctrl-combos automatically — no WebView2 in the way, so none of the
        │    webview UI's #24786 workarounds are needed.
-       ├─ vrp/native/channel_grid.py : ChannelGrid (wx.ListCtrl, LC_VIRTUAL)
-       │    ├─ virtual + multi-select: every channel is populated at once
-       │    │    (no paging); OnGetItemText pulls from vrp/native/grid_model.py
-       │    ├─ EVT_LIST_ITEM_ACTIVATED → on_edit_channel (F2/Enter opens the
-       │    │    native edit dialog, same as the webview UI's per-row button)
+       ├─ vrp/native/channel_grid.py : ChannelGrid (wx.dataview.DataViewListCtrl)
+       │    ├─ wraps a native list-view per OS (SysListView32 / NSTableView), so
+       │    │    NVDA and VoiceOver both read its rows/cells; multi-select; every
+       │    │    channel populated at once (no paging) via AppendItem from
+       │    │    vrp/native/grid_model.py
+       │    ├─ EVT_DATAVIEW_ITEM_ACTIVATED → on_edit_channel (F2/Enter opens the
+       │    │    native edit dialog; the grid itself is read-only/navigable)
        │    └─ Shift+Arrow / Ctrl+Space select a block; Ctrl+Shift+Up/Down/M
        │         move it, re-selecting + focusing the result afterward
        ├─ native wx dialogs (input/editing — first-class NVDA support, SHARED
@@ -57,15 +66,19 @@ main.py  (entry; parse_mode() picks native here unless --webview forces it)
 
 ### Interaction model
 
-- **Grid is virtual and unpaged.** `wx.ListCtrl` with `LC_VIRTUAL` populates
-  instantly regardless of radio size (`SetItemCount` + `OnGetItemText`), so
-  there's no page-by-page reading and no "channels per page" preference (the
-  webview UI's channels-per-page preference is vestigial — see below).
+- **Grid is unpaged.** The `DataViewListCtrl` is populated with every channel at
+  once (`AppendItem` per row from `grid_model.build_rows`), so there's no
+  page-by-page reading and no "channels per page" preference (the webview UI's
+  channels-per-page preference is vestigial — see below). The native list-view
+  handles 500+ rows without paging; if eager population ever became a problem,
+  `DataViewCtrl` + a `DataViewVirtualListModel` is the virtualized form (see the
+  migration sketch in the research doc).
 - **Editing still happens in native wx dialogs**, not in-grid: activating a
   row (F2/Enter) opens `edit_dialog.EditChannelDialog`, same dialog the
-  webview UI uses. Reordering (move up/down/to) happens directly on the
-  grid's selection instead, since `wx.ListCtrl` selection/focus is cheap to
-  manage without re-reading the whole table to a screen reader.
+  webview UI uses. The grid itself is read-only/navigable. Reordering (move
+  up/down/to) happens directly on the grid's selection instead, since
+  `DataViewListCtrl` selection/focus is cheap to manage without re-reading the
+  whole table to a screen reader.
 - **One command surface, not three.** The webview UI needs a menu bar,
   in-page buttons, and a separate JS shortcut map because a focused WebView2
   ate Alt/Ctrl accelerators (wx #24786). A real `wx.MenuBar` doesn't have that
@@ -79,13 +92,17 @@ main.py  (entry; parse_mode() picks native here unless --webview forces it)
 
 ### Key choices and why
 
-- **Native `wx.ListCtrl` for NVDA.** A native `wx.ListCtrl` and `wx.MenuBar`
-  get NVDA support, Alt/Ctrl accelerators, and unlimited-size population for
-  free from wxWidgets itself — no JS bridge, no paging, no fight with
-  WebView2 swallowing keyboard input (wx #24786). The tradeoff, found the
-  hard way (see PROGRESS_LOG.md "2026-06-21 — Platform-aware UI default"): it
-  doesn't read correctly under VoiceOver, which is why it isn't the default
-  on macOS.
+- **Native `wx.dataview.DataViewListCtrl` for NVDA *and* VoiceOver.** A
+  native-backed list-view and `wx.MenuBar` get screen-reader support, Alt/Ctrl
+  accelerators, and large-list population for free from wxWidgets itself — no JS
+  bridge, no paging, no fight with WebView2 swallowing keyboard input (wx
+  #24786). `DataViewListCtrl` wraps SysListView32 on Windows and **NSTableView
+  on macOS**, both of which carry their platform's full accessibility table
+  implementation, so this control reads under VoiceOver where the earlier
+  generic-backed `wx.ListCtrl` was silent (see PROGRESS_LOG.md "2026-06-21 —
+  Platform-aware UI default" for the original ListCtrl regression and
+  `docs/research/2026-06-24-native-grid-voiceover-feasibility.md` for the fix).
+  That is why the native UI is now the default on every platform.
 - **Dialogs and `chirp_backend` are unchanged.** The native UI is a
   presentation layer over the same validated backend and the same native wx
   dialogs the webview UI already used for input — only the channel-grid host
@@ -99,10 +116,15 @@ main.py  (entry; parse_mode() picks native here unless --webview forces it)
   I/O runs off the UI thread; progress is marshalled back with `wx.CallAfter`
   → `self.announce.announce(...)`.
 
-## Webview UI (default on macOS)
+## Webview UI (retained behind `--webview`, retired)
+
+No longer the default on any platform; reachable only with `--webview`. Kept
+working while the webview channel-grid stack is retired, and as the basis for
+the webview's intended future role — rendering in-app help and documentation
+pages. Don't add new channel-grid features here.
 
 ```
-main.py --webview   (or: parse_mode() picks webview here by default on macOS)
+main.py --webview   (parse_mode() never selects the webview on its own anymore)
   └─ vrp/app.py : VRPApp / MainWindow (wx.Frame)
        ├─ native wx menu bar (File / Edit / Radio / Channels / Help); keyboard
        │    access (Alt / Alt+mnemonic / F10) via wx-accessible-menubar's

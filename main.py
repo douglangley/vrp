@@ -66,12 +66,15 @@ def main() -> None:
     group.add_argument(
         "--webview",
         action="store_true",
-        help="Force the AccessibleWebView UI (the VoiceOver-friendly web grid).",
+        help="Force the AccessibleWebView UI (retained while the webview is retired).",
     )
     group.add_argument(
         "--native",
         action="store_true",
-        help="Force the native wx.ListCtrl UI (the NVDA-friendly native grid).",
+        help=(
+            "Force the native wx.dataview.DataViewListCtrl UI (read by NVDA and "
+            "VoiceOver; the default on every platform)."
+        ),
     )
     parser.add_argument(
         "file",

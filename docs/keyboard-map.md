@@ -4,18 +4,18 @@ Goal: **everything** in the app is reachable and operable from the keyboard,
 including the memory grid. This file is the single source of truth for
 shortcuts and is updated as each phase lands.
 
-There are two UIs (see CLAUDE.md "What This Project Is"), picked by platform
-— neither is legacy: the **native UI** (`vrp/native/`, default on
-Windows/Linux) documented first below, and the **webview UI** (`vrp/app.py`,
-default on macOS) documented further down. `--webview`/`--native` force
-either one regardless of platform. Conventions for both:
+There are two UIs (see CLAUDE.md "What This Project Is"): the **native UI**
+(`vrp/native/`, the default on every platform) documented first below, and the
+**webview UI** (`vrp/app.py`, retained behind `--webview` while retired)
+documented further down. `--webview`/`--native` force either one. Conventions
+for both:
 
 - Global commands use `Ctrl`+key (or `Alt` for menus) to avoid clashing with
   NVDA browse-mode single-letter quick navigation.
 - Inside the grid, single-letter keys are reserved for the screen reader; grid
   commands use arrows, Enter/F2, and `Ctrl`/`Alt` combinations.
 
-## Native UI (default on Windows/Linux)
+## Native UI (the default on every platform)
 
 A real native `wx.MenuBar` carries Alt-mnemonics and Ctrl-combo accelerators
 together in the same menu item — there's no WebView2 in the way, so there's
@@ -101,13 +101,14 @@ open — which is identical regardless of which UI opened the dialog).
 
 ---
 
-## Webview UI (default on macOS)
+## Webview UI (retained behind `--webview`, retired)
 
-The sections below describe `vrp/app.py`, the default UI on macOS (VoiceOver
-reads its `AccessibleGrid` channel table directly; the native UI's
-`wx.ListCtrl` doesn't read correctly under VoiceOver yet — see
-PROGRESS_LOG.md "2026-06-21 — Platform-aware UI default"). New commands
-should land on both UIs to keep them at parity.
+The sections below describe `vrp/app.py`, reachable only with `--webview` and no
+longer the default on any platform. It is kept working while the webview
+channel-grid stack is retired (the native UI's `DataViewListCtrl` now reads
+under VoiceOver too — see PROGRESS_LOG.md "2026-06-25 — Native UI is the default
+on every platform"). New commands land in the native UI; mirror them here only
+if the webview must keep working under `--webview`.
 
 ### Native menu bar + in-page shortcuts
 
