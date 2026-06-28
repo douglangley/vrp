@@ -103,6 +103,18 @@ def control_value(ctrl) -> str:
     return ctrl.GetValue()
 
 
+def _offset_suggestion_message(mhz: str) -> str:
+    """The announcement for an auto-filled offset. Names the duplex step because
+    the offset is inert until the user picks a +/- direction."""
+    return f"Suggested offset {mhz} MHz — set Duplex to plus or minus to use it."
+
+
+def _is_blank_offset(text: str) -> bool:
+    """Whether an offset field is effectively unset (blank / zero)."""
+    text = text.strip()
+    return not text or text in ("0", "0.0")
+
+
 class EditChannelDialog(wx.Dialog):
     """Modal editor for a single channel's fields."""
 
@@ -188,8 +200,7 @@ class EditChannelDialog(wx.Dialog):
 
         if not offset_ctrl.IsEnabled():
             return  # immutable offset — leave it alone
-        current = control_value(offset_ctrl).strip()
-        if current and current not in ("0", "0.0"):
+        if not _is_blank_offset(control_value(offset_ctrl)):
             return  # respect an offset the user/radio already set
 
         offset_hz = bandplan.suggest_offset_for_freq_str(freq_str)
@@ -199,7 +210,7 @@ class EditChannelDialog(wx.Dialog):
             # Announce it: the user has tabbed past the Offset field, so a screen
             # reader won't read the change on its own. Show it on the status line
             # (sighted) and speak it (don't interrupt the reader's field read).
-            message = f"Suggested offset {mhz} MHz — set Duplex to plus or minus to use it."
+            message = _offset_suggestion_message(mhz)
             self._status.SetLabel(message)
             _speaker.speak(message)
 
@@ -261,6 +272,30 @@ class EditCellDialog(wx.Dialog):
         self.SetSizerAndFit(outer)
         self.Bind(wx.EVT_BUTTON, self._on_ok, id=wx.ID_OK)
         self._ctrl.SetFocus()
+
+        # Editing the Offset cell on its own: there's no Frequency field here, so
+        # take the band's standard repeater shift from the channel's own
+        # frequency and pre-fill it when Offset is blank — focused and selected so
+        # the user can accept it with Enter or type over it.
+        if col.name == "offset":
+            self._suggest_offset(mem)
+
+    def _suggest_offset(self, mem) -> None:
+        from chirp_backend import bandplan
+
+        if not self._ctrl.IsEnabled():
+            return
+        if not _is_blank_offset(control_value(self._ctrl)):
+            return  # respect an offset already set
+        offset_hz = bandplan.suggest_offset_hz(getattr(mem, "freq", 0))
+        if not offset_hz:
+            return
+        mhz = bandplan.offset_hz_to_mhz_str(offset_hz)
+        self._ctrl.SetValue(mhz)
+        self._ctrl.SelectAll()  # type to replace, or Enter to accept
+        message = _offset_suggestion_message(mhz)
+        self._status.SetLabel(message)
+        _speaker.speak(message)
 
     def get_value(self) -> str:
         return control_value(self._ctrl)

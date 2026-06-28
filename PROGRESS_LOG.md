@@ -6,6 +6,29 @@ architecture, keyboard map, and CHIRP feature-coverage checklist.
 
 ---
 
+## 2026-06-28 — Offset suggestion in the single-cell (F2) editor too
+
+The band-plan offset suggestion (entries below) was only in the full
+`EditChannelDialog`. It now also fires in the single-cell `EditCellDialog` —
+**F2 on the Offset cell**. **NVDA-verified on Windows.**
+
+- **Different trigger, same idea.** The single-cell editor has no Frequency
+  field, so it reads the channel's own `mem.freq` and pre-fills the band's
+  standard repeater shift **on open** (you opened it specifically to set the
+  offset), where the full dialog fills on a frequency *change*. The value is
+  pre-filled, focused, and **selected** so the user can accept it with Enter or
+  type over it.
+- Same guards: only when the Offset is blank/zero (never overwrites an existing
+  offset), only when the band has a standard shift (HF stays blank), magnitude
+  only (Duplex untouched). Announced via status line + prism with the same
+  message ("Suggested offset 0.6 MHz — set Duplex to plus or minus to use it.").
+- Factored two shared helpers in `vrp/edit_dialog.py` (`_offset_suggestion_message`,
+  `_is_blank_offset`) so the full and single-cell editors stay in sync.
+
+Tests: `test_edit_cell_offset_prefills_band_suggestion` in
+`tests/test_edit_cell.py` (suggest on blank, none on HF, existing offset kept).
+Full suite 192 passing.
+
 ## 2026-06-28 — Band-plan region preference for offset suggestions
 
 The offset suggestion (entry below) was hardcoded to the North American band

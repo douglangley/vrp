@@ -170,6 +170,38 @@ def test_edit_dialog_suggests_offset_on_frequency_change(app):
         radio_backend.unload()
 
 
+def test_edit_cell_offset_prefills_band_suggestion(app):
+    from vrp.edit_dialog import EditCellDialog, control_value
+
+    radio_backend.load_image(IMAGE)
+    try:
+        frame = wx.Frame(None)
+        offcol = _col("offset")
+
+        def open_offset(freq_hz, duplex="", offset=0):
+            mem = radio_backend.get_memory(2)
+            mem.empty = False
+            mem.freq, mem.duplex, mem.offset = freq_hz, duplex, offset
+            dlg = EditCellDialog(frame, 2, mem, offcol)
+            value = control_value(dlg._ctrl)
+            status = dlg._status.GetLabel()
+            dlg.Destroy()
+            return value, status
+
+        # Blank offset on a 2 m channel -> pre-filled 0.6 and announced.
+        value, status = open_offset(146_940_000)
+        assert value == "0.6"
+        assert status.startswith("Suggested offset 0.6 MHz")
+        # 70 cm -> 5; HF -> nothing.
+        assert open_offset(442_500_000)[0] == "5"
+        assert open_offset(7_250_000) == ("", "")
+        # An offset already set is left alone (no overwrite, no announce).
+        assert open_offset(146_940_000, duplex="-", offset=1_000_000) == ("1", "")
+        frame.Destroy()
+    finally:
+        radio_backend.unload()
+
+
 def test_cell_display_matches_model_text(app):
     from vrp.native.channel_grid import ChannelGrid
     from vrp.native import grid_model
