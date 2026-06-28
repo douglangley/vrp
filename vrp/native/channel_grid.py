@@ -105,8 +105,26 @@ class ChannelGrid(wx.Panel):
             self._list.Bind(dv.EVT_DATAVIEW_ITEM_ACTIVATED, on_activate)
         if on_context_menu is not None:
             self._list.Bind(dv.EVT_DATAVIEW_ITEM_CONTEXT_MENU, on_context_menu)
+            # The generic DataViewCtrl on Windows raises the context-menu event
+            # for a right-click and the Applications key, but NOT for Shift+F10 —
+            # so wire that explicitly. Bound after AccessibleGrid's own
+            # EVT_KEY_DOWN (the Left/Right cell cursor), so ours runs first; it
+            # Skips everything except Shift+F10, leaving the cursor handler intact.
+            self._context_menu_cb = on_context_menu
+            self._list.Bind(wx.EVT_KEY_DOWN, self._on_shift_f10)
         if on_selection_changed is not None:
             self._list.Bind(dv.EVT_DATAVIEW_SELECTION_CHANGED, on_selection_changed)
+
+    def _on_shift_f10(self, event: wx.KeyEvent) -> None:
+        """Open the row context menu on Shift+F10 (the generic DataViewCtrl
+        doesn't raise the context-menu event for it). Routes to the same callback
+        the Applications key and right-click use; consumes the key so the control
+        doesn't also act on it. Everything else is skipped so AccessibleGrid's
+        Left/Right cell cursor keeps working."""
+        if event.GetKeyCode() == wx.WXK_F10 and event.ShiftDown():
+            self._context_menu_cb(event)
+            return
+        event.Skip()
 
     def SetFocus(self) -> None:  # noqa: N802 (wx API)
         """Focus the inner list — a native row is only spoken when it has focus."""

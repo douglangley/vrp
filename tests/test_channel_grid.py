@@ -43,6 +43,47 @@ def test_grid_populates_and_maps_selection(app):
         radio_backend.unload()
 
 
+def test_shift_f10_routes_to_context_menu(app):
+    """Shift+F10 must open the row context menu — the generic Windows
+    DataViewCtrl doesn't raise the context-menu event for it, so ChannelGrid
+    wires the key itself. Other keys are skipped so the cell cursor still works."""
+    from vrp.native.channel_grid import ChannelGrid
+
+    class FakeKey:
+        def __init__(self, key, shift):
+            self._key, self._shift, self.skipped = key, shift, False
+
+        def GetKeyCode(self):  # noqa: N802 (wx API parity)
+            return self._key
+
+        def ShiftDown(self):  # noqa: N802 (wx API parity)
+            return self._shift
+
+        def Skip(self):  # noqa: N802 (wx API parity)
+            self.skipped = True
+
+    calls = []
+    frame = wx.Frame(None)
+    try:
+        grid = ChannelGrid(frame, on_context_menu=lambda e: calls.append(e))
+
+        shift_f10 = FakeKey(wx.WXK_F10, True)
+        grid._on_shift_f10(shift_f10)
+        assert len(calls) == 1  # context menu opened
+        assert not shift_f10.skipped  # consumed, not passed on
+
+        # A plain F10 (no Shift) and an unrelated key must NOT open the menu and
+        # must be skipped so other handlers (e.g. the Left/Right cursor) see them.
+        plain_f10 = FakeKey(wx.WXK_F10, False)
+        grid._on_shift_f10(plain_f10)
+        other = FakeKey(ord("A"), False)
+        grid._on_shift_f10(other)
+        assert len(calls) == 1  # unchanged
+        assert plain_f10.skipped and other.skipped
+    finally:
+        frame.Destroy()
+
+
 def test_main_window_announces_ready_on_startup(app):
     from vrp.native.main_window import MainWindow
 
