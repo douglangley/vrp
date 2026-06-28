@@ -6,6 +6,89 @@ architecture, keyboard map, and CHIRP feature-coverage checklist.
 
 ---
 
+## 2026-06-28 — Undo/redo for channel edits (Ctrl+Z / Ctrl+Y / Ctrl+Shift+Z)
+
+**Feature.** Every channel-memory operation is now undoable and redoable from the
+native UI. Designed and built in six steps against the committed plan
+(`docs/superpowers/plans/2026-06-27-undo-history.md`).
+
+**How it works — one choke point.** Every channel write funnels through the loaded
+radio's `set_memory`/`erase_memory` (called directly by `memory_ops._set_mem`/
+`_erase_mem`), so undo is added by instrumenting that single point rather than each
+of the ~12 ops:
+- **`chirp_backend/undo.py` `UndoManager`** (`953bbc0`) — pure, framework-agnostic
+  (radio access injected): a ref-counted `transaction(label)` captures a
+  per-channel **pre-image** on first write and an **after-image** at commit; one
+  transaction = one history entry holding both. Bounded undo + redo stacks; a new
+  op clears the redo branch; restores run with recording suspended.
+- **Recorder hook** (`06a77ef`) — `radio.py` `_install_undo(radio)` wraps the CHIRP
+  radio's `set_memory`/`erase_memory` so each write records into a module-singleton
+  `get_undo_manager()`; installed on load/download, dropped on close; restores go
+  through the originals + `invalidate_cache`. Guarded so a driver that refuses
+  attribute assignment just disables undo.
+- **`@undo.records` decorator** (`23e628d`) — wraps all 13 `memory_ops` mutators in
+  a transaction labelled from the op's result message; a not-ok result or exception
+  aborts (no entry); nested ops (`delete_and_shift`→`delete_range`) collapse to one
+  entry.
+
+**UI** (`6a57b89`, alias `f1371f8`): `Ctrl+Z` undo, `Ctrl+Y` / `Ctrl+Shift+Z` redo,
+in the **Edit menu** (Undo/Redo at top) and the row **context menu** — both
+relabelled with the operation they'd act on ("Undo Deleted channel 5"). Handlers
+rebuild the grid, select+focus the affected block, and announce "Undone/Redone:
+{op}. Now on channel N." (or "Nothing to undo/redo"). Gated on a loaded radio only
+so the accelerators stay live. The now-false "This cannot be undone." confirms
+became "You can undo this with Ctrl+Z." `Ctrl+Shift+Z` is a frame
+`wx.AcceleratorTable` entry, verified on device not to disturb the menu
+accelerators.
+
+**Scope:** channel-memory ops only (edit, delete, delete+shift, insert, move,
+copy, cut/paste, sort, arrange, import). Radio Settings, banks, and download are
+**not** undoable; the history clears on load/close/download.
+
+**Verification:** ~174 tests pass (`tests/test_undo.py` manager+recorder+op
+round-trips; `tests/test_undo_ui.py` handlers). Confirmed end-to-end under NVDA on
+Windows. **macOS/VoiceOver hand pass is the remaining follow-up.**
+
+## 2026-06-27 — Native grid: row selection + cut/copy/paste clipboard (and grid fixes)
+
+**Feature.** Whole-row **selection and rearrange with a clipboard** on the native
+grid, on top of the existing Move up/down/to (plan:
+`docs/superpowers/plans/2026-06-27-grid-row-rearrange-clipboard.md`). **Rows only —
+cells are never moved.**
+
+- **Selection model** (`f28c402`). An NVDA spike confirmed the generic Windows
+  DataViewCtrl already does `Up/Down`, `Shift+Arrow` (contiguous), and `Ctrl+Arrow`
+  (move focus without changing selection) — all NVDA-correct. The only gap was
+  `Space`/`Ctrl+Space`, now wired in `channel_grid.py` to toggle the focused row
+  using the *real* selection (avoiding the `selected_rows` empty-fallback), with a
+  "Selected/Deselected channel N, K selected" announce.
+- **Clipboard** (`98ec03c` backend, `0f4d4ea` handlers, `3e44abf` menus). A new
+  `memory_ops.paste_block(mems, dest, *, cut_from, make_room)` writes a snapshot
+  block: overwrite by default; `make_room` shifts occupied channels down to insert
+  (atomic tail-room pre-check); `cut_from` erases sources first so overlap is safe.
+  `MainWindow` gets an in-app snapshot clipboard: `Ctrl+C` copy, `Ctrl+X` cut
+  (deferred — moves on paste, then clears), `Ctrl+V` paste at the focused channel.
+  On an occupied destination a native dialog offers **Overwrite / Make room /
+  Cancel**. A new **Edit menu** (Select All / Clear Selection / Copy / Cut / Paste)
+  plus the same in the context menu; menu count 4→5.
+
+**Smaller grid work the same day:**
+- **Per-cell `F2` re-announce** (`bbd9a74`): after a single-cell edit, speak the
+  new value as "<value>, <column>" (the cursor's form) instead of "channel
+  updated".
+- **`Shift+F10` context menu** (`54c24cf`): the generic Windows DataViewCtrl
+  doesn't raise the context-menu event for Shift+F10, so `ChannelGrid` wires it.
+- **Doc correction** (`6629314`): `DataViewListCtrl` is wx's *generic* custom-drawn
+  control on Windows (read by NVDA via wx's MSAA support), **not** SysListView32;
+  native (NSTableView) only on macOS. Corrected across the docs.
+- **`--webview` retired gracefully** (`85d1c8f`): the webview channel grid no longer
+  imports against wx-accessible-grid 0.8.0; deleted the dead `channel_grid_model.py`
+  / `grid_preview.py`, kept `vrp/app.py` for the future help/docs role, and made
+  `main.py --webview` warn and fall back to the native UI.
+
+**Verification:** ~150 tests pass; the selection, clipboard, conflict dialog, and
+context-menu flows were confirmed under NVDA on Windows.
+
 ## 2026-06-27 — Native channel grid moved onto wx-accessible-grid 0.8.0 (+ Left/Right cell cursor)
 
 **Direction realized.** The native channel grid no longer uses VRP's bespoke
