@@ -81,3 +81,43 @@ def test_set_region_ignores_unknown():
     bandplan.set_region("north_america")
     bandplan.set_region("atlantis")  # not a real plan
     assert bandplan.get_region() == "north_america"
+
+
+class _Feats:
+    """Minimal stand-in for chirp RadioFeatures (just what suggest needs)."""
+
+    def __init__(self, modes, steps, tones=()):
+        self.valid_modes = list(modes)
+        self.valid_tuning_steps = list(steps)
+        self.valid_tones = list(tones)
+
+
+def test_band_defaults_mode_and_step():
+    bandplan.set_region("north_america")
+    f = _Feats(modes=["FM", "NFM"], steps=[2.5, 5.0, 6.25, 12.5])
+    # 145.30 is in the NA FM repeater-output sub-band -> mode FM; 5 kHz step.
+    d = bandplan.suggest_band_defaults(_mhz(145.30), f)
+    assert d.get("mode") == "FM"
+    assert d.get("tuning_step") == "5.0"  # conventional, not finest-first 2.5
+
+
+def test_band_defaults_prefers_conventional_step_over_finest():
+    bandplan.set_region("north_america")
+    # valid_steps listed finest-first; 146.94 is a clean 5 kHz channel.
+    f = _Feats(modes=["FM"], steps=[2.5, 5.0, 10.0])
+    assert bandplan.suggest_band_defaults(_mhz(146.94), f)["tuning_step"] == "5.0"
+
+
+def test_band_defaults_step_falls_to_finer_when_needed():
+    bandplan.set_region("north_america")
+    f = _Feats(modes=["FM"], steps=[5.0, 6.25, 12.5])
+    # 145.7125 is not a 5 kHz multiple -> needs 12.5.
+    assert bandplan.suggest_band_defaults(_mhz(145.7125), f)["tuning_step"] == "12.5"
+
+
+def test_band_defaults_empty_for_no_freq_or_unparseable():
+    f = _Feats(modes=["FM"], steps=[5.0])
+    assert bandplan.suggest_band_defaults(0, f) == {}
+    assert bandplan.suggest_band_defaults_for_freq_str("", f) == {}
+    assert bandplan.suggest_band_defaults_for_freq_str("nope", f) == {}
+    assert bandplan.suggest_band_defaults_for_freq_str("145.30", f)["mode"] == "FM"

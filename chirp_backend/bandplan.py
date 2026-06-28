@@ -190,3 +190,80 @@ def offset_hz_to_mhz_str(offset_hz: int) -> str:
     matching ``col_defs.OffsetColumn.format_value`` (trimmed to 4 decimals)."""
     mhz = offset_hz / 1_000_000
     return f"{mhz:.4f}".rstrip("0").rstrip(".")
+
+
+def suggest_band_defaults(freq_hz: int, features) -> dict:
+    """Band-plan defaults for **mode, tuning step, and tone** at ``freq_hz`` for a
+    radio with ``features`` — the "auto edits" fields. Returns {field: value_str}
+    (editor/column string form) for the fields it can resolve, empty when none
+    apply. Mirrors the relevant parts of CHIRP's ``memedit._set_memory_defaults``.
+
+    Deliberately excludes **duplex** (the +/- direction is the user's call) and
+    **offset** (filled separately, magnitude-only) — see ``suggest_offset_hz``.
+    """
+    if not freq_hz:
+        return {}
+    try:
+        plans = _band_plans()
+    except Exception:  # noqa: BLE001 — never let a band-plan import break editing
+        LOG.warning("Band plan unavailable; no defaults", exc_info=True)
+        return {}
+    from chirp import chirp_common
+
+    freq_hz = int(freq_hz)
+    defaults = plans.get_defaults_for_frequency(freq_hz)
+    result: dict[str, str] = {}
+
+    # Mode: the band's default, only if this radio supports it.
+    valid_modes = list(features.valid_modes or [])
+    if defaults.mode and defaults.mode in valid_modes:
+        result["mode"] = defaults.mode
+
+    # Tuning step: the band's default if supported and the freq lands on it,
+    # otherwise the simplest step that represents the frequency exactly.
+    valid_steps = list(features.valid_tuning_steps or [])
+    want_step = None
+    if defaults.step_khz and defaults.step_khz in valid_steps and \
+            freq_hz % int(defaults.step_khz * 1000) == 0:
+        want_step = defaults.step_khz
+    else:
+        # required_step returns the first step in list order that fits; a radio's
+        # valid_steps is often ordered finest-first (2.5, 5, ...), which picks an
+        # unnecessarily fine step (2.5 on a 2 m simplex). CHIRP's default ordering
+        # prefers the conventional 5/10/12.5; use that, constrained to supported
+        # steps, and only fall back to the radio's order if none of those fit.
+        try:
+            preferred = chirp_common.required_step(freq_hz)
+        except Exception:  # noqa: BLE001
+            preferred = None
+        if preferred is not None and preferred in valid_steps:
+            want_step = preferred
+        else:
+            try:
+                want_step = chirp_common.required_step(freq_hz, valid_steps or None)
+            except Exception:  # noqa: BLE001 — no representable step -> skip
+                want_step = None
+    if want_step is not None:
+        # Match the Step column's str(step) form so the Choice can select it.
+        match = next((s for s in valid_steps if s == want_step), want_step)
+        result["tuning_step"] = str(match)
+
+    # Tone: only when the band plan specifies one and the radio supports it.
+    valid_tones = list(features.valid_tones or [])
+    if defaults.tones and defaults.tones[0] in valid_tones:
+        result["rtone"] = str(defaults.tones[0])
+
+    return result
+
+
+def suggest_band_defaults_for_freq_str(freq_str: str, features) -> dict:
+    """:func:`suggest_band_defaults` from a display MHz string (editor field)."""
+    if not freq_str or not freq_str.strip():
+        return {}
+    from chirp import chirp_common
+
+    try:
+        freq_hz = chirp_common.parse_freq(freq_str.strip())
+    except Exception:  # noqa: BLE001 — partial/invalid input -> nothing
+        return {}
+    return suggest_band_defaults(freq_hz, features)

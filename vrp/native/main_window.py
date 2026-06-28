@@ -369,8 +369,11 @@ class MainWindow(wx.Frame):
             return
         from vrp.edit_dialog import EditChannelDialog
         from chirp_backend import memory_ops
+        from vrp.config import get_config
 
-        with EditChannelDialog(self, number, mem, state.features) as dlg:
+        apply_defaults = bool(get_config().get("auto_band_defaults", False))
+        with EditChannelDialog(self, number, mem, state.features,
+                               apply_band_defaults=apply_defaults) as dlg:
             if dlg.ShowModal() != wx.ID_OK:
                 self.grid.select_channels([number])
                 self.grid.focus_channel(number)
@@ -1313,6 +1316,7 @@ class MainWindow(wx.Frame):
             "speak_status_messages": bool(cfg.get("speak_status_messages", False)),
             "recent_files_count": cfg.recent_count(),
             "bandplan_region": cfg.get("bandplan_region", bandplan.DEFAULT_REGION),
+            "auto_band_defaults": bool(cfg.get("auto_band_defaults", False)),
         }
         dlg = PreferencesDialog(self, current)
         if dlg.ShowModal() != wx.ID_OK:
@@ -1325,6 +1329,7 @@ class MainWindow(wx.Frame):
         cfg.set("speak_status_messages", values["speak_status_messages"])
         cfg.set_recent_count(values["recent_files_count"])
         cfg.set("bandplan_region", values["bandplan_region"])
+        cfg.set("auto_band_defaults", values["auto_band_defaults"])
         bandplan.set_region(values["bandplan_region"])  # takes effect immediately
         self._refresh_recent_menu()
         self.announce.announce("Preferences saved.")

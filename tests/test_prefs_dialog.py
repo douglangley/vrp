@@ -38,6 +38,26 @@ def test_region_choice_round_trips(app):
         frame.Destroy()
 
 
+def test_auto_band_defaults_checkbox_round_trips(app):
+    from vrp.prefs_dialog import PreferencesDialog
+
+    frame = wx.Frame(None)
+    try:
+        dlg = PreferencesDialog(frame, {
+            "speak_status_messages": False,
+            "recent_files_count": 9,
+            "bandplan_region": "north_america",
+            "auto_band_defaults": True,
+        })
+        assert dlg.auto_defaults.GetValue() is True
+        assert dlg.get_values()["auto_band_defaults"] is True
+        dlg.auto_defaults.SetValue(False)
+        assert dlg.get_values()["auto_band_defaults"] is False
+        dlg.Destroy()
+    finally:
+        frame.Destroy()
+
+
 def test_unknown_saved_region_falls_back_to_default(app):
     from vrp.prefs_dialog import PreferencesDialog
     from chirp_backend.bandplan import DEFAULT_REGION

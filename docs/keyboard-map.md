@@ -347,7 +347,10 @@ Settings persist in a JSON file under the user config dir (atomic writes;
 corrupt/missing falls back to defaults). File ▸ Preferences… (a native dialog)
 has **Recently opened files to show** (0–9; 0 hides the Open Recent submenu),
 **Band plan (region)** (North America / Australia / IARU R1–R2–R3; picks which
-CHIRP band plan supplies the editor's suggested repeater offsets), and
+CHIRP band plan supplies the editor's suggested repeater offsets), **Apply
+band-plan defaults** (off by default; when on, entering a frequency also fills
+mode/tuning step/tone from the band plan — the offset is suggested regardless,
+and the +/- duplex direction is always left to you), and
 **Speak status messages aloud** (off by default;
 gates the *supplemental* prism speech — the screen reader always reads the live
 region regardless). File ▸ Open Recent ▸ lists the last 8 opened images

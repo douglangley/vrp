@@ -63,7 +63,7 @@ update (`git pull` ./chirp) in case new dialogs appear.
 | Query: RepeaterBook              | 7         | ◐ (needs dynamic country→state cascade) |
 | Query: RadioReference            | 7         | ◐ (needs credentials/login form) |
 | Query: przemienniki.net / .eu    | 7         | ◐ (needs band/mode code mapping + coords) |
-| Auto edits toggle                | 8         | ☐      |
+| Auto edits toggle                | 8         | ☑ (offset always-on; mode/step/tone via Preferences ▸ Apply band-plan defaults; duplex intentionally manual) |
 | Select bandplan                  | 8         | ☐      |
 
 ## Editors / dialogs
@@ -85,9 +85,11 @@ update (`git pull` ./chirp) in case new dialogs appear.
   implemented — the channel editor auto-fills the **Offset** field with the
   band's standard repeater shift (from CHIRP's band plan) when you enter a
   frequency and Offset is blank (`chirp_backend/bandplan.py`,
-  `EditChannelDialog._maybe_suggest_offset`). VRP fills the *magnitude only* and
+  `EditChannelDialog._on_frequency_changed`). VRP fills the *magnitude only* and
   leaves the +/- **Duplex** direction to the user (deliberately unlike CHIRP,
-  which also sets duplex/step/mode/tone). The band plan is chosen in **File ▸
-  Preferences ▸ Band plan (region)** (North America / Australia / IARU R1–R2–R3;
-  default North America). The full "Auto edits toggle" row above (band-plan
-  defaults for the *other* fields, with an on/off switch) remains ☐.
+  which also sets duplex). The band plan is chosen in **File ▸ Preferences ▸ Band
+  plan (region)** (North America / Australia / IARU R1–R2–R3; default North
+  America). The *other* band-plan fields — **mode / tuning step / tone** — are
+  filled too when **File ▸ Preferences ▸ Apply band-plan defaults** is on
+  (default off); see `chirp_backend.bandplan.suggest_band_defaults`. Duplex is
+  never auto-set in either case.

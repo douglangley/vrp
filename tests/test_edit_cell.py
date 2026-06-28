@@ -153,7 +153,7 @@ def test_edit_dialog_suggests_offset_on_frequency_change(app):
                 dlg._last_freq = "force-change"
             dlg._controls["freq"][0].SetValue(freq)
             ev = wx.FocusEvent(wx.wxEVT_KILL_FOCUS)
-            dlg._maybe_suggest_offset(ev)
+            dlg._on_frequency_changed(ev)
             value = control_value(offc)
             status = dlg._status.GetLabel()
             dlg.Destroy()
@@ -165,6 +165,42 @@ def test_edit_dialog_suggests_offset_on_frequency_change(app):
         assert fill("146.52")[0] == "0.6"       # simplex still suggests
         assert fill("7.25") == ("", "")         # HF -> no suggestion, no announce
         assert fill("146.94", preset="1.0")[0] == "1.0"  # existing offset kept
+        frame.Destroy()
+    finally:
+        radio_backend.unload()
+
+
+def test_band_defaults_applied_only_when_enabled(app):
+    from vrp.edit_dialog import EditChannelDialog, control_value
+
+    radio_backend.load_image(IMAGE)
+    try:
+        frame = wx.Frame(None)
+        feats = radio_backend.get_state().features
+
+        def change_freq(apply):
+            mem = radio_backend.get_memory(2)
+            mem.empty = False
+            mem.freq, mem.duplex, mem.offset, mem.mode = 0, "", 0, "NFM"
+            dlg = EditChannelDialog(frame, 2, mem, feats,
+                                    apply_band_defaults=apply)
+            dlg._controls["freq"][0].SetValue("145.30")  # NA 2 m FM sub-band
+            dlg._on_frequency_changed(wx.FocusEvent(wx.wxEVT_KILL_FOCUS))
+            mode = control_value(dlg._controls["mode"][0])
+            offset = control_value(dlg._controls["offset"][0])
+            status = dlg._status.GetLabel()
+            dlg.Destroy()
+            return mode, offset, status
+
+        # Off: only the offset suggestion runs; mode left alone.
+        mode, offset, status = change_freq(False)
+        assert offset == "0.6" and mode == "NFM"
+        assert "Band defaults" not in status
+
+        # On: mode also set to the band default, and announced.
+        mode, offset, status = change_freq(True)
+        assert offset == "0.6" and mode == "FM"
+        assert "Band defaults: mode FM" in status
         frame.Destroy()
     finally:
         radio_backend.unload()

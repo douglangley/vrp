@@ -6,6 +6,39 @@ architecture, keyboard map, and CHIRP feature-coverage checklist.
 
 ---
 
+## 2026-06-28 — "Apply band-plan defaults" (mode / tuning step / tone), opt-in
+
+Rounds out the band-plan auto-fill: an opt-in **Preferences** toggle that, when
+on, fills **mode, tuning step, and tone** from CHIRP's band plan as you enter a
+frequency — the fuller form of CHIRP's "auto edits."
+
+- **Decisions (user):** **no duplex** — the +/- direction stays manual (consistent
+  with the offset decision); **off by default** (predictable; opt-in). The offset
+  suggestion is unchanged — always on, magnitude only, independent of this toggle.
+- **`chirp_backend/bandplan.py`.** `suggest_band_defaults(freq_hz, features)` /
+  `suggest_band_defaults_for_freq_str()` return `{mode, tuning_step, rtone}` in
+  the editor's string form, mirroring the relevant parts of CHIRP's
+  `memedit._set_memory_defaults` (minus duplex/offset). For tuning step it prefers
+  the *conventional* step (CHIRP's default 5/10/12.5 ordering) over a radio's
+  finest-first `valid_tuning_steps` (which would pick 2.5 on a clean 2 m channel),
+  falling back to `required_step` against the radio's steps.
+- **`vrp/edit_dialog.py`.** `EditChannelDialog(..., apply_band_defaults=False)`.
+  The frequency-change handler (`_on_frequency_changed`, renamed from
+  `_maybe_suggest_offset`) always fills the offset, and when the flag is on also
+  sets mode/step/tone — **only fields that actually change**, each guarded on the
+  control existing/enabled (e.g. a radio with no tuning-step column is skipped) —
+  then announces a combined summary ("…Band defaults: mode FM, step 5.0."). New
+  `set_control_value` helper (inverse of `control_value`).
+- **`vrp/prefs_dialog.py` / `config.py` / `native/main_window.py`.** A new
+  "Apply band-plan defaults (mode, tuning step, tone)" checkbox (accessible name
+  set), `auto_band_defaults` config default `False`, read into the editor and
+  persisted on Preferences-OK.
+
+Tests: `tests/test_bandplan.py` (mode/step resolution, conventional-step
+preference, finer-step fallback, empty cases); an off-vs-on `EditChannelDialog`
+case in `tests/test_edit_cell.py`; a checkbox round-trip in
+`tests/test_prefs_dialog.py`. Full suite 198 passing.
+
 ## 2026-06-28 — Offset suggestion in the single-cell (F2) editor too
 
 The band-plan offset suggestion (entries below) was only in the full

@@ -5,6 +5,9 @@ Prefs that take effect immediately:
   Open Recent submenu; 1..9 shows that many recent files.
 - Band plan (region) — a wx.Choice of CHIRP's band plans; picks which one
   supplies the channel editor's suggested repeater offsets.
+- Apply band-plan defaults — when on, entering a frequency in the editor also
+  fills mode/tuning step/tone from the band plan (the offset is suggested
+  regardless). Default OFF. The +/- duplex direction is always left to the user.
 - Speak status messages aloud — gates the prism supplemental speech. Default
   OFF: the screen reader already reads the live region, so this is opt-in extra
   speech (the label says so to avoid double-speak confusion).
@@ -59,6 +62,19 @@ class PreferencesDialog(wx.Dialog):
 
         outer.Add(grid, 0, wx.ALL, 12)
 
+        self.auto_defaults = wx.CheckBox(
+            self,
+            label="Apply band-plan defaults (mode, tuning step, tone) when a "
+                  "frequency is entered",
+        )
+        self.auto_defaults.SetName(
+            "Apply band-plan defaults for mode, tuning step and tone when a "
+            "frequency is entered; the offset is suggested regardless and the "
+            "duplex direction is always left to you"
+        )
+        self.auto_defaults.SetValue(bool(current.get("auto_band_defaults", False)))
+        outer.Add(self.auto_defaults, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 12)
+
         self.speak = wx.CheckBox(
             self,
             label="Speak status messages aloud (in addition to your screen reader)",
@@ -78,5 +94,6 @@ class PreferencesDialog(wx.Dialog):
         return {
             "recent_files_count": self.recent_count.GetSelection(),  # index == value (0..9)
             "bandplan_region": self._region_codes[self.region.GetSelection()],
+            "auto_band_defaults": self.auto_defaults.GetValue(),
             "speak_status_messages": self.speak.GetValue(),
         }

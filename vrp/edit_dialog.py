@@ -103,6 +103,15 @@ def control_value(ctrl) -> str:
     return ctrl.GetValue()
 
 
+def set_control_value(ctrl, col, value: str) -> None:
+    """Set a field control to a raw column ``value`` — the inverse of
+    ``control_value`` (maps a raw value to its display label for a wx.Choice)."""
+    if isinstance(ctrl, wx.Choice):
+        _select_choice(ctrl, list(col.choices), value, _label_for(col, value))
+    else:
+        ctrl.SetValue(value)
+
+
 def _offset_suggestion_message(mhz: str) -> str:
     """The announcement for an auto-filled offset. Names the duplex step because
     the offset is inert until the user picks a +/- direction."""
@@ -118,10 +127,15 @@ def _is_blank_offset(text: str) -> bool:
 class EditChannelDialog(wx.Dialog):
     """Modal editor for a single channel's fields."""
 
-    def __init__(self, parent, number: int, mem, features) -> None:
+    def __init__(self, parent, number: int, mem, features, *,
+                 apply_band_defaults: bool = False) -> None:
         empty = bool(getattr(mem, "empty", False))
         title = f"Edit channel {number}" + (" (empty)" if empty else "")
         super().__init__(parent, title=title)
+        # When set (Preferences > Apply band-plan defaults), changing the
+        # Frequency also fills mode/step/tone from the band plan, not just offset.
+        self._apply_band_defaults = apply_band_defaults
+        self._features = features
 
         self._number = number
         self._controls: dict[str, tuple] = {}  # field -> (ctrl, col)
@@ -168,15 +182,16 @@ class EditChannelDialog(wx.Dialog):
         self.SetSizerAndFit(outer)
         self.Bind(wx.EVT_BUTTON, self._on_ok, id=wx.ID_OK)
 
-        # Suggest the standard repeater offset for the band when the user enters
-        # a frequency (and the Offset field is still blank). Magnitude only —
-        # the user picks the +/- duplex direction. Tracked so we only act on a
-        # real change, never retroactively on a channel the user just views.
+        # When the user enters a frequency, fill band-plan values: always the
+        # standard repeater offset (if Offset is blank), and — when the
+        # "Apply band-plan defaults" preference is on — mode/step/tone too.
+        # Magnitude only; the user picks the +/- duplex direction. Tracked so we
+        # only act on a real change, never retroactively on a channel just viewed.
         freq_entry = self._controls.get("freq")
-        if freq_entry is not None and "offset" in self._controls:
+        if freq_entry is not None:
             freq_ctrl = freq_entry[0]
             self._last_freq = control_value(freq_ctrl)
-            freq_ctrl.Bind(wx.EVT_KILL_FOCUS, self._maybe_suggest_offset)
+            freq_ctrl.Bind(wx.EVT_KILL_FOCUS, self._on_frequency_changed)
 
         # Focus the first editable control on open.
         for field, (ctrl, _col) in self._controls.items():
@@ -184,35 +199,70 @@ class EditChannelDialog(wx.Dialog):
                 ctrl.SetFocus()
                 break
 
-    def _maybe_suggest_offset(self, event: wx.FocusEvent) -> None:
-        """Fill the Offset field with the band's standard repeater shift when
-        the frequency changes and Offset is still blank/zero. Never overwrites
-        an existing offset and never changes the duplex direction."""
+    def _on_frequency_changed(self, event: wx.FocusEvent) -> None:
+        """Apply band-plan values when the frequency actually changes: the
+        standard repeater offset (when Offset is blank), and — when enabled —
+        mode/step/tone. Announces what changed; never touches the duplex
+        direction or an offset already set."""
         event.Skip()  # don't consume focus traversal
-        from chirp_backend import bandplan
 
         freq_ctrl = self._controls["freq"][0]
-        offset_ctrl = self._controls["offset"][0]
         freq_str = control_value(freq_ctrl).strip()
         if freq_str == self._last_freq:
             return  # focus left the field but the frequency didn't change
         self._last_freq = freq_str
 
-        if not offset_ctrl.IsEnabled():
-            return  # immutable offset — leave it alone
-        if not _is_blank_offset(control_value(offset_ctrl)):
-            return  # respect an offset the user/radio already set
+        parts: list[str] = []
+        offset_msg = self._fill_offset(freq_str)  # always-on, magnitude only
+        if self._apply_band_defaults:
+            parts.extend(self._fill_band_defaults(freq_str))
 
-        offset_hz = bandplan.suggest_offset_for_freq_str(freq_str)
-        if offset_hz:
-            mhz = bandplan.offset_hz_to_mhz_str(offset_hz)
-            offset_ctrl.SetValue(mhz)
-            # Announce it: the user has tabbed past the Offset field, so a screen
-            # reader won't read the change on its own. Show it on the status line
-            # (sighted) and speak it (don't interrupt the reader's field read).
-            message = _offset_suggestion_message(mhz)
+        if offset_msg or parts:
+            message = offset_msg or ""
+            if parts:
+                joined = ", ".join(parts)
+                message = (message + " " if message else "") + \
+                    f"Band defaults: {joined}."
             self._status.SetLabel(message)
             _speaker.speak(message)
+
+    def _fill_offset(self, freq_str: str) -> str:
+        """Fill a blank Offset with the band's standard shift; return the
+        announcement (or "" when nothing was filled)."""
+        from chirp_backend import bandplan
+
+        entry = self._controls.get("offset")
+        if entry is None or not entry[0].IsEnabled():
+            return ""
+        offset_ctrl = entry[0]
+        if not _is_blank_offset(control_value(offset_ctrl)):
+            return ""  # respect an offset the user/radio already set
+        offset_hz = bandplan.suggest_offset_for_freq_str(freq_str)
+        if not offset_hz:
+            return ""
+        mhz = bandplan.offset_hz_to_mhz_str(offset_hz)
+        offset_ctrl.SetValue(mhz)
+        return _offset_suggestion_message(mhz)
+
+    def _fill_band_defaults(self, freq_str: str) -> list[str]:
+        """Set mode/step/tone from the band plan, overwriting current values.
+        Returns a short phrase per field that actually changed (for announcing)."""
+        from chirp_backend import bandplan
+
+        defaults = bandplan.suggest_band_defaults_for_freq_str(
+            freq_str, self._features)
+        changed: list[str] = []
+        labels = {"mode": "mode", "tuning_step": "step", "rtone": "tone"}
+        for field, value in defaults.items():
+            entry = self._controls.get(field)
+            if entry is None or not entry[0].IsEnabled():
+                continue
+            ctrl, col = entry
+            if control_value(ctrl) == value:
+                continue  # already that value — nothing to announce
+            set_control_value(ctrl, col, value)
+            changed.append(f"{labels.get(field, field)} {value}")
+        return changed
 
     def get_values(self) -> dict:
         """Return {field: value_str} for every enabled, editable control."""
