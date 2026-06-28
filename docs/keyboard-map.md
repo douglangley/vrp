@@ -37,7 +37,7 @@ arrow keys move across top-level menus; NVDA reads it like any native app menu.
 | File | Preferences… | — | |
 | File | Exit | `Ctrl+Q` | |
 | Edit | Undo | `Ctrl+Z` | needs a loaded radio; reverses the last channel op (announces "Nothing to undo" when empty) |
-| Edit | Redo | `Ctrl+Y` | needs a loaded radio; replays the last undone op |
+| Edit | Redo | `Ctrl+Y` (or `Ctrl+Shift+Z`) | needs a loaded radio; replays the last undone op |
 | Edit | Select All Channels | `Ctrl+A` | needs a loaded radio |
 | Edit | Clear Selection | — | needs a loaded radio |
 | Edit | Copy | `Ctrl+C` | needs a loaded radio; copies the selected channel(s) |
@@ -135,8 +135,9 @@ count is fixed, so nothing is ever added or pushed off the end.
 
 **Undo / redo** cover every channel operation — edit, delete, move, copy,
 cut/paste, sort, insert, arrange, import. `Ctrl+Z` undoes the last one and
-announces what it reversed (e.g. "Undone: Deleted channel 5"); `Ctrl+Y` redoes
-it. The Edit menu's Undo/Redo items show the operation they'd act on; the history
+announces what it reversed (e.g. "Undone: Deleted channel 5"); `Ctrl+Y` (or
+`Ctrl+Shift+Z`) redoes it. The Edit menu's Undo/Redo items show the operation
+they'd act on; the history
 is bounded (most-recent ops) and cleared when you load, close, or download an
 image. Radio Settings and bank assignments are not yet undoable.
 

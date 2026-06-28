@@ -84,6 +84,22 @@ def test_edit_menu_has_undo_redo(win):
     assert win._menu_items["redo"].IsEnabled()
 
 
+def test_ctrl_shift_z_accelerator_triggers_redo(win):
+    """The Ctrl+Shift+Z accelerator id is bound to on_redo (the redo alias)."""
+    from chirp_backend import memory_ops
+
+    n = _first_nonempty()
+    before = radio_backend.get_memory(n).name
+    memory_ops.update_channel(n, {"name": "ALIASD"})
+    win.on_undo()
+    assert radio_backend.get_memory(n).name == before
+
+    # Fire the command the Ctrl+Shift+Z accelerator maps to.
+    evt = wx.CommandEvent(wx.wxEVT_MENU, int(win._redo_accel_id))
+    win.GetEventHandler().ProcessEvent(evt)
+    assert radio_backend.get_memory(n).name == "ALIASD"
+
+
 def test_menu_open_relabels_undo_with_op(win):
     from chirp_backend import memory_ops
 

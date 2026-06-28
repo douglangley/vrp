@@ -63,7 +63,7 @@ APP_SHORTCUTS = [
     ("F2", "Edit the focused cell (one column)"),
     ("Del", "Delete the selected channel(s)"),
     ("Ctrl+Z", "Undo the last change"),
-    ("Ctrl+Y", "Redo the last undone change"),
+    ("Ctrl+Y / Ctrl+Shift+Z", "Redo the last undone change"),
     ("Space / Ctrl+Space", "Select or deselect the focused channel"),
     ("Ctrl+Up / Ctrl+Down", "Move the cursor without changing the selection"),
     ("Shift+Up / Shift+Down", "Extend the selection"),
@@ -153,6 +153,16 @@ class MainWindow(wx.Frame):
         # Refresh the Undo/Redo item labels with the next op's description when the
         # Edit menu opens (discoverability; relabeling is safe for accelerators).
         self.Bind(wx.EVT_MENU_OPEN, self._on_menu_open)
+        # Ctrl+Shift+Z is a second Redo accelerator (the Redo menu item displays
+        # Ctrl+Y). A frame accelerator table is consulted in addition to the menu
+        # accelerators, so this adds the alias without disturbing the menu's
+        # Ctrl-combos.
+        self._redo_accel_id = wx.NewIdRef()
+        self.Bind(wx.EVT_MENU, self.on_redo, id=self._redo_accel_id)
+        self.SetAcceleratorTable(wx.AcceleratorTable([
+            wx.AcceleratorEntry(wx.ACCEL_CTRL | wx.ACCEL_SHIFT, ord("Z"),
+                                self._redo_accel_id),
+        ]))
         self.grid.SetFocus()
         # Deferred and delayed: wx.CallAfter alone fires on the very next idle
         # tick, which can race ahead of NVDA's own window-title announcement
