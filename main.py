@@ -5,10 +5,11 @@ wxPython app with two interchangeable front ends, because no single channel
 grid reads on every screen reader (see PROGRESS_LOG.md and the memory note on
 the cross-platform grid split):
 
-* the **native** UI (``vrp/native/``) — a ``wx.dataview.DataViewListCtrl``
-  channel grid plus a native menu bar. Its grid wraps a native control on each
-  OS (SysListView32 on Windows, NSTableView on macOS), so **both NVDA and
-  VoiceOver** read it. This is the default on every platform.
+* the **native** UI (``vrp/native/``) — a channel grid built on
+  ``wx-accessible-grid``'s ``AccessibleGrid`` (a ``wx.dataview.DataViewListCtrl``)
+  plus a native menu bar. The grid is a real native table on each OS
+  (the native list view on Windows, NSTableView on macOS), so **both NVDA and
+  VoiceOver** read its rows directly. This is the default on every platform.
 * the **webview** UI (``vrp/app.py``) — the ``AccessibleWebView`` rendering the
   ``wx-accessible-grid`` Excel-style channel grid. Kept available via
   ``--webview`` while the webview stack is retired.
@@ -32,10 +33,11 @@ def parse_mode(argv: list[str], platform: str | None = None) -> str:
     """Pick which front end to launch.
 
     An explicit ``--webview`` or ``--native`` flag always wins. Otherwise the
-    default is the **native** UI on every platform: its
-    ``wx.dataview.DataViewListCtrl`` channel grid wraps a native control on each
-    OS (SysListView32 on Windows, NSTableView on macOS), so NVDA *and* VoiceOver
-    both read it. The webview UI remains available with ``--webview``.
+    default is the **native** UI on every platform: its ``AccessibleGrid``
+    channel grid (a ``wx.dataview.DataViewListCtrl``) is a real native table on
+    each OS (the native list view on Windows, NSTableView on macOS), so NVDA
+    *and* VoiceOver both read it. The webview UI remains available with
+    ``--webview``.
     ``platform`` is accepted for tests/overrides but no longer changes the
     default (it used to route macOS to the webview, before the grid migration).
     """
@@ -72,8 +74,8 @@ def main() -> None:
         "--native",
         action="store_true",
         help=(
-            "Force the native wx.dataview.DataViewListCtrl UI (read by NVDA and "
-            "VoiceOver; the default on every platform)."
+            "Force the native UI (wx-accessible-grid AccessibleGrid, a native "
+            "DataViewListCtrl read by NVDA and VoiceOver; the default on every platform)."
         ),
     )
     parser.add_argument(

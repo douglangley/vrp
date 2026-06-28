@@ -16,11 +16,15 @@ dependencies = [
     # swallows Alt (the menu key handling is the library's, not inline here).
     # 0.1.1 adds webview_listener_js for the single-bridge integration.
     "wx-accessible-menubar>=0.1.1",
-    # Accessible, editable ARIA data grid (sibling library). The screen-reader-
-    # first replacement for the read-only channel table (preview). 0.4.0 composes
-    # each cell's accessible name via aria-labelledby so VoiceOver speaks the
-    # column + row header and control type on every move (it never gets the arrow).
-    "wx-accessible-grid>=0.4.1",
+    # Accessible data grid (sibling library), a **native wx.dataview.DataViewListCtrl**
+    # — no WebView, no HTML, no JS in the path (NSTableView on macOS, so VoiceOver
+    # reads each cell natively; the native list view on Windows/GTK for
+    # NVDA/JAWS/Orca). 0.8.0 adds an opt-in app-level Left/Right cell cursor (the
+    # `announce=` callback) for Windows/NVDA, where the generic DataViewCtrl does
+    # not announce a per-cell cursor itself. Not on PyPI yet (PyPI's latest is
+    # 0.4.1, the retired WebView grid), so it resolves from the GitHub repo via
+    # [tool.uv.sources] below, pinned to a commit SHA for reproducible builds.
+    "wx-accessible-grid>=0.8.0",
     # Unified TTS / screen-reader speech (prism). Used to speak things that
     # ARIA alone can't convey. The Python bindings ship as `prismatoid`.
     "prismatoid>=0.16.0",
@@ -61,8 +65,12 @@ versatile-radio-programmer = "main:main"
 # so no separate `uv pip install -e ./chirp` step is needed. The ./chirp
 # directory must exist (git clone it) before running `uv sync`.
 chirp = { path = "./chirp", editable = true }
-# wx-accessible-menubar and wx-accessible-grid resolve from PyPI via the version
-# constraints above — no git/path source needed (grid 0.4.1 is published).
+# wx-accessible-menubar resolves from PyPI via the version constraint above.
+# wx-accessible-grid 0.8.0 (native DataViewListCtrl + opt-in Left/Right cell
+# cursor) is NOT on PyPI yet — PyPI's latest is 0.4.1, the retired WebView grid.
+# Pull it from GitHub, pinned to a commit SHA for reproducible builds (same idea
+# as CHIRP's pin). Bump the rev when adopting a newer upstream commit.
+wx-accessible-grid = { git = "https://github.com/Community-Access/wx-accessible-grid.git", rev = "e2087ed6b14d7879db942790e3fc653f7a7e33b4" }
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

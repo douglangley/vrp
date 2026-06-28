@@ -24,32 +24,46 @@ def column_meta(state: RadioState) -> list[dict]:
     ]
 
 
-def build_rows(state: RadioState) -> list[dict]:
-    """One row dict per channel, low..high in order.
+def build_row(number: int, cols=None) -> dict | None:
+    """Build the row dict for a single channel, or None if it can't be read.
 
-    Each row: {"number": int, "empty": bool, "immutable": list,
-               "cells": {col_name: display_str}}.
+    Pass ``cols`` (from ``build_column_defs``) to reuse one column build across a
+    batch; omit it and the loaded radio's columns are built on demand. Used both
+    by ``build_rows`` and by the grid's per-row refresh so updating one edited
+    channel doesn't re-read every channel.
+
+    Row shape: {"number": int, "empty": bool, "immutable": list,
+                "cells": {col_name: display_str}}.
     """
+    if cols is None:
+        cols = build_column_defs(radio_backend.get_state().features)
+    mem = radio_backend.get_memory(number)
+    if mem is None:
+        return None
+    empty = bool(getattr(mem, "empty", False))
+    cells = {}
+    for col in cols:
+        if col.name == "number":
+            cells["number"] = str(number)
+        else:
+            cells[col.name] = "" if empty else col.format_value(mem)
+    return {
+        "number": number,
+        "empty": empty,
+        "immutable": list(getattr(mem, "immutable", []) or []),
+        "cells": cells,
+    }
+
+
+def build_rows(state: RadioState) -> list[dict]:
+    """One row dict per channel, low..high in order (see ``build_row``)."""
     low, high = state.memory_bounds
     cols = build_column_defs(state.features)
     rows: list[dict] = []
     for number in range(low, high + 1):
-        mem = radio_backend.get_memory(number)
-        if mem is None:
-            continue
-        empty = bool(getattr(mem, "empty", False))
-        cells = {}
-        for col in cols:
-            if col.name == "number":
-                cells["number"] = str(number)
-            else:
-                cells[col.name] = "" if empty else col.format_value(mem)
-        rows.append({
-            "number": number,
-            "empty": empty,
-            "immutable": list(getattr(mem, "immutable", []) or []),
-            "cells": cells,
-        })
+        row = build_row(number, cols)
+        if row is not None:
+            rows.append(row)
     return rows
 
 

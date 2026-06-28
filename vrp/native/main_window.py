@@ -20,12 +20,12 @@ from __future__ import annotations
 
 import logging
 import os
+import sys
 import threading
 import time
 
 import wx
 import wx.adv
-import wx.dataview as dv
 
 from chirp_backend import radio as radio_backend
 from vrp import __version__
@@ -85,16 +85,31 @@ class MainWindow(wx.Frame):
             speak=lambda m, interrupt=False: self._speaker.speak(m, interrupt=interrupt),
         )
 
-        self.grid = ChannelGrid(self)
-        self.grid.Bind(dv.EVT_DATAVIEW_ITEM_ACTIVATED, self.on_edit_channel)
-        # Row context menu (right-click; Applications key / Shift+F10 on Windows)
-        # and debounced multi-select feedback. The native grid had none of these —
-        # they previously lived only in the webview grid. Delete is NOT bound to a
-        # grid key event here: a focused NSTableView can swallow EVT_KEY_DOWN on
-        # macOS, so Delete lives on the Channels-menu "Delete channel(s)\tDel"
+        # ChannelGrid binds these to its inner native list itself, re-binding when
+        # the list is recreated for a new radio (the library fixes columns at
+        # construction), so they are passed as callbacks rather than bound here:
+        #  - activate: Enter / double-click a row -> edit it in a native dialog;
+        #  - context_menu: Applications key / Shift+F10 / right-click -> row menu;
+        #  - selection_changed: debounced multi-select feedback.
+        # Delete is NOT a grid key event: a focused native list can swallow the
+        # key on macOS, so Delete lives on the Channels-menu "Delete channel(s)\tDel"
         # accelerator instead, which fires reliably regardless of grid focus.
-        self.grid.Bind(dv.EVT_DATAVIEW_ITEM_CONTEXT_MENU, self.on_grid_context_menu)
-        self.grid.Bind(dv.EVT_DATAVIEW_SELECTION_CHANGED, self._on_grid_selection_changed)
+        # Opt-in Left/Right cell cursor: on Windows the native DataViewCtrl is
+        # wx's generic control and announces no per-cell cursor, so we voice the
+        # moved-to cell ("<value>, <column>") through our prism Announcer
+        # (assertive, so quick arrowing speaks the latest cell). On macOS we leave
+        # it None — VoiceOver reads cells natively with VO+Left/Right, so a second
+        # synthesized voice would just double up.
+        cell_announce = None
+        if sys.platform == "win32":
+            cell_announce = lambda text: self.announce.announce(text, assertive=True)  # noqa: E731
+        self.grid = ChannelGrid(
+            self,
+            on_activate=self.on_edit_channel,
+            on_context_menu=self.on_grid_context_menu,
+            on_selection_changed=self._on_grid_selection_changed,
+            cell_announce=cell_announce,
+        )
         self._sel_timer: wx.CallLater | None = None
         self._menu_items: dict[str, wx.MenuItem] = {}
         self._radio_gated_keys: set[str] = set()
@@ -277,8 +292,8 @@ class MainWindow(wx.Frame):
         add("&Go to channel…\tCtrl+Shift+G", self.on_goto)
         add("Channel &banks…", self.on_banks)
 
-        # DataView places the menu sensibly on the focused row; exact pixel
-        # position is irrelevant to a screen-reader user.
+        # The native list places the menu sensibly on the focused row; exact
+        # pixel position is irrelevant to a screen-reader user.
         self.grid.popup_row_menu(menu)
         menu.Destroy()
 
