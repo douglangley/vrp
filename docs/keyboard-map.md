@@ -28,6 +28,7 @@ arrow keys move across top-level menus; NVDA reads it like any native app menu.
 | Menu | Item | Shortcut | Notes |
 |------|------|----------|-------|
 | File | Open Image File… | `Ctrl+O` | |
+| File | Open Recent ▸ … | `Alt`+digit | submenu of recent images; count set in Preferences (0 hides it) |
 | File | Save | `Ctrl+S` | needs a loaded radio |
 | File | Save As… | `Ctrl+Shift+S` | needs a loaded radio |
 | File | Close Image | — | needs a loaded radio |
@@ -56,6 +57,15 @@ arrow keys move across top-level menus; NVDA reads it like any native app menu.
 Items marked "needs a loaded radio" are disabled until an image is open. F1's
 on-screen list (`APP_SHORTCUTS` in `vrp/native/main_window.py`) is kept in
 sync with this table by hand — update both when adding a command.
+
+**File ▸ Open Recent** lists the most-recently opened images (newest first),
+each labelled with an `Alt`+digit mnemonic (`&1`…`&9`) inside the submenu and
+its full path in the status-bar help (the parent folder is appended only when
+two basenames collide); a final **Clear Recently Opened** empties the list.
+How many to show is set by **File ▸ Preferences ▸ Recently opened files to
+show** (a 0–9 chooser): **0 removes the submenu entirely**, 1–9 shows that
+many. Recent entries are menu-only (no Ctrl shortcut); a file that no longer
+exists is announced and dropped from the list when chosen.
 
 ### Channel grid navigation and selection
 
