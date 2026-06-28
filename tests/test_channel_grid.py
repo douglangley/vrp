@@ -170,6 +170,49 @@ def test_edit_menu_has_clipboard_items(app):
         win.Destroy()
 
 
+def test_goto_on_channels_menu(app):
+    """Go to channel stays on the Channels menu, now keyed Ctrl+G; Find next
+    moved to F3 (which freed Ctrl+G)."""
+    from vrp.native.main_window import MainWindow
+
+    win = MainWindow()
+    try:
+        radio_backend.load_image(IMAGE)
+        win._load_into_grid()
+        channels_menu = win.GetMenuBar().GetMenu(3)  # File, Edit, Radio, Channels
+        labels = " ".join(
+            channels_menu.FindItemByPosition(i).GetItemLabelText()
+            for i in range(channels_menu.GetMenuItemCount())
+        ).lower()
+        assert "go to channel" in labels
+        assert win._menu_items["goto"].IsEnabled()
+        assert "Ctrl+G" in win._menu_items["goto"].GetItemLabel()
+        # Find next's accelerator is now F3 (no longer Ctrl+G).
+        assert "F3" in win._menu_items["find_next"].GetItemLabel()
+    finally:
+        radio_backend.unload()
+        win.Destroy()
+
+
+def test_goto_handler_focuses_channel(app, monkeypatch):
+    """on_goto selects and focuses the channel the prompt returns."""
+    from vrp.native.main_window import MainWindow
+
+    win = MainWindow()
+    try:
+        radio_backend.load_image(IMAGE)
+        win._load_into_grid()
+        low, high = radio_backend.get_state().memory_bounds
+        target = low + 2
+        monkeypatch.setattr(wx, "GetNumberFromUser", lambda *a, **k: target)
+        win.on_goto()
+        assert win.grid.focused_channel() == target
+        assert win.grid.selected_channel_numbers() == [target]
+    finally:
+        radio_backend.unload()
+        win.Destroy()
+
+
 def test_main_window_announces_ready_on_startup(app):
     from vrp.native.main_window import MainWindow
 

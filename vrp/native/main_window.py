@@ -71,14 +71,14 @@ APP_SHORTCUTS = [
     ("Ctrl+C", "Copy selected channel(s)"),
     ("Ctrl+X", "Cut selected channel(s)"),
     ("Ctrl+V", "Paste at the focused channel"),
-    ("Ctrl+Shift+G", "Go to channel"),
+    ("Ctrl+G", "Go to channel"),
     ("Ctrl+B", "Channel banks for the focused channel"),
     ("Ctrl+Shift+Up", "Move selected channel(s) up"),
     ("Ctrl+Shift+Down", "Move selected channel(s) down"),
     ("Ctrl+Shift+M", "Move selected channel(s) to a chosen slot"),
     ("Ctrl+M", "Organize Channels dialog"),
     ("Ctrl+F", "Find a channel"),
-    ("Ctrl+G", "Find next match"),
+    ("F3", "Find next match"),
     ("F1", "Show this list of keyboard shortcuts"),
 ]
 
@@ -319,7 +319,7 @@ class MainWindow(wx.Frame):
         # and macOS has no keyboard context-menu, so the accelerator is the only
         # reliable, discoverable Delete path cross-platform.
         self._add(m, "delete", "&Delete channel(s)\tDel", self.on_delete_channels, needs_radio=True)
-        self._add(m, "goto", "&Go to channel…\tCtrl+Shift+G", self.on_goto, needs_radio=True)
+        self._add(m, "goto", "&Go to channel…\tCtrl+G", self.on_goto, needs_radio=True)
         self._add(m, "banks", "Channel &banks…\tCtrl+B", self.on_banks, needs_radio=True)
         m.AppendSeparator()
         self._add(m, "move_up", "Move &up\tCtrl+Shift+Up", self.on_move_up, needs_radio=True)
@@ -328,7 +328,7 @@ class MainWindow(wx.Frame):
         self._add(m, "organize", "&Organize Channels…\tCtrl+M", self.on_organize, needs_radio=True)
         m.AppendSeparator()
         self._add(m, "find", "&Find…\tCtrl+F", self.on_find, needs_radio=True)
-        self._add(m, "find_next", "Find &next\tCtrl+G", self.on_find_next, needs_radio=True)
+        self._add(m, "find_next", "Find &next\tF3", self.on_find_next, needs_radio=True)
         return m
 
     def _build_help_menu(self) -> wx.Menu:
@@ -503,7 +503,7 @@ class MainWindow(wx.Frame):
         add("&Move to channel…\tCtrl+Shift+M", self.on_move_to)
         add("&Organize channels…", self.on_organize)
         menu.AppendSeparator()
-        add("&Go to channel…\tCtrl+Shift+G", self.on_goto)
+        add("&Go to channel…\tCtrl+G", self.on_goto)
         add("Channel &banks…", self.on_banks)
 
         # The native list places the menu sensibly on the focused row; exact

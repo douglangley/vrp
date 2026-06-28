@@ -51,14 +51,14 @@ arrow keys move across top-level menus; NVDA reads it like any native app menu.
 | Channels | Edit channel… | `Ctrl+E` | needs a loaded radio; all fields (also `Enter` / double-click on the grid) |
 | Channels | Edit cell… | `F2` | needs a loaded radio; just the focused cell's column |
 | Channels | Delete channel(s) | `Del` | needs a loaded radio; clears the selected channel(s) |
-| Channels | Go to channel… | `Ctrl+Shift+G` | needs a loaded radio |
+| Channels | Go to channel… | `Ctrl+G` | needs a loaded radio; prompt for a number, then select + focus it |
 | Channels | Channel banks… | `Ctrl+B` | needs a loaded radio |
 | Channels | Move up | `Ctrl+Shift+Up` | needs a loaded radio |
 | Channels | Move down | `Ctrl+Shift+Down` | needs a loaded radio |
 | Channels | Move to channel… | `Ctrl+Shift+M` | needs a loaded radio |
 | Channels | Organize Channels… | `Ctrl+M` | needs a loaded radio |
 | Channels | Find… | `Ctrl+F` | needs a loaded radio |
-| Channels | Find next | `Ctrl+G` | needs a loaded radio |
+| Channels | Find next | `F3` | needs a loaded radio |
 | Help | Keyboard Shortcuts | `F1` | shows this list as a plain-text message box |
 | Help | About | — | |
 
@@ -116,8 +116,8 @@ Then:
 | `Ctrl+Shift+Down` | Move the selected channel(s) down one slot |
 | `Ctrl+Shift+M` | Move the selected channel(s) to a chosen channel |
 | `Ctrl+M` | Organize (delete/copy/sort/insert/arrange) dialog |
-| `Ctrl+Shift+G` | Go to channel |
-| `Ctrl+F` / `Ctrl+G` | Find / Find next |
+| `Ctrl+G` | Go to channel |
+| `Ctrl+F` / `F3` | Find / Find next |
 | `Ctrl+B` | Channel banks for the focused channel |
 
 After a move, the moved block stays selected at its new position and focus

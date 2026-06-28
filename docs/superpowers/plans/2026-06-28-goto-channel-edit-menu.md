@@ -1,8 +1,10 @@
 # Plan — Go to Channel on the Edit menu (Ctrl+G)
 
-> **Status:** DRAFT (2026-06-28). Put a **Go to Channel** command on the **Edit
-> menu** with hotkey **`Ctrl+G`**. Mostly menu rewiring + one hotkey-conflict
-> resolution — the function itself already exists.
+> **Status:** IMPLEMENTED 2026-06-28 (pending NVDA verify). **Revised:** Go to
+> channel **stays on the Channels menu** (user changed their mind — not the Edit
+> menu), rekeyed from `Ctrl+Shift+G` to **`Ctrl+G`**; Find next moved to **`F3`**
+> to free `Ctrl+G`. Tests green. (More Channels-menu additions to come — separate
+> follow-up.)
 
 ---
 
