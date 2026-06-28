@@ -81,6 +81,7 @@ class ChannelGrid(wx.Panel):
         on_activate=None,
         on_context_menu=None,
         on_selection_changed=None,
+        on_select_toggle=None,
         cell_announce=None,
     ) -> None:
         super().__init__(parent)
@@ -105,24 +106,37 @@ class ChannelGrid(wx.Panel):
             self._list.Bind(dv.EVT_DATAVIEW_ITEM_ACTIVATED, on_activate)
         if on_context_menu is not None:
             self._list.Bind(dv.EVT_DATAVIEW_ITEM_CONTEXT_MENU, on_context_menu)
-            # The generic DataViewCtrl on Windows raises the context-menu event
-            # for a right-click and the Applications key, but NOT for Shift+F10 —
-            # so wire that explicitly. Bound after AccessibleGrid's own
+        self._context_menu_cb = on_context_menu
+        # ``on_select_toggle(number, now_selected, total)`` — called when
+        # Space/Ctrl+Space toggles the focused row, so the host can announce it.
+        self._on_select_toggle = on_select_toggle
+        if on_context_menu is not None or on_select_toggle is not None:
+            # One EVT_KEY_DOWN handler for the keys the generic DataViewCtrl
+            # doesn't give us: Shift+F10 (it raises the context-menu event only
+            # for the Applications key / right-click) and Space/Ctrl+Space (native
+            # no-ops here — see the Step 0 spike). Bound after AccessibleGrid's own
             # EVT_KEY_DOWN (the Left/Right cell cursor), so ours runs first; it
-            # Skips everything except Shift+F10, leaving the cursor handler intact.
-            self._context_menu_cb = on_context_menu
-            self._list.Bind(wx.EVT_KEY_DOWN, self._on_shift_f10)
+            # Skips everything else, leaving the cursor + native Up/Down/Shift/
+            # Ctrl-arrow selection behavior intact.
+            self._list.Bind(wx.EVT_KEY_DOWN, self._on_grid_key)
         if on_selection_changed is not None:
             self._list.Bind(dv.EVT_DATAVIEW_SELECTION_CHANGED, on_selection_changed)
 
-    def _on_shift_f10(self, event: wx.KeyEvent) -> None:
-        """Open the row context menu on Shift+F10 (the generic DataViewCtrl
-        doesn't raise the context-menu event for it). Routes to the same callback
-        the Applications key and right-click use; consumes the key so the control
-        doesn't also act on it. Everything else is skipped so AccessibleGrid's
-        Left/Right cell cursor keeps working."""
-        if event.GetKeyCode() == wx.WXK_F10 and event.ShiftDown():
+    def _on_grid_key(self, event: wx.KeyEvent) -> None:
+        """Handle the keys the native control doesn't: Shift+F10 (row context
+        menu) and Space/Ctrl+Space (toggle the focused row's selection). Both are
+        consumed; everything else is skipped so the cell cursor and native
+        arrow-selection keep working."""
+        code = event.GetKeyCode()
+        if code == wx.WXK_F10 and event.ShiftDown() and self._context_menu_cb is not None:
             self._context_menu_cb(event)
+            return
+        # Space or Ctrl+Space toggles selection of the focused row. (Plain Space
+        # is a native no-op on this control, so consuming it costs nothing.)
+        if code == wx.WXK_SPACE and not event.AltDown() and self._on_select_toggle is not None:
+            result = self.toggle_focused_selection()
+            if result is not None:
+                self._on_select_toggle(*result)
             return
         event.Skip()
 
@@ -190,6 +204,26 @@ class ChannelGrid(wx.Panel):
     def selected_count(self) -> int:
         """Actual number of selected rows (no focused-row fallback)."""
         return self._list.GetSelectedItemsCount()
+
+    def toggle_focused_selection(self) -> tuple[int, bool, int] | None:
+        """Toggle the focused row in/out of the **real** selection (Space /
+        Ctrl+Space). Returns ``(channel_number, now_selected, total_selected)`` or
+        ``None`` when there is no focused row.
+
+        Uses the control's real selection (``IsRowSelected``/``SelectRow``/
+        ``UnselectRow``), never ``selected_channel_numbers()`` — that falls back to
+        the focused row when the real selection is empty, which would make
+        deselecting the last row impossible."""
+        row = self._grid.focused_row()
+        if row is None or not (0 <= row < len(self._model.rows)):
+            return None
+        now_selected = not self._list.IsRowSelected(row)
+        if now_selected:
+            self._list.SelectRow(row)
+        else:
+            self._list.UnselectRow(row)
+        number = grid_model.index_to_number(self._model.rows, row)
+        return number, now_selected, self._list.GetSelectedItemsCount()
 
     def cell_display(self, number: int, col_name: str) -> str:
         """The display text shown (and read) for a cell — the same text the

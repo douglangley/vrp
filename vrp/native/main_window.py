@@ -109,9 +109,13 @@ class MainWindow(wx.Frame):
             on_activate=self.on_edit_channel,
             on_context_menu=self.on_grid_context_menu,
             on_selection_changed=self._on_grid_selection_changed,
+            on_select_toggle=self._on_select_toggle,
             cell_announce=cell_announce,
         )
         self._sel_timer: wx.CallLater | None = None
+        # Set by a Space/Ctrl+Space toggle so the debounced count announce doesn't
+        # double up on the per-row toggle announce (which already states the count).
+        self._suppress_next_count = False
         self._menu_items: dict[str, wx.MenuItem] = {}
         self._radio_gated_keys: set[str] = set()
         # Find state: query string, fields, last matched channel.
@@ -452,9 +456,23 @@ class MainWindow(wx.Frame):
 
     def _announce_selection_count(self) -> None:
         self._sel_timer = None
+        # A Space/Ctrl+Space toggle already spoke a per-row message stating the
+        # count, so skip the debounced count this once to avoid doubling up.
+        if self._suppress_next_count:
+            self._suppress_next_count = False
+            return
         count = self.grid.selected_count()
         if count >= 2:
             self.announce.announce(f"{count} channels selected")
+
+    def _on_select_toggle(self, number: int, selected: bool, count: int) -> None:
+        """Announce a Space/Ctrl+Space selection toggle of the focused row. The
+        per-row message already states the running count, so suppress the debounced
+        count announce that the selection-changed event also schedules."""
+        self._suppress_next_count = True
+        verb = "Selected" if selected else "Deselected"
+        tail = "none selected" if count == 0 else f"{count} selected"
+        self.announce.announce(f"{verb} channel {number}. {tail}.")
 
     def on_goto(self, _evt=None) -> None:
         """Go to a specific channel by number — prompt, select, and focus it."""

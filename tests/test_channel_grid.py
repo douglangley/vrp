@@ -43,44 +43,107 @@ def test_grid_populates_and_maps_selection(app):
         radio_backend.unload()
 
 
+class _FakeKey:
+    """Minimal stand-in for wx.KeyEvent for the grid key handler."""
+
+    def __init__(self, key, shift=False, alt=False):
+        self._key, self._shift, self._alt, self.skipped = key, shift, alt, False
+
+    def GetKeyCode(self):  # noqa: N802 (wx API parity)
+        return self._key
+
+    def ShiftDown(self):  # noqa: N802 (wx API parity)
+        return self._shift
+
+    def AltDown(self):  # noqa: N802 (wx API parity)
+        return self._alt
+
+    def Skip(self):  # noqa: N802 (wx API parity)
+        self.skipped = True
+
+
 def test_shift_f10_routes_to_context_menu(app):
     """Shift+F10 must open the row context menu — the generic Windows
     DataViewCtrl doesn't raise the context-menu event for it, so ChannelGrid
     wires the key itself. Other keys are skipped so the cell cursor still works."""
     from vrp.native.channel_grid import ChannelGrid
 
-    class FakeKey:
-        def __init__(self, key, shift):
-            self._key, self._shift, self.skipped = key, shift, False
-
-        def GetKeyCode(self):  # noqa: N802 (wx API parity)
-            return self._key
-
-        def ShiftDown(self):  # noqa: N802 (wx API parity)
-            return self._shift
-
-        def Skip(self):  # noqa: N802 (wx API parity)
-            self.skipped = True
-
     calls = []
     frame = wx.Frame(None)
     try:
         grid = ChannelGrid(frame, on_context_menu=lambda e: calls.append(e))
 
-        shift_f10 = FakeKey(wx.WXK_F10, True)
-        grid._on_shift_f10(shift_f10)
+        shift_f10 = _FakeKey(wx.WXK_F10, shift=True)
+        grid._on_grid_key(shift_f10)
         assert len(calls) == 1  # context menu opened
         assert not shift_f10.skipped  # consumed, not passed on
 
         # A plain F10 (no Shift) and an unrelated key must NOT open the menu and
         # must be skipped so other handlers (e.g. the Left/Right cursor) see them.
-        plain_f10 = FakeKey(wx.WXK_F10, False)
-        grid._on_shift_f10(plain_f10)
-        other = FakeKey(ord("A"), False)
-        grid._on_shift_f10(other)
+        plain_f10 = _FakeKey(wx.WXK_F10, shift=False)
+        grid._on_grid_key(plain_f10)
+        other = _FakeKey(ord("A"))
+        grid._on_grid_key(other)
         assert len(calls) == 1  # unchanged
         assert plain_f10.skipped and other.skipped
     finally:
+        frame.Destroy()
+
+
+def test_toggle_focused_selection_uses_real_selection(app):
+    """Space/Ctrl+Space toggles the focused row in/out of the REAL selection.
+    Toggling off the only selected row must leave a real empty selection (count 0)
+    — i.e. it must not use the focused-row fallback in selected_channel_numbers."""
+    from vrp.native.channel_grid import ChannelGrid
+
+    radio_backend.load_image(IMAGE)
+    try:
+        frame = wx.Frame(None)
+        grid = ChannelGrid(frame)
+        grid.set_state(radio_backend.get_state())
+        grid.focus_channel(3)
+
+        number, selected, count = grid.toggle_focused_selection()
+        assert (number, selected, count) == (3, True, 1)
+        assert grid.selected_count() == 1
+
+        number2, selected2, count2 = grid.toggle_focused_selection()
+        assert (number2, selected2, count2) == (3, False, 0)
+        assert grid.selected_count() == 0  # really empty, not the fallback
+    finally:
+        radio_backend.unload()
+        frame.Destroy()
+
+
+def test_space_key_routes_to_select_toggle(app):
+    """Space (and Ctrl+Space) invoke the toggle and the on_select_toggle callback,
+    and consume the key; a bare letter is skipped."""
+    from vrp.native.channel_grid import ChannelGrid
+
+    radio_backend.load_image(IMAGE)
+    try:
+        toggles = []
+        frame = wx.Frame(None)
+        grid = ChannelGrid(frame, on_select_toggle=lambda *a: toggles.append(a))
+        grid.set_state(radio_backend.get_state())
+        grid.focus_channel(5)
+
+        space = _FakeKey(wx.WXK_SPACE)
+        grid._on_grid_key(space)
+        assert len(toggles) == 1
+        assert toggles[0] == (5, True, 1)  # (number, now_selected, total)
+        assert not space.skipped  # consumed
+
+        # Ctrl+Space (shift flag irrelevant; alt would be skipped) toggles back off.
+        ctrl_space = _FakeKey(wx.WXK_SPACE)
+        grid._on_grid_key(ctrl_space)
+        assert toggles[-1] == (5, False, 0)
+
+        other = _FakeKey(ord("X"))
+        grid._on_grid_key(other)
+        assert other.skipped  # not a handled key
+    finally:
+        radio_backend.unload()
         frame.Destroy()
 
 
