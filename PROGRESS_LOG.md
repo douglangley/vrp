@@ -6,6 +6,47 @@ architecture, keyboard map, and CHIRP feature-coverage checklist.
 
 ---
 
+## 2026-06-28 — Suggested repeater offset from CHIRP's band plan (auto-fill on frequency entry)
+
+The channel editor's **Offset** field was "very unclear" — you had to already
+know the standard repeater shift for the band. Now, when you enter/change the
+**Frequency** in `EditChannelDialog` and Offset is still blank, VRP fills the
+band's standard offset **magnitude** and announces it. **NVDA-verified on
+Windows.**
+
+- **`chirp_backend/bandplan.py` (new).** `suggest_offset_hz(freq_hz)` /
+  `suggest_offset_for_freq_str(str)` read CHIRP's own band-plan data
+  (`chirp.bandplan`, North America by default) and return the standard repeater
+  shift in Hz, or `None` off the repeater bands (HF, FM broadcast). It uses
+  CHIRP's most-specific sub-band match when the frequency sits in a repeater
+  range, else the band's **dominant** offset so simplex portions still get the
+  band's standard shift (146.52 → 0.6, 147.52 → 0.6). `chirp.bandplan.BandPlans`
+  needs a config object (normally `chirp.wxui.config`, which is off-limits) — we
+  pass a tiny `_StubConfig` enabling one plan, so nothing imports `chirp.wxui`.
+  Results: 2 m 0.6, 70 cm 5.0, 1.25 m 1.6, 6 m 0.5, 10 m 0.1 (FM sub-band) /
+  0.89 (band), 33 cm 25, 23 cm 12.
+- **Magnitude only — never the duplex sign.** Per the user: local coordinations
+  don't all follow the band plan's nominal +/- direction, and the magnitude is
+  the same either way (147.x → 0.6 means "-" txes 146.x, "+" txes 147.x+0.6). So
+  VRP fills Offset and leaves **Duplex** for the user to choose.
+- **`vrp/edit_dialog.py`.** An `EVT_KILL_FOCUS` on the Frequency control
+  (`_maybe_suggest_offset`) fills Offset **only when the frequency actually
+  changed** (tracked via `_last_freq`) **and** Offset is blank/zero — never
+  overwrites an existing offset, never retroactively touches a channel you only
+  view, and skips an immutable offset. It announces via the status line + a
+  module-level prism `Speaker` (the documented channel for a transient
+  confirmation that doesn't move focus; non-interrupting so it doesn't clip the
+  reader): *"Suggested offset 0.6 MHz — set Duplex to plus or minus to use it."*
+  The duplex hint is included because the offset is inert until a direction is
+  picked.
+- **Region** is North America (CHIRP's own default); a per-region preference
+  (AU / IARU R1–R3) is a possible later add.
+
+Tests: `tests/test_bandplan.py` (per-band magnitudes, whole-band/simplex
+coverage, non-negative, no-suggestion off the repeater bands, string parse,
+MHz formatting) and an `EditChannelDialog` auto-fill/announce/preserve case in
+`tests/test_edit_cell.py`. Full suite 186 passing.
+
 ## 2026-06-28 — Channel-edit combo boxes: spell out terse choice values, fix duplicate/spurious entries
 
 The native channel editor (`EditChannelDialog` and the single-cell `EditCellDialog`,

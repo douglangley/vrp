@@ -1,0 +1,156 @@
+"""Suggested repeater offset lookup, derived from CHIRP's band plans.
+
+VRP fills the channel's **Offset** field with the standard repeater shift
+*magnitude* for the frequency's band (e.g. 0.6 MHz on 2 m, 5 MHz on 70 cm),
+leaving the **Duplex** direction (+/-) to the user — many local coordinations
+don't follow the band plan's nominal direction, and the magnitude is the same
+either way (147.x -> 0.6 means "-" txes 146.x and "+" txes 147.x+0.6).
+
+The data is read from CHIRP's ``chirp.bandplan`` (``bandplan_na`` etc.), so we
+inherit its frequency ranges instead of hardcoding our own. ``chirp.bandplan``'s
+``BandPlans`` wants a config object (normally ``chirp.wxui.config``, which VRP
+must not import — CLAUDE.md); we pass a tiny stub that just enables one plan.
+"""
+
+from __future__ import annotations
+
+import logging
+
+LOG = logging.getLogger(__name__)
+
+# Which CHIRP band plan to read offsets from. North America is CHIRP's own
+# default for new users; the others are bandplan_au / bandplan_iaru_r1/r2/r3.
+# (Could become a user preference later — see suggest_offset_hz.)
+_PLAN_SHORTNAME = "north_america"
+
+
+class _StubConfig:
+    """Minimal config satisfying ``bandplan.BandPlans``: enable one plan only.
+
+    BandPlans calls get/set_bool/is_defined/get_bool/remove_option during init
+    and get_bool(shortname, "bandplan") when resolving. We report the chosen
+    plan as enabled and everything else off, and no legacy "autorpt" to migrate.
+    """
+
+    def get(self, key, section):
+        return None
+
+    def set_bool(self, key, value, section):
+        pass
+
+    def remove_option(self, key, section):
+        pass
+
+    def is_defined(self, key, section):
+        return True
+
+    def get_bool(self, key, section, default=False):
+        return key == _PLAN_SHORTNAME
+
+
+_plans = None
+
+
+def _band_plans():
+    """Lazily build the CHIRP BandPlans (importing chirp only when needed)."""
+    global _plans
+    if _plans is None:
+        from chirp import bandplan as chirp_bandplan
+
+        _plans = chirp_bandplan.BandPlans(_StubConfig())
+    return _plans
+
+
+def _amateur_band_containing(plans, freq_hz: int):
+    """The broad amateur band (e.g. "2 Meter Band") whose range contains
+    ``freq_hz``, or None. These broad bands carry no offset themselves."""
+    plan = plans.get_enabled_plan()
+    if plan is None:
+        return None
+    best = None
+    for band in plan.bands:
+        name = (band.name or "").lower()
+        if not (name.endswith("meter band") or name.endswith("cm band")):
+            continue
+        lo, hi = band.limits
+        if lo <= freq_hz < hi:
+            # Prefer the narrowest containing band if they ever nest.
+            if best is None or band.width() < best.width():
+                best = band
+    return best
+
+
+def _dominant_offset_in(plans, band) -> int | None:
+    """The repeater offset magnitude that covers the most spectrum within
+    ``band`` — i.e. the band's standard shift, robust to a stray sub-band with a
+    different offset (10 m, 23 cm). Returns Hz, or None if the band has none."""
+    plan = plans.get_enabled_plan()
+    lo, hi = band.limits
+    span_by_mag: dict[int, int] = {}
+    for b in plan.bands:
+        if not b.offset:
+            continue
+        blo, bhi = b.limits
+        # Overlap of this offset-bearing sub-band with the amateur band.
+        olo, ohi = max(lo, blo), min(hi, bhi)
+        if ohi <= olo:
+            continue
+        mag = abs(b.offset)
+        span_by_mag[mag] = span_by_mag.get(mag, 0) + (ohi - olo)
+    if not span_by_mag:
+        return None
+    # Max total span wins; tie-break to the larger magnitude (deterministic).
+    return max(span_by_mag, key=lambda m: (span_by_mag[m], m))
+
+
+def suggest_offset_hz(freq_hz: int) -> int | None:
+    """Suggested repeater offset *magnitude* (Hz) for ``freq_hz``, or None when
+    the band has no standard repeater offset (HF, simplex-only bands).
+
+    Always non-negative — the caller/user chooses the duplex direction. Uses
+    CHIRP's most-specific match when the frequency sits in a repeater sub-band,
+    else the band's dominant offset so simplex portions of a repeater band still
+    get the band's standard shift (e.g. 147.52 -> 0.6 MHz)."""
+    try:
+        plans = _band_plans()
+    except Exception:  # noqa: BLE001 — never let a band-plan import break editing
+        LOG.warning("Band plan unavailable; no offset suggestion", exc_info=True)
+        return None
+    if not freq_hz:
+        return None
+    freq_hz = int(freq_hz)
+
+    # 1) Frequency is inside a repeater sub-band: use CHIRP's own resolution.
+    defaults = plans.get_defaults_for_frequency(freq_hz)
+    if defaults.offset:
+        return abs(defaults.offset)
+
+    # 2) Simplex portion of an amateur band: use the band's standard shift.
+    band = _amateur_band_containing(plans, freq_hz)
+    if band is not None:
+        mag = _dominant_offset_in(plans, band)
+        if mag:
+            return mag
+    return None
+
+
+def suggest_offset_for_freq_str(freq_str: str) -> int | None:
+    """Like :func:`suggest_offset_hz` but takes a display frequency string in
+    MHz (e.g. "146.94"), the form the editor's Frequency field holds. Returns
+    None on an unparseable/empty string instead of raising."""
+    if not freq_str or not freq_str.strip():
+        return None
+    from chirp import chirp_common
+
+    try:
+        freq_hz = chirp_common.parse_freq(freq_str.strip())
+    except Exception:  # noqa: BLE001 — partial/invalid input -> no suggestion
+        return None
+    return suggest_offset_hz(freq_hz)
+
+
+def offset_hz_to_mhz_str(offset_hz: int) -> str:
+    """Format an offset magnitude (Hz) as the MHz string the Offset field uses,
+    matching ``col_defs.OffsetColumn.format_value`` (trimmed to 4 decimals)."""
+    mhz = offset_hz / 1_000_000
+    return f"{mhz:.4f}".rstrip("0").rstrip(".")

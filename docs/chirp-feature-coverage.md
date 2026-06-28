@@ -81,3 +81,12 @@ update (`git pull` ./chirp) in case new dialogs appear.
 
 - Developer-only items (reload driver/module, interact with driver, serial
   trace, bug report) are lower priority; revisit in Phase 10.
+- **Auto edits (offset suggestion):** a partial form of CHIRP's "auto edits" is
+  implemented — the channel editor auto-fills the **Offset** field with the
+  band's standard repeater shift (from CHIRP's band plan) when you enter a
+  frequency and Offset is blank (`chirp_backend/bandplan.py`,
+  `EditChannelDialog._maybe_suggest_offset`). VRP fills the *magnitude only* and
+  leaves the +/- **Duplex** direction to the user (deliberately unlike CHIRP,
+  which also sets duplex/step/mode/tone). The full "Auto edits toggle" row above
+  (band-plan defaults for the other fields, with an on/off switch and a region
+  picker) remains ☐.

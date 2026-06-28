@@ -136,6 +136,40 @@ def test_skip_choices_use_valid_skips_and_full_words(app):
         radio_backend.unload()
 
 
+def test_edit_dialog_suggests_offset_on_frequency_change(app):
+    from vrp.edit_dialog import EditChannelDialog, control_value
+
+    radio_backend.load_image(IMAGE)
+    try:
+        frame = wx.Frame(None)
+        feats = radio_backend.get_state().features
+        mem = radio_backend.get_memory(2)
+
+        def fill(freq, preset=None):
+            dlg = EditChannelDialog(frame, 2, mem, feats)
+            offc = dlg._controls["offset"][0]
+            if preset is not None:
+                offc.SetValue(preset)
+                dlg._last_freq = "force-change"
+            dlg._controls["freq"][0].SetValue(freq)
+            ev = wx.FocusEvent(wx.wxEVT_KILL_FOCUS)
+            dlg._maybe_suggest_offset(ev)
+            value = control_value(offc)
+            status = dlg._status.GetLabel()
+            dlg.Destroy()
+            return value, status
+
+        assert fill("146.94") == ("0.6", "Suggested offset 0.6 MHz"
+                                  " — set Duplex to plus or minus to use it.")
+        assert fill("442.5")[0] == "5"          # 70 cm -> 5 MHz
+        assert fill("146.52")[0] == "0.6"       # simplex still suggests
+        assert fill("7.25") == ("", "")         # HF -> no suggestion, no announce
+        assert fill("146.94", preset="1.0")[0] == "1.0"  # existing offset kept
+        frame.Destroy()
+    finally:
+        radio_backend.unload()
+
+
 def test_cell_display_matches_model_text(app):
     from vrp.native.channel_grid import ChannelGrid
     from vrp.native import grid_model

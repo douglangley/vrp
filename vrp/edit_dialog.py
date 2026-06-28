@@ -20,6 +20,12 @@ from __future__ import annotations
 import wx
 
 from chirp_backend.col_defs import build_column_defs
+from vrp.speech import Speaker
+
+# Supplemental speech for transient dialog confirmations that don't move focus
+# (e.g. the auto-filled offset suggestion). Module-level so the prism backend is
+# acquired once, not per dialog; a no-op when speech is unavailable.
+_speaker = Speaker()
 
 # Several choice columns store terse tokens — a blank ("no value") entry, single
 # letters, "+"/"-" — that a screen reader reads poorly or as nothing. We show a
@@ -150,11 +156,52 @@ class EditChannelDialog(wx.Dialog):
         self.SetSizerAndFit(outer)
         self.Bind(wx.EVT_BUTTON, self._on_ok, id=wx.ID_OK)
 
+        # Suggest the standard repeater offset for the band when the user enters
+        # a frequency (and the Offset field is still blank). Magnitude only —
+        # the user picks the +/- duplex direction. Tracked so we only act on a
+        # real change, never retroactively on a channel the user just views.
+        freq_entry = self._controls.get("freq")
+        if freq_entry is not None and "offset" in self._controls:
+            freq_ctrl = freq_entry[0]
+            self._last_freq = control_value(freq_ctrl)
+            freq_ctrl.Bind(wx.EVT_KILL_FOCUS, self._maybe_suggest_offset)
+
         # Focus the first editable control on open.
         for field, (ctrl, _col) in self._controls.items():
             if ctrl.IsEnabled():
                 ctrl.SetFocus()
                 break
+
+    def _maybe_suggest_offset(self, event: wx.FocusEvent) -> None:
+        """Fill the Offset field with the band's standard repeater shift when
+        the frequency changes and Offset is still blank/zero. Never overwrites
+        an existing offset and never changes the duplex direction."""
+        event.Skip()  # don't consume focus traversal
+        from chirp_backend import bandplan
+
+        freq_ctrl = self._controls["freq"][0]
+        offset_ctrl = self._controls["offset"][0]
+        freq_str = control_value(freq_ctrl).strip()
+        if freq_str == self._last_freq:
+            return  # focus left the field but the frequency didn't change
+        self._last_freq = freq_str
+
+        if not offset_ctrl.IsEnabled():
+            return  # immutable offset — leave it alone
+        current = control_value(offset_ctrl).strip()
+        if current and current not in ("0", "0.0"):
+            return  # respect an offset the user/radio already set
+
+        offset_hz = bandplan.suggest_offset_for_freq_str(freq_str)
+        if offset_hz:
+            mhz = bandplan.offset_hz_to_mhz_str(offset_hz)
+            offset_ctrl.SetValue(mhz)
+            # Announce it: the user has tabbed past the Offset field, so a screen
+            # reader won't read the change on its own. Show it on the status line
+            # (sighted) and speak it (don't interrupt the reader's field read).
+            message = f"Suggested offset {mhz} MHz — set Duplex to plus or minus to use it."
+            self._status.SetLabel(message)
+            _speaker.speak(message)
 
     def get_values(self) -> dict:
         """Return {field: value_str} for every enabled, editable control."""

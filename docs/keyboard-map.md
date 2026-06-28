@@ -149,6 +149,13 @@ the same native wx dialogs the webview UI uses (see "Memory grid editing",
 per-dialog keyboard behavior — Tab order, Enter/Esc, validation-keeps-dialog-
 open — which is identical regardless of which UI opened the dialog).
 
+In the **Edit channel** dialog, changing the **Frequency** auto-fills a blank
+**Offset** field with the band's standard repeater shift from CHIRP's band plan
+(e.g. 146.94 → 0.6 MHz, 442.5 → 5 MHz) and announces it ("Suggested offset 0.6
+MHz — set Duplex to plus or minus to use it."). Only the *magnitude* is filled —
+you choose the `+`/`-` **Duplex** direction; an offset you've already set is
+never overwritten.
+
 ---
 
 ## Webview UI (retained behind `--webview`, retired)
