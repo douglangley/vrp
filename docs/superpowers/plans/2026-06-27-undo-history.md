@@ -123,12 +123,15 @@ the transaction on failure or no-op). Mutating ops to decorate: `set_field`,
 
 ## Implementation steps (sequenced)
 
-1. **`chirp_backend/undo.py`** — `UndoManager`: ref-counted `transaction(label)`
-   context manager, pre-image recorder API, bounded **undo + redo** stacks,
-   `undo()` / `redo()`. Pure logic, no wx. Unit-tested headless against the
-   `stub_radio` (like `paste_block`): record→undo restores `before`; redo restores
-   `after`; a new op clears the redo stack; nesting yields one entry; empty txn
-   commits nothing; stack bound; empty→erase, non-empty→set.
+1. **`chirp_backend/undo.py`** — ✅ DONE. `UndoManager` with injected
+   `get_memory`/`set_memory`/`erase_memory` (no wx, no globals): ref-counted
+   `transaction(label)` context manager, `record(number)` pre-image API,
+   `commit`/`abort`, bounded **undo + redo** stacks, `undo()`/`redo()` (restore
+   with recording suspended), `can_undo`/`can_redo`/`peek_*_label`/`clear`. 11
+   headless unit tests in `tests/test_undo.py` (undo restores before, redo
+   restores after, new op clears redo, nesting → one entry, empty txn → nothing,
+   first-touch-only per channel, empty pre-image → erase, stack bound, empty
+   stacks → None, abort on exception, clear).
 2. **Recorder hook** — wrap the loaded radio's `set_memory`/`erase_memory` (in
    `radio.py`'s load path) to feed the recorder when a transaction is open;
    `clear()` both stacks on load/close/download. Tests: a write inside a
