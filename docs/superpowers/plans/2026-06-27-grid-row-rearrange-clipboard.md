@@ -1,10 +1,35 @@
 # Plan — Rearranging memory channels: selection model + clipboard (cut/copy/paste)
 
-> **Status:** AGREED 2026-06-27 — all design decisions resolved (see "Decisions"
-> and the former open questions, now folded in). Ready to implement. Extends the
-> native channel grid (`vrp/native/`) so whole **rows** (channels) can be selected
-> and rearranged with a clipboard, on top of the existing Move up/down/to.
-> **Rows only — cells are never moved.**
+> **Status:** AGREED 2026-06-27 — all design decisions resolved. **Step 0 (NVDA
+> selection spike) DONE** — see "Step 0 results" below; the selection model needs
+> far less hand-wiring than feared. Ready for Step 1. Extends the native channel
+> grid (`vrp/native/`) so whole **rows** (channels) can be selected and rearranged
+> with a clipboard, on top of the existing Move up/down/to. **Rows only — cells
+> are never moved.**
+
+## Step 0 results (NVDA spike, 2026-06-27)
+
+Ran `tools/selection_spike.py` (a throwaway harness logging the real focus/
+selection state on every key) with NVDA on the 128-channel Baofeng UV-5R. The
+generic Windows DataViewCtrl already does **most** of the model natively:
+
+| Key | Native behavior | NVDA | Verdict |
+|-----|-----------------|------|---------|
+| `Up` / `Down` | Move + select only the focused row | reads the row | ✅ keep |
+| `Shift+Up/Down` | Extend a contiguous selection (its own anchor) | reads | ✅ keep |
+| `Ctrl+Up/Down` | **Move the focus cursor, selection untouched** | **reads the new row** | ✅ keep — **no wiring** |
+| `Ctrl+Space` | Nothing (no selection change/event) | — | ❌ **wire toggle + announce** |
+| `Space` | Nothing | — | ❌ **wire toggle + announce** |
+
+Trap to remember: the library's `selected_rows()` falls back to the focused row
+when the real selection is empty, and `focus_channel()` sets the current item
+*without selecting*. So early spike lines that looked like "selection followed
+Ctrl+Arrow" were that fallback — the real selection was empty. Confirmed by the
+multi-select cases where `Ctrl+Arrow` left a real selection untouched.
+
+**Net:** the only selection wiring needed is **Space / Ctrl+Space → toggle the
+focused row** (+ announce). `Ctrl+Arrow` and `Shift+Arrow` are native and
+NVDA-correct; no app-level focus cursor or anchor tracking required on Windows.
 
 ---
 
@@ -93,24 +118,27 @@ when the clipboard is empty; Copy/Cut disabled when nothing is selected.
 
 ## Architecture
 
-### 1. Selection model (the riskiest part — spike FIRST)
-The Windows grid is the **generic, custom-drawn DataViewCtrl** (not a native
-common control), so we cannot assume it implements the standard focus-vs-selection
-list model. **Step 0 is an NVDA spike** confirming what the control already does:
-- Does `Shift+Up/Down` extend selection and `Ctrl+Space` toggle? (claimed today)
-- Does `Ctrl+Up/Down` move focus *without* changing selection? (likely NOT native)
-- Does plain `Space` toggle the focused row?
+### 1. Selection model (mostly native — Step 0 confirmed)
+Per "Step 0 results", the generic Windows DataViewCtrl already handles `Up/Down`,
+`Shift+Up/Down` (with its own anchor), and `Ctrl+Up/Down` (move focus, selection
+untouched) — and **NVDA reads the row in every case**. So **no app-level focus
+cursor or anchor tracking is needed** on Windows. The only gap is `Space` /
+`Ctrl+Space`, which are native no-ops.
 
-For anything the control doesn't do, wire it in `channel_grid.py` by extending the
-existing `EVT_KEY_DOWN` handler (the one that does Left/Right + Shift+F10), using
-the library's `focus_row()/select_rows()/selected_rows()/focused_row()`. New grid
-methods (pure-ish, announced via the `Announcer` on Windows like the cell cursor):
-- `move_focus(direction)` — `SetCurrentItem` to prev/next row, **no** selection
-  change; ensure visible; announce the row.
-- `toggle_focused_selection()` — add/remove the focused row from the selection.
-- `extend_selection(direction)` — grow/shrink the contiguous range from a tracked
-  **anchor** row (set when a plain move or a fresh selection starts).
-- Track `_selection_anchor` for Shift+range behavior.
+**Wire just the toggle**, in `channel_grid.py`'s existing `EVT_KEY_DOWN` handler
+(the one that already does Shift+F10 and Skips everything else):
+- `toggle_focused_selection()` — add/remove the focused row from the **real**
+  selection (`SelectRow` / `Unselect` on the inner list at `focused_row()`).
+- Catch `WXK_SPACE` (with or without Ctrl) → call it and **consume** (no `Skip()`)
+  so the control does nothing else with Space; every other key still `Skip()`s, so
+  native `Up`/`Down`/`Shift`/`Ctrl`-arrow behavior is untouched.
+- **Announce** via the `Announcer` (Windows), e.g. "Selected channel N, 3
+  selected" / "Deselected channel N, 2 selected" — mirrors the cell-cursor
+  pattern. Plain/Shift/Ctrl-arrow keep being announced by NVDA natively.
+- **Read the real selection** (`GetSelections` / `IsRowSelected`), not VRP's
+  `selected_channel_numbers()` — the latter falls back to the focused row when the
+  real selection is empty (the Step 0 trap), which would break "deselect the last
+  row."
 
 **macOS/VoiceOver caveat** (consistent with the existing #3 caveat and the webview
 note that Shift+Arrow range-select doesn't work under VoiceOver): VoiceOver drives
@@ -192,12 +220,13 @@ On paste, if any destination slot in `[dest, dest+len-1]` is non-empty:
 - **No selection / no focus / clipboard empty:** announce a gentle message, no-op.
 
 ## Implementation steps (sequenced)
-0. **NVDA selection spike** — verify what the generic DataViewCtrl already does
-   for `Shift+Arrow` / `Ctrl+Space` / `Ctrl+Arrow` / `Space`. Decide what to wire.
-   *(verify-before-commit: this gates the whole selection model.)*
-1. **Selection model in `channel_grid.py`** — `move_focus`, `toggle_focused_
-   selection`, `extend_selection` + anchor; bind the new keys in the existing
-   `EVT_KEY_DOWN` handler; announce via `Announcer` on Windows. NVDA pass.
+0. **NVDA selection spike** — ✅ DONE (2026-06-27, see "Step 0 results").
+   `Up/Down`, `Shift+Arrow`, and `Ctrl+Arrow` are native and NVDA-correct; only
+   `Space`/`Ctrl+Space` need wiring.
+1. **Selection toggle in `channel_grid.py`** — add `toggle_focused_selection()`
+   (reading the real selection, not the fallback); catch `Space`/`Ctrl+Space` in
+   the existing `EVT_KEY_DOWN` handler and consume; announce via `Announcer`.
+   That's the *only* selection wiring (no focus cursor / anchor). NVDA pass.
 2. **Backend `paste_block`** + unit tests (overwrite, make-room success/﻿fail on
    fixed count, cut+erase-source, overlap, immutable, empty). Per the testing rule.
 3. **Clipboard + handlers** (`on_copy/on_cut/on_paste`, `_Clipboard`) in
