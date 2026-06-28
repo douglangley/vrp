@@ -69,15 +69,20 @@ exists is announced and dropped from the list when chosen.
 
 ### Channel grid navigation and selection
 
-The grid is a multi-select `wx.dataview.DataViewListCtrl`
-(`vrp/native/channel_grid.py`) with every channel populated at once — no paging.
-It wraps a native control on each platform (SysListView32 on Windows,
-NSTableView on macOS), so NVDA and VoiceOver both read its rows and cells.
+The grid is a multi-select `wx.dataview.DataViewListCtrl`, provided by
+`wx-accessible-grid`'s `AccessibleGrid` (`vrp/native/channel_grid.py`), with
+every channel populated at once — no paging. It is a real native table on each
+platform (the native list view on Windows, NSTableView on macOS), so NVDA and
+VoiceOver both read its rows. On macOS VoiceOver also reads across a row's cells
+by column natively (`VO`+`Left`/`Right`); on Windows the native list announces
+no per-cell cursor, so VRP adds an app-level `Left`/`Right` cell cursor that
+speaks `"<value>, <column>"` through its supplemental (prism) speech.
 
 | Key | Action |
 |-----|--------|
-| Arrows | Move focus a row at a time |
-| `Shift+Arrow` | Extend a contiguous selection |
+| `Up` / `Down` | Move focus a row at a time (the screen reader reads the row) |
+| `Left` / `Right` | Move a cell cursor across the row's columns. **Windows:** VRP speaks `"<value>, <column>"`. **macOS:** use VoiceOver's own `VO`+`Left`/`Right`, which reads cells natively |
+| `Shift+Up` / `Shift+Down` | Extend a contiguous selection |
 | `Ctrl+Space` | Toggle the focused row into/out of a non-contiguous selection |
 | `F2` / `Enter` | Open the edit dialog for the focused channel |
 | `Del` | Delete the selected channel(s) (Channels-menu accelerator) |
