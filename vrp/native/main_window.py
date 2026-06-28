@@ -157,6 +157,8 @@ class MainWindow(wx.Frame):
 
     def _build_file_menu(self) -> wx.Menu:
         m = wx.Menu()
+        self._file_menu = m
+        self._recent_item: wx.MenuItem | None = None  # the "Open Recent" submenu, when shown
         self._add(m, "open", "&Open Image File…\tCtrl+O", self.on_open)
         self._add(m, "save", "&Save\tCtrl+S", self.on_save, needs_radio=True)
         self._add(m, "save_as", "Save &As…\tCtrl+Shift+S", self.on_save_as, needs_radio=True)
@@ -167,7 +169,49 @@ class MainWindow(wx.Frame):
         m.AppendSeparator()
         self._add(m, "preferences", "&Preferences…", self.on_preferences)
         self._add(m, "exit", "E&xit\tCtrl+Q", self.on_exit)
+        # Insert the "Open Recent" submenu (after Open) per the saved preference.
+        self._refresh_recent_menu()
         return m
+
+    def _refresh_recent_menu(self) -> None:
+        """(Re)build the File > Open Recent submenu from prefs + recent files.
+
+        Shown only when the recent_files_count preference is >= 1; a count of 0
+        removes the submenu entirely (the user asked for it to disappear). Called
+        at startup, after each successful open, and after Preferences changes the
+        count. Rebuilt from scratch each time to avoid stale entries."""
+        from vrp.config import get_config
+
+        cfg = get_config()
+        if self._recent_item is not None:
+            # Remove() detaches the submenu item; dropping our reference lets it
+            # (and its submenu) be freed. wx.Menu has no Destroy(item) in Phoenix.
+            self._file_menu.Remove(self._recent_item)
+            self._recent_item = None
+        if cfg.recent_count() <= 0:
+            return
+        recents = cfg.recent_to_show()
+        sub = wx.Menu()
+        if recents:
+            basenames = [os.path.basename(p) for p in recents]
+            for i, path in enumerate(recents):
+                base = basenames[i]
+                label = base
+                if basenames.count(base) > 1:  # disambiguate dupes with the folder
+                    label = f"{base} — {os.path.basename(os.path.dirname(path))}"
+                # &N gives a quick Alt+number mnemonic; escape any literal & in
+                # the name so it isn't read as a mnemonic; full path in the help.
+                item = sub.Append(wx.ID_ANY, f"&{i + 1} {label.replace('&', '&&')}")
+                item.SetHelp(path)
+                self.Bind(wx.EVT_MENU, lambda e, p=path: self._open_recent(p), item)
+            sub.AppendSeparator()
+            clear = sub.Append(wx.ID_ANY, "&Clear Recently Opened")
+            self.Bind(wx.EVT_MENU, self._on_clear_recent, clear)
+        else:
+            placeholder = sub.Append(wx.ID_ANY, "(No recent files)")
+            placeholder.Enable(False)
+        # Position 1 = directly after "Open Image File…".
+        self._recent_item = self._file_menu.Insert(1, wx.ID_ANY, "Open &Recent", sub)
 
     def _build_radio_menu(self) -> wx.Menu:
         from chirp_backend import query as query_mod
@@ -679,11 +723,21 @@ class MainWindow(wx.Frame):
             if dlg.ShowModal() != wx.ID_OK:
                 return
             path = dlg.GetPath()
+        self._open_path(path)
+
+    def _open_path(self, path: str) -> bool:
+        """Load a radio image from ``path``, record it in recent files, refresh
+        the Recent submenu, and focus the grid. Shared by File > Open and the
+        Open Recent submenu. Returns True on success."""
+        from vrp.config import get_config
+
         ok, message = radio_backend.load_image(path)
         if not ok:
             self.announce.announce(message, assertive=True)
-            return
+            return False
         self._load_into_grid()
+        get_config().add_recent(path)
+        self._refresh_recent_menu()
         self.grid.SetFocus()
         # Status bar keeps the detailed message (vendor/model/filename); the
         # spoken cue is just the short "<name> loaded" form. Deferred and
@@ -694,6 +748,32 @@ class MainWindow(wx.Frame):
         self.SetStatusText(message)
         name = os.path.splitext(os.path.basename(path))[0]
         wx.CallLater(750, self._speaker.speak, f"{name} loaded", interrupt=True)
+        return True
+
+    def _open_recent(self, path: str) -> None:
+        """Open a file chosen from the Open Recent submenu. A path that no longer
+        exists is dropped from the list (with an announcement) rather than failing
+        to load."""
+        from vrp.config import get_config
+
+        if not os.path.exists(path):
+            get_config().remove_recent(path)
+            self._refresh_recent_menu()
+            self.announce.announce(
+                f"File not found: {os.path.basename(path)}. Removed from recent files.",
+                assertive=True,
+            )
+            self.grid.SetFocus()
+            return
+        self._open_path(path)
+
+    def _on_clear_recent(self, _evt=None) -> None:
+        from vrp.config import get_config
+
+        get_config().clear_recent()
+        self._refresh_recent_menu()
+        self.announce.announce("Recent files cleared.")
+        self.grid.SetFocus()
 
     def on_save(self, _evt=None) -> None:
         state = radio_backend.get_state()
@@ -829,10 +909,11 @@ class MainWindow(wx.Frame):
         self.grid.SetFocus()
 
     def on_preferences(self, _evt=None) -> None:
-        """File > Preferences — app settings (supplemental speech).
+        """File > Preferences — app settings.
 
-        The native grid has no paging, so channels_per_page is not offered here.
-        Only the supplemental speech toggle is exposed.
+        Exposes the supplemental-speech toggle and the number of recent files to
+        show in File > Open Recent (0 hides it). The native grid has no paging,
+        so channels_per_page is collected by the shared dialog but ignored here.
         """
         from vrp.config import get_config
         from vrp.prefs_dialog import PreferencesDialog
@@ -843,6 +924,7 @@ class MainWindow(wx.Frame):
         current = {
             "channels_per_page": int(cfg.get("channels_per_page", 100)),
             "speak_status_messages": bool(cfg.get("speak_status_messages", False)),
+            "recent_files_count": cfg.recent_count(),
         }
         dlg = PreferencesDialog(self, current)
         if dlg.ShowModal() != wx.ID_OK:
@@ -853,6 +935,8 @@ class MainWindow(wx.Frame):
         dlg.Destroy()
 
         cfg.set("speak_status_messages", values["speak_status_messages"])
+        cfg.set_recent_count(values["recent_files_count"])
+        self._refresh_recent_menu()
         self.announce.announce("Preferences saved.")
         self.grid.SetFocus()
 

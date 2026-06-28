@@ -17,7 +17,10 @@ import tempfile
 
 LOG = logging.getLogger(__name__)
 
-MAX_RECENT = 8
+# Upper bound on how many recent files we *store*. The user picks how many to
+# *show* (0–9) via the recent_files_count preference; storing 9 lets a setting
+# of 9 actually display 9.
+MAX_RECENT = 9
 
 # App config directory name. "OpenMemoryWriter" was the project's pre-rename
 # name; any config found there is migrated forward to the current "VRP" dir.
@@ -29,6 +32,7 @@ _DEFAULTS = {
     "channels_per_page": 100,
     "speak_status_messages": False,  # screen reader already reads the live region
     "recent_files": [],
+    "recent_files_count": 9,  # how many recent files to show in the menu (0 hides it)
     "last_serial_port": None,  # device string (e.g. "COM4") last used for a clone
 }
 
@@ -129,6 +133,25 @@ class Config:
     def clear_recent(self) -> None:
         self._data["recent_files"] = []
         self.save()
+
+    # -- recent-files count preference ------------------------------------
+
+    def recent_count(self) -> int:
+        """How many recent files to show in the menu, clamped to 0..MAX_RECENT.
+        0 means hide the Recent submenu entirely."""
+        try:
+            n = int(self._data.get("recent_files_count", _DEFAULTS["recent_files_count"]))
+        except (TypeError, ValueError):
+            n = _DEFAULTS["recent_files_count"]
+        return max(0, min(MAX_RECENT, n))
+
+    def set_recent_count(self, n: int) -> None:
+        self._data["recent_files_count"] = max(0, min(MAX_RECENT, int(n)))
+        self.save()
+
+    def recent_to_show(self) -> list:
+        """The recent files to display, newest first, capped at recent_count()."""
+        return self.recent()[: self.recent_count()]
 
 
 _instance: Config | None = None

@@ -1,7 +1,9 @@
 """Native wx Preferences dialog (app settings with a real wired effect).
 
-Two prefs that take effect immediately:
+Prefs that take effect immediately:
 - Channels per page (grid paging size) — a wx.Choice of known-good values.
+- Recently opened files to show — a wx.Choice of 0..9. 0 hides the File >
+  Open Recent submenu; 1..9 shows that many recent files.
 - Speak status messages aloud — gates the prism supplemental speech. Default
   OFF: the screen reader already reads the live region, so this is opt-in extra
   speech (the label says so to avoid double-speak confusion).
@@ -14,6 +16,7 @@ from __future__ import annotations
 import wx
 
 PAGE_CHOICES = [25, 50, 100, 250, 500]
+RECENT_COUNT_CHOICES = list(range(10))  # 0..9; 0 hides the Recent submenu
 
 
 class PreferencesDialog(wx.Dialog):
@@ -31,6 +34,22 @@ class PreferencesDialog(wx.Dialog):
             PAGE_CHOICES.index(cur) if cur in PAGE_CHOICES else PAGE_CHOICES.index(100)
         )
         grid.Add(self.page)
+
+        grid.Add(wx.StaticText(self, label="Recently opened files to show:"), 0,
+                 wx.ALIGN_CENTER_VERTICAL)
+        self.recent_count = wx.Choice(
+            self, choices=[str(n) for n in RECENT_COUNT_CHOICES]
+        )
+        self.recent_count.SetName("Recently opened files to show, 0 to 9, 0 hides the menu")
+        cur_recent = current.get("recent_files_count", 9)
+        try:
+            cur_recent = int(cur_recent)
+        except (TypeError, ValueError):
+            cur_recent = 9
+        cur_recent = max(0, min(9, cur_recent))
+        self.recent_count.SetSelection(cur_recent)  # choices are 0..9, so index == value
+        grid.Add(self.recent_count)
+
         outer.Add(grid, 0, wx.ALL, 12)
 
         self.speak = wx.CheckBox(
@@ -51,5 +70,6 @@ class PreferencesDialog(wx.Dialog):
     def get_values(self) -> dict:
         return {
             "channels_per_page": PAGE_CHOICES[self.page.GetSelection()],
+            "recent_files_count": self.recent_count.GetSelection(),  # index == value (0..9)
             "speak_status_messages": self.speak.GetValue(),
         }

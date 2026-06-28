@@ -54,6 +54,40 @@ def test_clear_recent(tmp_path):
     assert c.recent() == []
 
 
+def test_recent_count_default(tmp_path):
+    c = Config(path=str(tmp_path / "c.json"))
+    assert c.recent_count() == 9  # default shows all stored recents
+
+
+def test_set_recent_count_persists_and_clamps(tmp_path):
+    path = str(tmp_path / "c.json")
+    Config(path=path).set_recent_count(3)
+    assert Config(path=path).recent_count() == 3
+    # out-of-range values are clamped to 0..MAX_RECENT
+    Config(path=path).set_recent_count(99)
+    assert Config(path=path).recent_count() == MAX_RECENT
+    Config(path=path).set_recent_count(-4)
+    assert Config(path=path).recent_count() == 0
+
+
+def test_recent_count_tolerates_garbage(tmp_path):
+    p = tmp_path / "c.json"
+    p.write_text(json.dumps({"recent_files_count": "not a number"}), encoding="utf-8")
+    assert Config(path=str(p)).recent_count() == 9  # falls back to the default
+
+
+def test_recent_to_show_caps_to_count(tmp_path):
+    c = Config(path=str(tmp_path / "c.json"))
+    for i in range(MAX_RECENT):
+        c.add_recent(f"/tmp/f{i}.img")
+    c.set_recent_count(3)
+    shown = c.recent_to_show()
+    assert len(shown) == 3
+    assert os.path.basename(shown[0]) == f"f{MAX_RECENT - 1}.img"  # newest first
+    c.set_recent_count(0)
+    assert c.recent_to_show() == []  # 0 shows nothing (menu hidden)
+
+
 def test_last_serial_port_round_trips(tmp_path):
     path = str(tmp_path / "c.json")
     assert Config(path=path).get_last_serial_port() is None  # default
