@@ -36,6 +36,11 @@ arrow keys move across top-level menus; NVDA reads it like any native app menu.
 | File | Export to CSV… | — | needs a loaded radio |
 | File | Preferences… | — | |
 | File | Exit | `Ctrl+Q` | |
+| Edit | Select All Channels | `Ctrl+A` | needs a loaded radio |
+| Edit | Clear Selection | — | needs a loaded radio |
+| Edit | Copy | `Ctrl+C` | needs a loaded radio; copies the selected channel(s) |
+| Edit | Cut | `Ctrl+X` | needs a loaded radio; deferred — moves on paste |
+| Edit | Paste | `Ctrl+V` | needs a loaded radio; pastes at the focused channel |
 | Radio | Download from Radio | `Ctrl+Shift+D` | |
 | Radio | Upload to Radio | `Ctrl+Shift+U` | needs a loaded radio |
 | Radio | Query Source ▸ … | — | needs a loaded radio; one item per registered source |
@@ -81,22 +86,28 @@ speaks `"<value>, <column>"` through its supplemental (prism) speech.
 
 | Key | Action |
 |-----|--------|
-| `Up` / `Down` | Move focus a row at a time (the screen reader reads the row) |
+| `Up` / `Down` | Move focus a row at a time (the screen reader reads the row); selection follows |
+| `Ctrl+Up` / `Ctrl+Down` | Move the focus cursor to the prev/next row **without changing the selection** (native; NVDA still reads the row) |
 | `Left` / `Right` | Move a cell cursor across the row's columns. **Windows:** VRP speaks `"<value>, <column>"`. **macOS:** use VoiceOver's own `VO`+`Left`/`Right`, which reads cells natively |
+| `Space` / `Ctrl+Space` | Toggle the focused row in/out of the selection (announces "Selected/Deselected channel N, K selected") |
 | `Shift+Up` / `Shift+Down` | Extend a contiguous selection |
-| `Ctrl+Space` | Toggle the focused row into/out of a non-contiguous selection |
+| `Ctrl+A` | Select all channels |
+| `Ctrl+C` / `Ctrl+X` / `Ctrl+V` | Copy / Cut (deferred — moves on paste) / Paste the selected channel(s) at the focused channel |
 | `Ctrl+E` / `Enter` | Edit the focused channel — **all** fields (full dialog) |
 | `F2` | Edit the **focused cell** — a single-field dialog for the cursor's column. On the channel-number column, a read-only column, or where the cursor column isn't known (macOS until wx-accessible-grid#3), falls back to the full dialog |
 | `Del` | Delete the selected channel(s) (Channels-menu accelerator) |
-| `Applications` key / `Shift+F10` | Open the row context menu (Edit channel / Edit cell / Delete / Move up/down / Move to / Organize / Go to / Banks). The generic Windows DataViewCtrl raises this for the Applications key and a right-click natively; VRP wires `Shift+F10` itself (`ChannelGrid._on_shift_f10`) since the control doesn't |
+| `Applications` key / `Shift+F10` | Open the row context menu (Edit channel / Edit cell / Delete / Copy / Cut / Paste / Move up/down / Move to / Organize / Go to / Banks). The generic Windows DataViewCtrl raises this for the Applications key and a right-click natively; VRP wires `Shift+F10` itself (`ChannelGrid._on_grid_key`) since the control doesn't |
 
 ### Reorganizing channels
 
 Select one channel, or a group: `Shift+Arrow` extends a contiguous block;
-`Ctrl+Space` toggles individual rows for a non-contiguous set. Then:
+`Space`/`Ctrl+Space` toggles individual rows for a non-contiguous set (use
+`Ctrl+Arrow` to move the cursor between rows without disturbing the selection).
+Then:
 
 | Key | Action |
 |-----|--------|
+| `Ctrl+C` / `Ctrl+X` / `Ctrl+V` | Copy / Cut / Paste the selected channel(s) |
 | `Ctrl+Shift+Up` | Move the selected channel(s) up one slot |
 | `Ctrl+Shift+Down` | Move the selected channel(s) down one slot |
 | `Ctrl+Shift+M` | Move the selected channel(s) to a chosen channel |
@@ -108,6 +119,15 @@ Select one channel, or a group: `Shift+Arrow` extends a contiguous block;
 After a move, the moved block stays selected at its new position and focus
 lands on its first channel; the result is announced via the status bar and
 speech.
+
+**Cut / copy / paste** work on whole rows with an in-app clipboard (current
+image only). `Ctrl+C` snapshots the selected channel(s); `Ctrl+X` marks them
+(deferred — nothing changes until you paste, which then *moves* them and clears
+the clipboard); `Ctrl+V` pastes at the focused channel. Paste **overwrites** the
+destination, but when the destination is occupied a dialog offers **Overwrite**,
+**Make room** (shift the existing channels down to insert — blocked if there
+aren't enough empty slots near the end), or **Cancel**. The radio's channel
+count is fixed, so nothing is ever added or pushed off the end.
 
 ### Dialogs (shared with the webview UI)
 

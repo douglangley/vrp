@@ -246,12 +246,20 @@ On paste, if any destination slot in `[dest, dest+len-1]` is non-empty:
    `wx.MessageDialog`, Overwrite / Make room / Cancel via `SetYesNoCancelLabels`;
    Esc cancels; focus returns to the grid). Shown only when destination slots are
    occupied (skipped for an empty destination). Button→choice mapping unit-tested.
-5. **Menus** — new Edit menu + context-menu items + `APP_SHORTCUTS`;
-   `_update_menu_state` enable/disable; update `GetMenuCount()` test (4 → 5) and
-   the Radio-menu-index assertion in `tests/test_channel_grid.py`.
-6. **Docs** — `docs/keyboard-map.md` (native selection + Edit menu tables),
-   `docs/chirp-feature-coverage.md`, F1 list.
-7. **Full NVDA hand pass** of the whole flow; macOS/VoiceOver noted as follow-up.
+5. **Menus** — ✅ DONE. New **Edit** menu (Select All `Ctrl+A` / Clear Selection /
+   Copy `Ctrl+C` / Cut `Ctrl+X` / Paste `Ctrl+V`) between File and Radio; same
+   Copy/Cut/Paste in `on_grid_context_menu` (Paste shows its count, or a disabled
+   item when the clipboard is empty). `on_select_all`/`on_clear_selection` added.
+   Edit items gated on a loaded radio **only** (not on selection/clipboard state):
+   disabling an item kills its accelerator until the menu reopens, which would
+   make `Ctrl+V` right after `Ctrl+C` dead — so they stay live and the handlers
+   announce gracefully. `APP_SHORTCUTS` (F1) updated; menu-count test 4 → 5 and
+   Radio index 1 → 2; new Edit-menu test.
+6. **Docs** — ✅ DONE. `docs/keyboard-map.md` (Edit-menu rows, grid selection +
+   clipboard keys, context menu, Reorganizing section), `docs/chirp-feature-
+   coverage.md` (Cut/Paste ☑), F1 list.
+7. **Full NVDA hand pass** of the whole flow — ⏳ OWED before committing the
+   user-facing claim; macOS/VoiceOver noted as follow-up.
 
 ## Test strategy
 - Backend: `paste_block` gets full unit coverage (every memory op must — project

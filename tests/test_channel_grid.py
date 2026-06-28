@@ -147,6 +147,29 @@ def test_space_key_routes_to_select_toggle(app):
         frame.Destroy()
 
 
+def test_edit_menu_has_clipboard_items(app):
+    """The new Edit menu carries Select All / Clear Selection / Copy / Cut /
+    Paste, all enabled once a radio is loaded."""
+    from vrp.native.main_window import MainWindow
+
+    win = MainWindow()
+    try:
+        radio_backend.load_image(IMAGE)
+        win._load_into_grid()
+        edit_menu = win.GetMenuBar().GetMenu(1)  # File(0), Edit(1)
+        labels = " ".join(
+            edit_menu.FindItemByPosition(i).GetItemLabelText()
+            for i in range(edit_menu.GetMenuItemCount())
+        ).lower()
+        for word in ("select all", "clear selection", "copy", "cut", "paste"):
+            assert word in labels
+        for key in ("select_all", "clear_selection", "copy", "cut", "paste"):
+            assert win._menu_items[key].IsEnabled()
+    finally:
+        radio_backend.unload()
+        win.Destroy()
+
+
 def test_main_window_announces_ready_on_startup(app):
     from vrp.native.main_window import MainWindow
 
@@ -173,7 +196,8 @@ def test_main_window_constructs_and_lists_channels(app):
         radio_backend.load_image(IMAGE)
         win._load_into_grid()
         assert win.grid.GetItemCount() == 16
-        assert win.GetMenuBar().GetMenuCount() == 4
+        # File, Edit, Radio, Channels, Help
+        assert win.GetMenuBar().GetMenuCount() == 5
 
         # CHIRP attribution must be permanently visible in status field 1.
         sb = win.GetStatusBar()
@@ -181,7 +205,7 @@ def test_main_window_constructs_and_lists_channels(app):
         assert "chirpmyradio.com" in sb.GetStatusText(1)
 
         # Radio menu must include a Query Source submenu.
-        radio_menu = win.GetMenuBar().GetMenu(1)  # "&Radio" is index 1
+        radio_menu = win.GetMenuBar().GetMenu(2)  # "&Radio" is index 2 (after Edit)
         labels = [radio_menu.FindItemByPosition(i).GetItemLabel()
                   for i in range(radio_menu.GetMenuItemCount())]
         assert any("Query Source" in lbl for lbl in labels)

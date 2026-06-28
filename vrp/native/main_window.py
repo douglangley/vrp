@@ -62,6 +62,13 @@ APP_SHORTCUTS = [
     ("Ctrl+E / Enter", "Edit the focused channel (all fields)"),
     ("F2", "Edit the focused cell (one column)"),
     ("Del", "Delete the selected channel(s)"),
+    ("Space / Ctrl+Space", "Select or deselect the focused channel"),
+    ("Ctrl+Up / Ctrl+Down", "Move the cursor without changing the selection"),
+    ("Shift+Up / Shift+Down", "Extend the selection"),
+    ("Ctrl+A", "Select all channels"),
+    ("Ctrl+C", "Copy selected channel(s)"),
+    ("Ctrl+X", "Cut selected channel(s)"),
+    ("Ctrl+V", "Paste at the focused channel"),
     ("Ctrl+Shift+G", "Go to channel"),
     ("Ctrl+B", "Channel banks for the focused channel"),
     ("Ctrl+Shift+Up", "Move selected channel(s) up"),
@@ -156,6 +163,7 @@ class MainWindow(wx.Frame):
     def _build_menubar(self) -> None:
         bar = wx.MenuBar()
         bar.Append(self._build_file_menu(), "&File")
+        bar.Append(self._build_edit_menu(), "&Edit")
         bar.Append(self._build_radio_menu(), "&Radio")
         bar.Append(self._build_channels_menu(), "&Channels")
         bar.Append(self._build_help_menu(), "&Help")
@@ -234,6 +242,24 @@ class MainWindow(wx.Frame):
             placeholder.Enable(False)
         # Position 1 = directly after "Open Image File…".
         self._recent_item = self._file_menu.Insert(1, wx.ID_ANY, "Open &Recent", sub)
+
+    def _build_edit_menu(self) -> wx.Menu:
+        m = wx.Menu()
+        self._add(m, "select_all", "Select &All Channels\tCtrl+A",
+                  self.on_select_all, needs_radio=True)
+        self._add(m, "clear_selection", "&Clear Selection",
+                  self.on_clear_selection, needs_radio=True)
+        m.AppendSeparator()
+        # Copy/Cut/Paste are gated only on a loaded radio (not on having a
+        # selection / non-empty clipboard): disabling a menu item also disables
+        # its accelerator, and the item wouldn't be re-enabled until the menu
+        # reopened — so Ctrl+V right after Ctrl+C would be dead. Keeping them live
+        # and letting the handlers announce "Clipboard is empty" / "No channel
+        # selected" is both correct and more discoverable.
+        self._add(m, "copy", "&Copy\tCtrl+C", self.on_copy, needs_radio=True)
+        self._add(m, "cut", "Cu&t\tCtrl+X", self.on_cut, needs_radio=True)
+        self._add(m, "paste", "&Paste\tCtrl+V", self.on_paste, needs_radio=True)
+        return m
 
     def _build_radio_menu(self) -> wx.Menu:
         from chirp_backend import query as query_mod
@@ -419,6 +445,20 @@ class MainWindow(wx.Frame):
             self.on_delete_channels,
         )
         menu.AppendSeparator()
+        add(
+            "&Copy selected channels\tCtrl+C" if sel > 1 else f"&Copy channel {number}\tCtrl+C",
+            self.on_copy,
+        )
+        add(
+            "Cu&t selected channels\tCtrl+X" if sel > 1 else f"Cu&t channel {number}\tCtrl+X",
+            self.on_cut,
+        )
+        if self._clipboard is not None:
+            add(f"&Paste {len(self._clipboard.mems)} channel(s) here\tCtrl+V", self.on_paste)
+        else:
+            disabled = menu.Append(wx.ID_ANY, "&Paste\tCtrl+V")
+            disabled.Enable(False)  # nothing on the clipboard yet
+        menu.AppendSeparator()
         add("Move &up\tCtrl+Shift+Up", self.on_move_up)
         add("Move &down\tCtrl+Shift+Down", self.on_move_down)
         add("&Move to channel…\tCtrl+Shift+M", self.on_move_to)
@@ -490,6 +530,28 @@ class MainWindow(wx.Frame):
         verb = "Selected" if selected else "Deselected"
         tail = "none selected" if count == 0 else f"{count} selected"
         self.announce.announce(f"{verb} channel {number}. {tail}.")
+
+    # -- selection commands (Edit menu) ------------------------------
+
+    def on_select_all(self, _evt=None) -> None:
+        """Select every channel (Edit ▸ Select All / Ctrl+A)."""
+        if not radio_backend.get_state().loaded:
+            self.announce.announce("No radio image is open.", assertive=True)
+            return
+        self.grid.select_all()
+        # select_all fires the selection-changed event; its debounced count
+        # announce would duplicate ours, so suppress it once.
+        self._suppress_next_count = True
+        self.announce.announce(f"Selected all {self.grid.selected_count()} channels.")
+
+    def on_clear_selection(self, _evt=None) -> None:
+        """Clear the selection (Edit ▸ Clear Selection)."""
+        if not radio_backend.get_state().loaded:
+            self.announce.announce("No radio image is open.", assertive=True)
+            return
+        self.grid.clear_selection()
+        self._suppress_next_count = True
+        self.announce.announce("Selection cleared.")
 
     # -- clipboard: cut / copy / paste (whole rows) -------------------
 

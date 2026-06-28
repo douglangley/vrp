@@ -36,7 +36,7 @@ update (`git pull` ./chirp) in case new dialogs appear.
 | Copy to / Move to (bulk)        | 3         | ☑      |
 | Delete / Delete + shift         | 3         | ☑      |
 | Insert / Move / Sort / Arrange  | 3         | ☑      |
-| Cut / Paste (clipboard)         | 3         | ☐      |
+| Cut / Paste (clipboard)         | 3         | ☑      |
 | Find / Find Next                | 3         | ☑      |
 | Goto channel                    | 3         | ☑      |
 | Preferences                     | config    | ☑      |

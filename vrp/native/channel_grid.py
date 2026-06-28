@@ -242,6 +242,14 @@ class ChannelGrid(wx.Panel):
                 idxs.append(idx)
         self._grid.select_rows(idxs)
 
+    def select_all(self) -> None:
+        """Select every row (Edit ▸ Select All / Ctrl+A)."""
+        self._list.SelectAll()
+
+    def clear_selection(self) -> None:
+        """Clear the selection (Edit ▸ Clear Selection)."""
+        self._list.UnselectAll()
+
     def focus_channel(self, number: int) -> None:
         """Move focus to ``number`` so the screen reader reads it (takes keyboard
         focus to the grid if needed). Pair with ``select_channels`` when a row
