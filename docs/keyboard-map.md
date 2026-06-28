@@ -41,7 +41,8 @@ arrow keys move across top-level menus; NVDA reads it like any native app menu.
 | Radio | Query Source ▸ … | — | needs a loaded radio; one item per registered source |
 | Radio | Settings… | `Ctrl+Shift+P` | needs a loaded radio |
 | Radio | Radio Info… | — | needs a loaded radio |
-| Channels | Edit channel… | `F2` | needs a loaded radio |
+| Channels | Edit channel… | `Ctrl+E` | needs a loaded radio; all fields (also `Enter` / double-click on the grid) |
+| Channels | Edit cell… | `F2` | needs a loaded radio; just the focused cell's column |
 | Channels | Delete channel(s) | `Del` | needs a loaded radio; clears the selected channel(s) |
 | Channels | Go to channel… | `Ctrl+Shift+G` | needs a loaded radio |
 | Channels | Channel banks… | `Ctrl+B` | needs a loaded radio |
@@ -84,7 +85,8 @@ speaks `"<value>, <column>"` through its supplemental (prism) speech.
 | `Left` / `Right` | Move a cell cursor across the row's columns. **Windows:** VRP speaks `"<value>, <column>"`. **macOS:** use VoiceOver's own `VO`+`Left`/`Right`, which reads cells natively |
 | `Shift+Up` / `Shift+Down` | Extend a contiguous selection |
 | `Ctrl+Space` | Toggle the focused row into/out of a non-contiguous selection |
-| `F2` / `Enter` | Open the edit dialog for the focused channel |
+| `Ctrl+E` / `Enter` | Edit the focused channel — **all** fields (full dialog) |
+| `F2` | Edit the **focused cell** — a single-field dialog for the cursor's column. On the channel-number column, a read-only column, or where the cursor column isn't known (macOS until wx-accessible-grid#3), falls back to the full dialog |
 | `Del` | Delete the selected channel(s) (Channels-menu accelerator) |
 
 ### Reorganizing channels

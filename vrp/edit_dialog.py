@@ -22,6 +22,38 @@ import wx
 from chirp_backend.col_defs import build_column_defs
 
 
+def _select_choice(ctrl: "wx.Choice", choices: list[str], current: str) -> None:
+    """Select ``current`` in a wx.Choice, tolerating numeric formatting
+    differences (e.g. DTCS "23" vs the choice "023")."""
+    if ctrl.SetStringSelection(current):
+        return
+    cur = current.strip().lstrip("0")
+    if cur:
+        for i, choice in enumerate(choices):
+            if choice.strip().lstrip("0") == cur:
+                ctrl.SetSelection(i)
+                return
+    if choices:
+        ctrl.SetSelection(0)
+
+
+def make_field_control(parent: wx.Window, col, current: str):
+    """Build the right native control for a column: a wx.Choice for ``select``
+    columns (pre-selected to ``current``), else a wx.TextCtrl."""
+    if col.input_type == "select":
+        ctrl = wx.Choice(parent, choices=list(col.choices))
+        _select_choice(ctrl, list(col.choices), current)
+        return ctrl
+    return wx.TextCtrl(parent, value=current)
+
+
+def control_value(ctrl) -> str:
+    """Read the current string value from a field control (Choice or TextCtrl)."""
+    if isinstance(ctrl, wx.Choice):
+        return ctrl.GetStringSelection()
+    return ctrl.GetValue()
+
+
 class EditChannelDialog(wx.Dialog):
     """Modal editor for a single channel's fields."""
 
@@ -47,7 +79,7 @@ class EditChannelDialog(wx.Dialog):
             current = col.format_value(mem)  # blank for an empty channel's freq
 
             label = wx.StaticText(self, label=col.label + ":")
-            ctrl = self._make_control(col, current)
+            ctrl = make_field_control(self, col, current)
 
             name = col.label
             if is_immutable:
@@ -81,38 +113,13 @@ class EditChannelDialog(wx.Dialog):
                 ctrl.SetFocus()
                 break
 
-    def _make_control(self, col, current: str):
-        if col.input_type == "select":
-            ctrl = wx.Choice(self, choices=list(col.choices))
-            self._select_choice(ctrl, list(col.choices), current)
-            return ctrl
-        ctrl = wx.TextCtrl(self, value=current)
-        return ctrl
-
-    @staticmethod
-    def _select_choice(ctrl: "wx.Choice", choices: list[str], current: str) -> None:
-        if ctrl.SetStringSelection(current):
-            return
-        # Tolerant numeric match (e.g. DTCS "23" vs choice "023").
-        cur = current.strip().lstrip("0")
-        if cur:
-            for i, choice in enumerate(choices):
-                if choice.strip().lstrip("0") == cur:
-                    ctrl.SetSelection(i)
-                    return
-        if choices:
-            ctrl.SetSelection(0)
-
     def get_values(self) -> dict:
         """Return {field: value_str} for every enabled, editable control."""
         values: dict[str, str] = {}
         for field, (ctrl, _col) in self._controls.items():
             if not ctrl.IsEnabled():
                 continue
-            if isinstance(ctrl, wx.Choice):
-                values[field] = ctrl.GetStringSelection()
-            else:
-                values[field] = ctrl.GetValue()
+            values[field] = control_value(ctrl)
         return values
 
     def _on_ok(self, event: wx.CommandEvent) -> None:
@@ -129,3 +136,54 @@ class EditChannelDialog(wx.Dialog):
         wx.MessageBox(message, "Invalid value", wx.OK | wx.ICON_ERROR, self)
         if bad_field and bad_field in self._controls:
             self._controls[bad_field][0].SetFocus()
+
+
+class EditCellDialog(wx.Dialog):
+    """Modal editor for a single column of one channel (the grid's F2 / "edit
+    this cell" action).
+
+    Same control types and validation path as :class:`EditChannelDialog`, but
+    one field only — the fastest way to change a single value. On OK the value is
+    validated via ``memory_ops.validate_channel_values``; on failure the dialog
+    stays open, speaks the reason, and re-focuses the field. The caller applies
+    the value (``update_channel``) and refreshes the row.
+    """
+
+    def __init__(self, parent, number: int, mem, col) -> None:
+        super().__init__(parent, title=f"Edit {col.label} (channel {number})")
+        self._number = number
+        self._col = col
+
+        outer = wx.BoxSizer(wx.VERTICAL)
+        row = wx.BoxSizer(wx.HORIZONTAL)
+        row.Add(wx.StaticText(self, label=col.label + ":"), 0,
+                wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 8)
+        self._ctrl = make_field_control(self, col, col.format_value(mem))
+        self._ctrl.SetName(col.label)  # NVDA reads control name + role + value
+        row.Add(self._ctrl, 1, wx.EXPAND)
+        outer.Add(row, 0, wx.EXPAND | wx.ALL, 12)
+
+        self._status = wx.StaticText(self, label="")
+        outer.Add(self._status, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 12)
+
+        outer.Add(self.CreateStdDialogButtonSizer(wx.OK | wx.CANCEL), 0,
+                  wx.EXPAND | wx.ALL, 8)
+        self.SetSizerAndFit(outer)
+        self.Bind(wx.EVT_BUTTON, self._on_ok, id=wx.ID_OK)
+        self._ctrl.SetFocus()
+
+    def get_value(self) -> str:
+        return control_value(self._ctrl)
+
+    def _on_ok(self, event: wx.CommandEvent) -> None:
+        from chirp_backend import memory_ops
+
+        ok, message, _bad = memory_ops.validate_channel_values(
+            self._number, {self._col.name: self.get_value()}
+        )
+        if ok:
+            event.Skip()
+            return
+        self._status.SetLabel(message)
+        wx.MessageBox(message, "Invalid value", wx.OK | wx.ICON_ERROR, self)
+        self._ctrl.SetFocus()

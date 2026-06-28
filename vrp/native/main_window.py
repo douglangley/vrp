@@ -44,7 +44,8 @@ APP_SHORTCUTS = [
     ("Ctrl+Shift+D", "Download from radio"),
     ("Ctrl+Shift+U", "Upload to radio"),
     ("Ctrl+Shift+P", "Edit radio settings"),
-    ("F2 / Enter", "Edit the focused channel"),
+    ("Ctrl+E / Enter", "Edit the focused channel (all fields)"),
+    ("F2", "Edit the focused cell (one column)"),
     ("Del", "Delete the selected channel(s)"),
     ("Ctrl+Shift+G", "Go to channel"),
     ("Ctrl+B", "Channel banks for the focused channel"),
@@ -242,7 +243,8 @@ class MainWindow(wx.Frame):
 
     def _build_channels_menu(self) -> wx.Menu:
         m = wx.Menu()
-        self._add(m, "edit", "&Edit channel…\tF2", self.on_edit_channel, needs_radio=True)
+        self._add(m, "edit", "&Edit channel…\tCtrl+E", self.on_edit_channel, needs_radio=True)
+        self._add(m, "edit_cell", "Edit ce&ll…\tF2", self.on_edit_cell, needs_radio=True)
         # Delete needs a menu accelerator, not just the in-grid Del key: a focused
         # native DataViewListCtrl (NSTableView) can swallow EVT_KEY_DOWN on macOS,
         # and macOS has no keyboard context-menu, so the accelerator is the only
@@ -304,6 +306,49 @@ class MainWindow(wx.Frame):
         self.grid.focus_channel(number)
         self.announce.announce(message, assertive=not ok)
 
+    def on_edit_cell(self, _evt=None) -> None:
+        """Edit just the focused cell's column in a single-field dialog (F2).
+
+        The column comes from the grid's Left/Right cell cursor. On the channel-
+        number column (the row header), a read-only column, or when the cursor
+        column isn't known (macOS until wx-accessible-grid#3 lands), fall back to
+        the full-channel edit dialog so F2 always does something useful."""
+        cell = self.grid.focused_cell()
+        if cell is None:
+            self.announce.announce("No channel selected.")
+            return
+        number, col_name = cell
+        mem = radio_backend.get_memory(number)
+        if mem is None:
+            return
+        if col_name == "number" or col_name in (mem.immutable or []):
+            self.on_edit_channel()  # whole-channel edit (also the macOS fallback)
+            return
+        from chirp_backend.col_defs import build_column_defs
+        from chirp_backend import memory_ops
+        from vrp.edit_dialog import EditCellDialog
+
+        col = next(
+            (c for c in build_column_defs(radio_backend.get_state().features)
+             if c.name == col_name),
+            None,
+        )
+        if col is None:
+            self.on_edit_channel()
+            return
+        with EditCellDialog(self, number, mem, col) as dlg:
+            if dlg.ShowModal() != wx.ID_OK:
+                self.grid.select_channels([number])
+                self.grid.focus_channel(number)
+                return
+            ok, message, _affected = memory_ops.update_channel(
+                number, {col_name: dlg.get_value()}
+            )
+        self.grid.refresh_numbers([number])
+        self.grid.select_channels([number])
+        self.grid.focus_channel(number)
+        self.announce.announce(message, assertive=not ok)
+
     # -- context menu / delete / selection feedback -------------------
 
     def on_grid_context_menu(self, event) -> None:
@@ -322,7 +367,23 @@ class MainWindow(wx.Frame):
             item = menu.Append(wx.ID_ANY, label)
             self.grid.Bind(wx.EVT_MENU, lambda _e: handler(), item)
 
-        add(f"&Edit channel {number}\tEnter", self.on_edit_channel)
+        add(f"&Edit channel {number}\tCtrl+E", self.on_edit_channel)
+        # Contextual single-cell edit, when the cursor is on an editable column
+        # whose name we know (Windows today; macOS once cursor tracking lands).
+        cell = self.grid.focused_cell()
+        if cell is not None:
+            _cn, col_name = cell
+            cmem = radio_backend.get_memory(number)
+            if col_name != "number" and cmem is not None and col_name not in (cmem.immutable or []):
+                from chirp_backend.col_defs import build_column_defs
+
+                col = next(
+                    (c for c in build_column_defs(radio_backend.get_state().features)
+                     if c.name == col_name),
+                    None,
+                )
+                if col is not None:
+                    add(f"Edit ce&ll — {col.label}\tF2", self.on_edit_cell)
         add(
             "&Delete selected channels\tDel" if sel > 1 else f"&Delete channel {number}\tDel",
             self.on_delete_channels,
