@@ -91,13 +91,29 @@ def main() -> None:
     )
 
     if parse_mode(sys.argv[1:]) == "webview":
-        from vrp.app import run
+        # The webview UI is retired as a channel-grid front end: it no longer
+        # imports cleanly against wx-accessible-grid 0.8.0 (which dropped the
+        # editable GridModel/ContextMenuItem API the webview grid used when the
+        # library went native — see CLAUDE.md). It's kept only for the planned
+        # in-app help/documentation role. Fail gracefully so --webview never
+        # crashes the app: warn and launch the native UI instead. (If app.py is
+        # later reworked to import again, --webview will launch it once more.)
+        try:
+            from vrp.app import run as run_webview
+        except ImportError as exc:
+            logging.warning(
+                "--webview is retired and currently unavailable as a channel "
+                "grid (%s); launching the native UI instead. The webview stack "
+                "is retained only for future in-app help/documentation.",
+                exc,
+            )
+        else:
+            run_webview(open_path=args.file)
+            return
 
-        run(open_path=args.file)
-    else:
-        from vrp.native.app import run
+    from vrp.native.app import run
 
-        run(debug=args.debug)
+    run(debug=args.debug)
 
 
 if __name__ == "__main__":

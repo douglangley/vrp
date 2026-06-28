@@ -160,9 +160,6 @@ vrp/
                          in vrp/app.py) but aren't reached in normal
                          operation — the production channel view is the
                          AccessibleGrid below.
-  channel_grid_model.py   Webview UI: ChannelGridModel, the production
-                         GridModel adapter feeding the AccessibleGrid (also
-                         usable standalone via tools/grid_preview.py).
   edit_dialog.py          Native wx dialog to edit one channel (shared by both UIs).
   ops_dialog.py           Native wx dialog for bulk operations (shared).
   find_dialog.py          Native wx Find dialog (shared).
@@ -194,8 +191,6 @@ templates/
 tests/                   Unit tests (no radio hardware needed).
 tools/
   update_chirp.py        Fetches/tests/pins a new CHIRP commit.
-  grid_preview.py        Standalone harness for the webview UI's AccessibleGrid
-                         (loads a CHIRP test image; no full app or radio needed).
 build.py                 PyInstaller build script.
 pyproject.toml           uv-managed project definition (Python 3.11 pinned).
 ```

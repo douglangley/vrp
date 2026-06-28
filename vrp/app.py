@@ -1,5 +1,21 @@
 """wxPython application shell for Versatile Radio Programmer.
 
+.. note::
+   **RETIRED — currently non-importable.** This is the old webview channel-grid
+   UI. The native UI (``vrp/native/``) is the production front end on every
+   platform. This module no longer imports against wx-accessible-grid 0.8.0,
+   which dropped the editable ``GridModel``/``ContextMenuItem`` API the webview
+   grid used when the library went native (it now exports only the read-only
+   ``AccessibleGrid``/``GridModel``/``Column``). ``main.py --webview`` therefore
+   fails gracefully and launches the native UI instead.
+
+   It is kept (not deleted) only as scaffolding for the webview's intended future
+   role — rendering in-app **help and documentation** pages (the menu-bar/bridge/
+   ``AccessibleWebView`` plumbing below is reusable for that). The channel-grid
+   pieces (``AccessibleGrid`` usage, ``ContextMenuItem``, the deleted
+   ``ChannelGridModel``) are dead and will be removed/reworked when that role is
+   built. See CLAUDE.md "What This Project Is".
+
 The app is a wx ``Frame`` whose entire client area is a single
 ``AccessibleWebView``. The webview renders semantic HTML views (welcome screen,
 channel grid, dialogs) that NVDA/JAWS read like a web page. Page code talks back

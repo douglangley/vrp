@@ -211,15 +211,21 @@ modifier, not bare Ctrl+letter, so there's no quick-nav clash). Single-letter
 shortcuts are never used (rule #8). Download/Upload and Close currently have
 in-page buttons; their shortcuts arrive with the relevant phase.
 
-### Channel grid (AccessibleGrid — production)
+### Channel grid (AccessibleGrid — retired)
 
-The channel view is `wx-accessible-grid`'s `AccessibleGrid`, driven by
-`vrp/channel_grid_model.py`. It renders a real, editable `<table role="grid">`
-via the aria-activedescendant pattern so NVDA stays in focus mode, and
-composes each cell's accessible name (channel + column header + value +
-control type) so VoiceOver — which never receives the runtime's live-region
-announcement on a VO+arrow move — still hears the full context on every
-move. Try it standalone with `uv run python tools/grid_preview.py`.
+> **Retired.** This described the webview's editable HTML `AccessibleGrid`,
+> driven by `vrp/channel_grid_model.py`. Both that adapter and its
+> `tools/grid_preview.py` harness have been **removed**, and `vrp/app.py` no
+> longer imports — `--webview` fails over to the native UI. The production
+> channel grid is the native `DataViewListCtrl` documented in the native UI
+> section above. The key behavior below is kept only for historical reference.
+
+The channel view was `wx-accessible-grid`'s `AccessibleGrid`. It rendered a real,
+editable `<table role="grid">` via the aria-activedescendant pattern so NVDA
+stayed in focus mode, and composed each cell's accessible name (channel + column
+header + value + control type) so VoiceOver — which never receives the runtime's
+live-region announcement on a VO+arrow move — still heard the full context on
+every move.
 
 | Key                  | Action                                  |
 |-----------------------|------------------------------------------|

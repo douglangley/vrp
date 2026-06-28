@@ -59,11 +59,16 @@
   speaks) via `ChannelGrid.cell_display()`. **Verified audible under NVDA**
   (2026-06-27, commit `bbd9a74`). `Ctrl+E`/`Enter` still open the full-channel
   `edit_dialog`.
-- **Known collateral:** 0.7.0's API dropped `ContextMenuItem` and the editor
-  constants (`COMBO/TEXT/...`, `SetResult`), so the retired `--webview` stack
-  (`vrp/app.py`, `vrp/channel_grid_model.py`, `tools/grid_preview.py`) no longer
-  imports. The default native UI is unaffected. Decide: leave `--webview` broken
-  (it's retired), make it fail gracefully, or port it.
+- **Known collateral — RESOLVED (2026-06-27):** 0.7.0+ dropped `ContextMenuItem`
+  and the editor constants (`COMBO/TEXT/...`, `SetResult`), so the retired
+  `--webview` stack no longer imports. Resolved the "graceful for now" way:
+  `tools/grid_preview.py` and `vrp/channel_grid_model.py` (dead webview
+  channel-grid code) were **deleted**; `vrp/app.py` is kept (retired note added)
+  for the planned help/docs role; and `main.py --webview` now catches the
+  ImportError, warns, and **launches the native UI instead** (test:
+  `test_webview_falls_back_to_native_when_unimportable`). The default native UI
+  was always unaffected. A deeper rework (strip the dead grid pieces from
+  `vrp/app.py`, or build the help/docs role) is deferred.
 - All exploratory changes from the previous attempt (vendoring the grid,
   flipping the default to the webview) were **reverted**. Clean slate.
 

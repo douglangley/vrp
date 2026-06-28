@@ -71,11 +71,10 @@ relevant going forward only for the webview's intended help/docs role.
   the **webview UI only** (`MainWindow._show_grid` in vrp/app.py) — a real,
   editable `<table role="grid">` driven by the aria-activedescendant pattern.
   The **production** channel grid is now the native `DataViewListCtrl`
-  (`vrp/native/channel_grid.py`), not this; `AccessibleGrid` is only reachable
-  under `--webview`. VRP's adapter is `vrp/channel_grid_model.py`
-  (`ChannelGridModel`); try it standalone with
-  `uv run python tools/grid_preview.py`. Resolves from PyPI (`>=0.4.1`):
-  VoiceOver cell-name + assertive selection/enter announcements.
+  (`vrp/native/channel_grid.py`), not this. The webview's editable HTML grid is
+  retired: its `ChannelGridModel` adapter (`vrp/channel_grid_model.py`) and the
+  `tools/grid_preview.py` harness were **removed**, and `vrp/app.py` no longer
+  imports — `--webview` fails over to the native UI (see "What This Project Is").
 
 All three were extracted from this app; fix issues upstream in the library,
 not as a local workaround in vrp/app.py.
@@ -124,10 +123,6 @@ the right thing to do. Do not remove or obscure it from either UI.
                          checks in vrp/app.py but aren't reached in normal
                          operation — the production channel view is the
                          AccessibleGrid, not this
-  - channel_grid_model.py — webview UI: `ChannelGridModel`, the production
-                         GridModel adapter feeding the webview UI's
-                         AccessibleGrid (also used standalone by
-                         tools/grid_preview.py)
   - edit_dialog.py     — native wx dialog to edit one channel (shared by both UIs)
   - ops_dialog.py      — native wx dialog for bulk operations, shared (delete/move/…)
   - find_dialog.py     — native wx Find dialog (shared by both UIs)
@@ -148,9 +143,7 @@ the right thing to do. Do not remove or obscure it from either UI.
                          channels, _row_macro — channels/_row_macro back the
                          unreached read-only-table fallback, see views.py above)
 - tests/               — unit tests (no hardware needed)
-- tools/               — update_chirp.py (CHIRP version bump) and
-                         grid_preview.py (standalone harness for the webview
-                         UI's AccessibleGrid, no full app needed)
+- tools/               — update_chirp.py (CHIRP version bump)
 - build.py             — PyInstaller build script
 - chirp/               — upstream CHIRP library (DO NOT EDIT)
 

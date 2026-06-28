@@ -138,14 +138,12 @@ main.py --webview   (parse_mode() never selects the webview on its own anymore)
        │    ├─ owns document chrome, lang="en", styles, status live region
        │    └─ JS → Python bridge: window.vrp.postMessage({action, ...})
        │                            → MainWindow.on_bridge_message
-       ├─ AccessibleGrid (wx-accessible-grid) — the PRODUCTION channel grid,
-       │    built by MainWindow._show_grid, replacing the webview control
-       │    while a radio is loaded:
-       │    ├─ vrp/channel_grid_model.py : ChannelGridModel adapts
-       │    │    chirp_backend (build_column_defs, memory_ops.set_field/
-       │    │    delete_range) to the library's GridModel — editing routes
-       │    │    through CHIRP's own validation, so the value the screen
-       │    │    reader confirms is authoritative
+       ├─ AccessibleGrid (wx-accessible-grid) — the RETIRED webview channel grid
+       │    (the production grid is now the native DataViewListCtrl; this path is
+       │    dead and vrp/app.py no longer imports):
+       │    ├─ ChannelGridModel (vrp/channel_grid_model.py) adapted chirp_backend
+       │    │    to the library's editable GridModel — REMOVED when the webview
+       │    │    grid was retired (the 0.8.0 library is read-only/host-driven)
        │    ├─ real in-place cell editing (text/combo), Space/Ctrl+Space/
        │    │    Shift+arrow selection, Delete, and a context menu (row menu
        │    │    reachable via Applications key, Shift+F10, or VoiceOver's
