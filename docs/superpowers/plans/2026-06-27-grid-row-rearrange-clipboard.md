@@ -235,9 +235,17 @@ On paste, if any destination slot in `[dest, dest+len-1]` is non-empty:
    cut+erase-source, overlap, make-room shift, make-room no-room failure,
    out-of-range, empty clipboard, cut+make-room combo). Immutable handling is
    best-effort via exceptions, matching `move_to`/`copy_memories` (no pre-check).
-3. **Clipboard + handlers** (`on_copy/on_cut/on_paste`, `_Clipboard`) in
-   `main_window.py`; deferred-cut bookkeeping; selection/focus/announce after.
-4. **Conflict dialog** (overwrite / move / cancel), native + accessible.
+3. **Clipboard + handlers** — ✅ DONE. `_Clipboard` dataclass + `on_copy`/`on_cut`/
+   `on_paste` in `main_window.py`: snapshot the selection (`mem.dupe()`), deferred
+   cut (source erased only on paste, then clipboard cleared), copy keeps the
+   clipboard; paste at the focused channel with a runs-past-end guard, then
+   `reorder_refresh` + select/focus the pasted block + announce. 9 handler tests in
+   `tests/test_clipboard.py`. *(Not user-reachable until Step 5 wires the menus —
+   no on-device audio to verify yet.)*
+4. **Conflict dialog** — ✅ DONE. `_ask_paste_conflict` (native
+   `wx.MessageDialog`, Overwrite / Make room / Cancel via `SetYesNoCancelLabels`;
+   Esc cancels; focus returns to the grid). Shown only when destination slots are
+   occupied (skipped for an empty destination). Button→choice mapping unit-tested.
 5. **Menus** — new Edit menu + context-menu items + `APP_SHORTCUTS`;
    `_update_menu_state` enable/disable; update `GetMenuCount()` test (4 → 5) and
    the Radio-menu-index assertion in `tests/test_channel_grid.py`.

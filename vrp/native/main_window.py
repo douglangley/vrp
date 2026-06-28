@@ -23,6 +23,7 @@ import os
 import sys
 import threading
 import time
+from dataclasses import dataclass
 
 import wx
 import wx.adv
@@ -34,6 +35,20 @@ from vrp.native.channel_grid import ChannelGrid
 from vrp.speech import Speaker
 
 LOG = logging.getLogger(__name__)
+
+
+@dataclass
+class _Clipboard:
+    """In-app clipboard for whole-row cut/copy/paste (no OS clipboard in v1).
+
+    ``mems`` are deep-copied Memory snapshots taken at copy/cut time, so the
+    clipboard survives later edits to the source. ``source_numbers`` are the
+    original channel numbers — used only for a ``cut`` (to erase the sources when
+    the paste lands, making cut+paste a move); a ``copy`` ignores them."""
+
+    mode: str  # "copy" | "cut"
+    mems: list
+    source_numbers: list[int]
 
 # Keyboard shortcuts table (combo, description).
 # Displayed by on_shortcuts (F1).
@@ -116,6 +131,8 @@ class MainWindow(wx.Frame):
         # Set by a Space/Ctrl+Space toggle so the debounced count announce doesn't
         # double up on the per-row toggle announce (which already states the count).
         self._suppress_next_count = False
+        # In-app cut/copy/paste clipboard (None = empty). See _Clipboard.
+        self._clipboard: _Clipboard | None = None
         self._menu_items: dict[str, wx.MenuItem] = {}
         self._radio_gated_keys: set[str] = set()
         # Find state: query string, fields, last matched channel.
@@ -473,6 +490,125 @@ class MainWindow(wx.Frame):
         verb = "Selected" if selected else "Deselected"
         tail = "none selected" if count == 0 else f"{count} selected"
         self.announce.announce(f"{verb} channel {number}. {tail}.")
+
+    # -- clipboard: cut / copy / paste (whole rows) -------------------
+
+    def _snapshot_selection(self) -> tuple[list[int], list] | None:
+        """The selected channel numbers and deep-copied Memory snapshots, or None
+        (with an announcement) when nothing is available to act on."""
+        if not radio_backend.get_state().loaded:
+            self.announce.announce("No radio image is open.", assertive=True)
+            return None
+        numbers = self.grid.selected_channel_numbers()
+        if not numbers:
+            self.announce.announce("No channel selected.")
+            return None
+        mems = [radio_backend.get_memory(n).dupe() for n in numbers]
+        return numbers, mems
+
+    def on_copy(self, _evt=None) -> None:
+        """Copy the selected channel(s) to the in-app clipboard (source kept)."""
+        snap = self._snapshot_selection()
+        if snap is None:
+            return
+        numbers, mems = snap
+        self._clipboard = _Clipboard("copy", mems, list(numbers))
+        self.announce.announce(f"Copied {len(mems)} channel(s).")
+
+    def on_cut(self, _evt=None) -> None:
+        """Cut the selected channel(s) to the clipboard. Deferred: the source is
+        untouched until paste, which then moves them (erasing the source)."""
+        snap = self._snapshot_selection()
+        if snap is None:
+            return
+        numbers, mems = snap
+        self._clipboard = _Clipboard("cut", mems, list(numbers))
+        self.announce.announce(f"Cut {len(mems)} channel(s). Paste to move them.")
+
+    def on_paste(self, _evt=None) -> None:
+        """Paste the clipboard at the focused channel. Overwrites by default; when
+        the destination is occupied, asks whether to overwrite or make room (shift
+        the existing channels down). A cut paste moves (erases the source) and
+        empties the clipboard; a copy paste keeps it for pasting again."""
+        from chirp_backend import memory_ops
+
+        if not radio_backend.get_state().loaded:
+            self.announce.announce("No radio image is open.", assertive=True)
+            return
+        clip = self._clipboard
+        if clip is None:
+            self.announce.announce("Clipboard is empty.")
+            return
+        dest = self.grid.focused_channel()
+        if dest is None:
+            self.announce.announce("No channel selected.")
+            return
+        n = len(clip.mems)
+        low, high = radio_backend.get_state().memory_bounds
+        if dest + n - 1 > high:
+            self.announce.announce(
+                f"Not enough room: pasting {n} channel(s) at {dest} runs past "
+                f"channel {high}.",
+                assertive=True,
+            )
+            return
+
+        cut_from = clip.source_numbers if clip.mode == "cut" else None
+        cut_set = set(cut_from or [])
+        # Occupied destination slots that aren't sources being moved out.
+        occupied = [
+            k for k in range(dest, dest + n)
+            if k not in cut_set and not radio_backend.get_memory(k).empty
+        ]
+        make_room = False
+        if occupied:
+            choice = self._ask_paste_conflict(dest, dest + n - 1, len(occupied))
+            if choice is None:
+                return  # cancelled — clipboard kept
+            make_room = choice == "move"
+
+        ok, message, _affected = memory_ops.paste_block(
+            clip.mems, dest, cut_from=cut_from, make_room=make_room
+        )
+        if not ok:
+            self.announce.announce(message, assertive=True)
+            return
+
+        # A paste can shift many rows (make_room) or just overwrite a few; either
+        # way the same radio's rows changed, so refresh in place and re-anchor on
+        # the pasted block.
+        self.grid.reorder_refresh()
+        self.grid.select_channels(list(range(dest, dest + n)))
+        self.grid.focus_channel(dest)
+        if clip.mode == "cut":
+            self._clipboard = None  # cut is one-shot
+        self.announce.announce(f"{message}. Now on channel {dest}.", assertive=True)
+
+    def _ask_paste_conflict(self, first: int, last: int, occupied: int) -> str | None:
+        """Ask how to resolve a paste onto occupied channels. Returns
+        ``"overwrite"``, ``"move"`` (make room by shifting down), or ``None``
+        (cancel). A native message dialog: focus-trapped, Esc cancels, focus
+        returns to the grid afterward."""
+        where = f"Channel {first} is" if first == last else f"Channels {first} to {last} are"
+        msg = (
+            f"{where} not empty ({occupied} occupied). Overwrite the destination, "
+            "or make room by moving the existing channels down?"
+        )
+        dlg = wx.MessageDialog(
+            self, msg, "Paste — destination not empty",
+            wx.YES_NO | wx.CANCEL | wx.ICON_QUESTION,
+        )
+        dlg.SetYesNoCancelLabels("Overwrite", "Make room", "Cancel")
+        try:
+            result = dlg.ShowModal()
+        finally:
+            dlg.Destroy()
+            self.grid.SetFocus()
+        if result == wx.ID_YES:
+            return "overwrite"
+        if result == wx.ID_NO:
+            return "move"
+        return None
 
     def on_goto(self, _evt=None) -> None:
         """Go to a specific channel by number — prompt, select, and focus it."""

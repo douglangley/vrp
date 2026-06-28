@@ -1,0 +1,217 @@
+"""Tests for the native UI cut/copy/paste clipboard handlers (MainWindow).
+
+These drive MainWindow.on_copy/on_cut/on_paste against a real CHIRP image. The
+conflict dialog (_ask_paste_conflict) is monkeypatched so paths run headless
+without a modal. paste_block's own correctness is covered in test_memory_ops.py;
+here we verify the handler wiring (clipboard state, destination, cut vs copy,
+guards, and the dialog choice -> make_room mapping). Skips without a GUI."""
+
+import os
+
+import pytest
+
+from chirp_backend import radio as radio_backend
+
+wx = pytest.importorskip("wx")
+
+IMAGE = os.path.abspath(
+    os.path.join(
+        os.path.dirname(__file__), "..", "chirp", "tests", "images",
+        "Baofeng_UV-5R.img",
+    )
+)
+
+
+@pytest.fixture
+def app():
+    try:
+        a = wx.App()
+    except Exception:  # noqa: BLE001 — headless CI
+        pytest.skip("no GUI/display available")
+    yield a
+    a.Destroy()
+
+
+@pytest.fixture
+def win(app):
+    from vrp.native.main_window import MainWindow
+
+    w = MainWindow()
+    radio_backend.load_image(IMAGE)
+    w._load_into_grid()
+    try:
+        yield w
+    finally:
+        radio_backend.unload()
+        w.Destroy()
+
+
+def _first_empty(low, high):
+    for n in range(low, high + 1):
+        if radio_backend.get_memory(n).empty:
+            return n
+    return None
+
+
+def _first_nonempty(low, high):
+    for n in range(low, high + 1):
+        if not radio_backend.get_memory(n).empty:
+            return n
+    return None
+
+
+def test_on_copy_populates_clipboard(win):
+    win.grid.select_channels([2, 3])
+    win.on_copy()
+    assert win._clipboard is not None
+    assert win._clipboard.mode == "copy"
+    assert len(win._clipboard.mems) == 2
+    assert win._clipboard.source_numbers == [2, 3]
+
+
+def test_on_cut_populates_clipboard(win):
+    win.grid.select_channels([4, 5])
+    win.on_cut()
+    assert win._clipboard.mode == "cut"
+    assert win._clipboard.source_numbers == [4, 5]
+
+
+def test_paste_empty_clipboard_does_nothing(win, monkeypatch):
+    from chirp_backend import memory_ops
+
+    monkeypatch.setattr(
+        memory_ops, "paste_block",
+        lambda *a, **k: pytest.fail("paste_block called with empty clipboard"),
+    )
+    win._clipboard = None
+    win.on_paste()  # should just announce, not paste
+
+
+def test_copy_paste_into_empty(win, monkeypatch):
+    low, high = radio_backend.get_state().memory_bounds
+    src = _first_nonempty(low, high)
+    dest = _first_empty(low, high)
+    assert src is not None and dest is not None and src != dest
+    src_name = radio_backend.get_memory(src).name
+    src_freq = radio_backend.get_memory(src).freq
+
+    # An empty destination must not trigger the conflict dialog.
+    monkeypatch.setattr(
+        win, "_ask_paste_conflict",
+        lambda *a: pytest.fail("conflict dialog shown for empty destination"),
+    )
+    win.grid.select_channels([src])
+    win.on_copy()
+    win.grid.focus_channel(dest)
+    win.on_paste()
+
+    pasted = radio_backend.get_memory(dest)
+    assert not pasted.empty
+    assert pasted.name == src_name and pasted.freq == src_freq
+    assert radio_backend.get_memory(src).name == src_name  # copy keeps source
+    assert win._clipboard is not None  # copy keeps the clipboard
+
+
+def test_cut_paste_moves_and_clears_clipboard(win, monkeypatch):
+    low, high = radio_backend.get_state().memory_bounds
+    src = _first_nonempty(low, high)
+    dest = _first_empty(low, high)
+    assert src is not None and dest is not None and src != dest
+    src_name = radio_backend.get_memory(src).name
+
+    monkeypatch.setattr(win, "_ask_paste_conflict", lambda *a: "overwrite")
+    win.grid.select_channels([src])
+    win.on_cut()
+    win.grid.focus_channel(dest)
+    win.on_paste()
+
+    assert radio_backend.get_memory(dest).name == src_name
+    assert radio_backend.get_memory(src).empty  # source moved away
+    assert win._clipboard is None  # cut is one-shot
+
+
+def test_paste_runs_past_end_is_blocked(win, monkeypatch):
+    from chirp_backend import memory_ops
+
+    low, high = radio_backend.get_state().memory_bounds
+    win.grid.select_channels([low, low + 1])  # two-channel clipboard
+    win.on_copy()
+    win.grid.focus_channel(high)  # dest+1 would be high+1 -> out of range
+
+    monkeypatch.setattr(
+        memory_ops, "paste_block",
+        lambda *a, **k: pytest.fail("paste_block called when paste runs past end"),
+    )
+    win.on_paste()  # should announce the no-room error, not paste
+
+
+def test_paste_conflict_move_passes_make_room(win, monkeypatch):
+    low, high = radio_backend.get_state().memory_bounds
+    src = _first_nonempty(low, high)
+    # A non-empty destination distinct from the source forces the conflict dialog.
+    dest = next(
+        (n for n in range(low, high + 1)
+         if not radio_backend.get_memory(n).empty and n != src),
+        None,
+    )
+    assert dest is not None
+
+    from chirp_backend import memory_ops
+
+    captured = {}
+    real = memory_ops.paste_block
+
+    def spy(mems, destination, **kw):
+        captured["dest"] = destination
+        captured["kw"] = kw
+        return real(mems, destination, **kw)
+
+    monkeypatch.setattr(memory_ops, "paste_block", spy)
+    monkeypatch.setattr(win, "_ask_paste_conflict", lambda *a: "move")
+
+    win.grid.select_channels([src])
+    win.on_copy()
+    win.grid.focus_channel(dest)
+    win.on_paste()
+
+    assert captured["dest"] == dest
+    assert captured["kw"]["make_room"] is True
+    assert captured["kw"]["cut_from"] is None  # copy, not cut
+
+
+def test_paste_conflict_cancel_makes_no_change(win, monkeypatch):
+    from chirp_backend import memory_ops
+
+    low, high = radio_backend.get_state().memory_bounds
+    src = _first_nonempty(low, high)
+    dest = next(
+        (n for n in range(low, high + 1)
+         if not radio_backend.get_memory(n).empty and n != src),
+        None,
+    )
+    assert dest is not None
+    dest_name = radio_backend.get_memory(dest).name
+
+    monkeypatch.setattr(
+        memory_ops, "paste_block",
+        lambda *a, **k: pytest.fail("paste_block called after cancel"),
+    )
+    monkeypatch.setattr(win, "_ask_paste_conflict", lambda *a: None)
+
+    win.grid.select_channels([src])
+    win.on_copy()
+    win.grid.focus_channel(dest)
+    win.on_paste()
+
+    assert radio_backend.get_memory(dest).name == dest_name  # unchanged
+
+
+def test_ask_paste_conflict_maps_buttons(win, monkeypatch):
+    """The dialog's Yes/No/Cancel map to overwrite/move/None."""
+    results = iter([wx.ID_YES, wx.ID_NO, wx.ID_CANCEL])
+    monkeypatch.setattr(wx.MessageDialog, "ShowModal", lambda self: next(results))
+    monkeypatch.setattr(wx.MessageDialog, "Destroy", lambda self: None)
+
+    assert win._ask_paste_conflict(5, 5, 1) == "overwrite"
+    assert win._ask_paste_conflict(5, 7, 3) == "move"
+    assert win._ask_paste_conflict(5, 5, 1) is None
