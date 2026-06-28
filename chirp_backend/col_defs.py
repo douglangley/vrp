@@ -132,6 +132,19 @@ class DTCSColumn(ChoiceColumn):
         return False
 
 
+def _blank_first(values) -> list[str]:
+    """Return ``values`` with exactly one blank ('') choice at the front.
+
+    The blank choice is the "no value" option (e.g. tone mode "none", simplex
+    duplex). CHIRP's ``valid_tmodes``/``valid_duplexes`` already include '',
+    so prepending '' unconditionally produced a *duplicate* empty entry — two
+    blank rows in the combo box. Dedupe to a single leading blank, order of the
+    remaining values preserved.
+    """
+    rest = [v for v in values if v != ""]
+    return [""] + rest
+
+
 def build_column_defs(features) -> list[ColumnDef]:
     """
     Build the list of column definitions for a radio with the given features.
@@ -159,7 +172,7 @@ def build_column_defs(features) -> list[ColumnDef]:
         ChoiceColumn(
             name="tmode",
             label="Tone Mode",
-            choices=[""] + list(features.valid_tmodes),
+            choices=_blank_first(features.valid_tmodes),
             width_hint="narrow",
         ),
         ToneColumn(
@@ -201,7 +214,7 @@ def build_column_defs(features) -> list[ColumnDef]:
         ChoiceColumn(
             name="duplex",
             label="Duplex",
-            choices=[""] + list(features.valid_duplexes),
+            choices=_blank_first(features.valid_duplexes),
             width_hint="narrow",
         ),
         OffsetColumn(),
@@ -220,7 +233,9 @@ def build_column_defs(features) -> list[ColumnDef]:
         ChoiceColumn(
             name="skip",
             label="Skip",
-            choices=["", "S", "P"],
+            # Only the skip values this radio supports (CHIRP's ChirpSkipColumn
+            # uses features.valid_skips too); many radios omit "P" (Pscan).
+            choices=_blank_first(features.valid_skips),
             width_hint="narrow",
         ),
         ColumnDef(name="comment", label="Comment", width_hint="wide"),

@@ -65,6 +65,77 @@ def test_edit_cell_dialog_choice_value_round_trips(app):
         radio_backend.unload()
 
 
+def test_tmode_blank_choice_shown_as_none_round_trips(app):
+    from vrp.edit_dialog import EditCellDialog
+
+    radio_backend.load_image(IMAGE)
+    try:
+        frame = wx.Frame(None)
+        col = _col("tmode")
+        # No duplicate blank entry, and the empty option reads as "None".
+        assert col.choices.count("") == 1
+        # A channel with no tone (tmode "") shows the "None" label, not a blank.
+        mem = radio_backend.get_memory(2)
+        mem.tmode = ""
+        dlg = EditCellDialog(frame, 2, mem, col)
+        labels = [dlg._ctrl.GetString(i) for i in range(dlg._ctrl.GetCount())]
+        assert "None" in labels and "" not in labels
+        assert dlg._ctrl.GetStringSelection() == "None"
+        # ...but the value read back out is the empty string CHIRP expects.
+        assert dlg.get_value() == ""
+        dlg.Destroy()
+        frame.Destroy()
+    finally:
+        radio_backend.unload()
+
+
+def test_duplex_choices_shown_as_full_words_round_trip(app):
+    from vrp.edit_dialog import make_field_control, control_value
+
+    radio_backend.load_image(IMAGE)
+    try:
+        frame = wx.Frame(None)
+        col = _col("duplex")
+        assert col.choices.count("") == 1  # no duplicate blank
+        # Each raw value shows a spoken word but reads back as the raw value.
+        expected = {"": "Simplex", "-": "Minus", "+": "Plus",
+                    "split": "Split", "off": "Off"}
+        for raw, label in expected.items():
+            if raw not in col.choices:
+                continue
+            ctrl = make_field_control(frame, col, raw)
+            assert ctrl.GetStringSelection() == label
+            assert control_value(ctrl) == raw
+        labels = [_label for _label in expected.values()]
+        ctrl = make_field_control(frame, col, "")
+        shown = [ctrl.GetString(i) for i in range(ctrl.GetCount())]
+        assert "" not in shown and set(shown) <= set(labels)
+        frame.Destroy()
+    finally:
+        radio_backend.unload()
+
+
+def test_skip_choices_use_valid_skips_and_full_words(app):
+    from vrp.edit_dialog import make_field_control, control_value
+
+    radio_backend.load_image(IMAGE)
+    try:
+        frame = wx.Frame(None)
+        f = radio_backend.get_state().features
+        col = _col("skip")
+        # Only the radio's supported skip values are offered (CHIRP parity).
+        assert col.choices == [""] + [s for s in f.valid_skips if s != ""]
+        for raw, label in {"": "None", "S": "Skip", "P": "Priority scan"}.items():
+            if raw not in col.choices:
+                continue
+            ctrl = make_field_control(frame, col, raw)
+            assert ctrl.GetStringSelection() == label
+            assert control_value(ctrl) == raw
+        frame.Destroy()
+    finally:
+        radio_backend.unload()
+
+
 def test_cell_display_matches_model_text(app):
     from vrp.native.channel_grid import ChannelGrid
     from vrp.native import grid_model

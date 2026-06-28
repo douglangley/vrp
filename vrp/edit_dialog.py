@@ -21,19 +21,50 @@ import wx
 
 from chirp_backend.col_defs import build_column_defs
 
+# Several choice columns store terse tokens — a blank ("no value") entry, single
+# letters, "+"/"-" — that a screen reader reads poorly or as nothing. We show a
+# spoken word instead, mapping the raw CHIRP value -> a label and round-tripping
+# it back in ``control_value`` so the stored value is unchanged. A blank with no
+# explicit override falls back to "None". Cross-checked against chirp_common's
+# value lists (CHIRP's own editor renders these raw, so the words are a VRP a11y
+# add):
+#   tmode  TONE_MODES ("", "Tone", ...)        "" = no tone -> "None"
+#   duplex ["", "+", "-", "split", "off"]      "" simplex, +/- offset, off = TX off
+#   skip   SKIP_VALUES ("", "S", "P")          "" none, S = skip, P = priority scan
+_DEFAULT_EMPTY_LABEL = "None"
+_CHOICE_LABELS: dict[str, dict[str, str]] = {
+    "duplex": {"": "Simplex", "+": "Plus", "-": "Minus",
+               "split": "Split", "off": "Off"},
+    "skip": {"": "None", "S": "Skip", "P": "Priority scan"},
+}
 
-def _select_choice(ctrl: "wx.Choice", choices: list[str], current: str) -> None:
-    """Select ``current`` in a wx.Choice, tolerating numeric formatting
-    differences (e.g. DTCS "23" vs the choice "023")."""
-    if ctrl.SetStringSelection(current):
+
+def _label_for(col, value: str) -> str:
+    """Display label for the raw choice ``value`` in ``col``: a per-column word
+    where defined, "None" for an otherwise-blank option, else the value as-is."""
+    overrides = _CHOICE_LABELS.get(col.name, {})
+    if value in overrides:
+        return overrides[value]
+    if value == "":
+        return _DEFAULT_EMPTY_LABEL
+    return value
+
+
+def _select_choice(
+    ctrl: "wx.Choice", raw_choices: list[str], current: str, target_label: str
+) -> None:
+    """Select ``current`` (a raw column value) in a wx.Choice whose entries are
+    display labels, tolerating the relabel and numeric formatting differences
+    (e.g. DTCS "23" vs the choice "023")."""
+    if ctrl.SetStringSelection(target_label):
         return
     cur = current.strip().lstrip("0")
     if cur:
-        for i, choice in enumerate(choices):
+        for i, choice in enumerate(raw_choices):
             if choice.strip().lstrip("0") == cur:
                 ctrl.SetSelection(i)
                 return
-    if choices:
+    if raw_choices:
         ctrl.SetSelection(0)
 
 
@@ -41,16 +72,28 @@ def make_field_control(parent: wx.Window, col, current: str):
     """Build the right native control for a column: a wx.Choice for ``select``
     columns (pre-selected to ``current``), else a wx.TextCtrl."""
     if col.input_type == "select":
-        ctrl = wx.Choice(parent, choices=list(col.choices))
-        _select_choice(ctrl, list(col.choices), current)
+        raw = list(col.choices)
+        labels = [_label_for(col, v) for v in raw]
+        ctrl = wx.Choice(parent, choices=labels)
+        # Reverse map (display label -> raw value) so control_value restores the
+        # value CHIRP stores. Labels are unique per column.
+        ctrl._vrp_label_to_value = dict(zip(labels, raw))
+        _select_choice(ctrl, raw, current, _label_for(col, current))
         return ctrl
     return wx.TextCtrl(parent, value=current)
 
 
 def control_value(ctrl) -> str:
-    """Read the current string value from a field control (Choice or TextCtrl)."""
+    """Read the current string value from a field control (Choice or TextCtrl).
+
+    A display label maps back to the raw value CHIRP expects (e.g. "Simplex" ->
+    "", "Priority scan" -> "P")."""
     if isinstance(ctrl, wx.Choice):
-        return ctrl.GetStringSelection()
+        val = ctrl.GetStringSelection()
+        reverse = getattr(ctrl, "_vrp_label_to_value", None)
+        if reverse is not None:
+            return reverse.get(val, val)
+        return val
     return ctrl.GetValue()
 
 

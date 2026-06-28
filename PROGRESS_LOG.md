@@ -6,6 +6,39 @@ architecture, keyboard map, and CHIRP feature-coverage checklist.
 
 ---
 
+## 2026-06-28 — Channel-edit combo boxes: spell out terse choice values, fix duplicate/spurious entries
+
+The native channel editor (`EditChannelDialog` and the single-cell `EditCellDialog`,
+both via the shared `vrp/edit_dialog.py` helpers) presented several CHIRP choice
+values as blank or single-character tokens a screen reader reads poorly or as
+nothing. Now each is shown as a spoken word, mapped raw↔label so what CHIRP stores
+is unchanged. **NVDA-verified on Windows.**
+
+- **Blank "no value" options were empty combo entries.** Tone Mode "none" (`""`)
+  read as a blank row. Now per-column display labels (`_CHOICE_LABELS` +
+  `_DEFAULT_EMPTY_LABEL` in `vrp/edit_dialog.py`), round-tripped back to the raw
+  value in `control_value` via a reverse map stashed on each `wx.Choice`:
+  - **tmode** `""` → **None**
+  - **duplex** `""` → **Simplex**, `+` → **Plus**, `-` → **Minus**, `split` →
+    **Split**, `off` → **Off**
+  - **skip** `""` → **None**, `S` → **Skip**, `P` → **Priority scan**
+  - Cross-checked against `chirp_common` (`TONE_MODES`, the `["", "+", "-",
+    "split", "off"]` duplex master list — CHIRP's repr renders `""` as `/`,
+    i.e. simplex — and `SKIP_VALUES = ("", "S", "P")`). CHIRP's own editor shows
+    these raw, so the words are a VRP accessibility addition, not a CHIRP label.
+- **Duplicate blank entry.** `col_defs.py` built tmode/duplex choices as `[""] +
+  list(features.valid_*)`, but CHIRP's `valid_tmodes`/`valid_duplexes` already
+  include `""`, so the combo had **two** blank rows (`['', '', 'Tone', …]`). New
+  `_blank_first()` helper guarantees exactly one leading blank.
+- **Spurious skip value.** The Skip column hardcoded `["", "S", "P"]`, offering
+  Priority scan ("P") even on radios that don't support it. Now
+  `_blank_first(features.valid_skips)`, matching CHIRP's `ChirpSkipColumn` — the
+  UV-5R now shows only None / Skip.
+
+Tests: `tests/test_edit_cell.py` gained round-trip cases for the tmode/duplex/skip
+labels (label shown, raw value read back, no duplicate blank, skip honors
+`valid_skips`). Full suite 179 passing.
+
 ## 2026-06-28 — Go to Channel rekeyed to Ctrl+G + removed the vestigial "Channels per page" preference
 
 Two small native-UI cleanups (commits `0a945b0`, `71a4313`):
