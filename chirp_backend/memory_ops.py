@@ -17,6 +17,8 @@ Reference: chirp/chirp/wxui/memedit.py methods:
 import logging
 from typing import Optional
 
+from chirp_backend import undo
+
 LOG = logging.getLogger(__name__)
 
 # Type alias for the return value of all operations
@@ -82,6 +84,7 @@ def _parse_field_value(radio, mem, field: str, value: str):
     return value
 
 
+@undo.records
 def set_field(number: int, field: str, value: str) -> OpResult:
     """Set one field on one memory channel and write it back to the image.
 
@@ -165,6 +168,7 @@ def validate_channel_values(number: int, values: dict):
     return True, "OK", None
 
 
+@undo.records
 def update_channel(number: int, values: dict) -> OpResult:
     """Apply several field edits to one channel atomically, then write it back.
 
@@ -201,6 +205,7 @@ def update_channel(number: int, values: dict) -> OpResult:
     return True, f"Channel {number} updated.", [number]
 
 
+@undo.records
 def import_memories(src_radio, destination: int, overwrite: bool = True) -> OpResult:
     """Import a query/source radio's memories into the loaded radio.
 
@@ -313,6 +318,7 @@ def parse_channel_spec(spec: str, low: int, high: int):
 # Single-channel operations
 # ---------------------------------------------------------------------------
 
+@undo.records
 def delete_memory(number: int) -> OpResult:
     """Erase a single memory channel."""
     try:
@@ -333,6 +339,7 @@ def delete_memory(number: int) -> OpResult:
 # Range delete operations
 # ---------------------------------------------------------------------------
 
+@undo.records
 def delete_range(numbers: list[int]) -> OpResult:
     """
     Delete a list of channel numbers (erase each one).
@@ -370,6 +377,7 @@ def delete_range(numbers: list[int]) -> OpResult:
         return False, str(e), []
 
 
+@undo.records
 def delete_and_shift(numbers: list[int], mode: str = "all") -> OpResult:
     """
     Delete channels and shift remaining channels up to fill the gap.
@@ -450,6 +458,7 @@ def delete_and_shift(numbers: list[int], mode: str = "all") -> OpResult:
 # Insert row (shift down to create a blank slot)
 # ---------------------------------------------------------------------------
 
+@undo.records
 def insert_row(row_number: int) -> OpResult:
     """
     Insert a blank channel at row_number by finding the next empty slot
@@ -498,6 +507,7 @@ def insert_row(row_number: int) -> OpResult:
 # Move operations
 # ---------------------------------------------------------------------------
 
+@undo.records
 def move_memories(numbers: list[int], direction: int) -> OpResult:
     """
     Move a selected range of channels up (-1) or down (+1) by one slot.
@@ -558,6 +568,7 @@ def move_memories(numbers: list[int], direction: int) -> OpResult:
         return False, str(e), []
 
 
+@undo.records
 def move_to(numbers: list[int], destination: int) -> OpResult:
     """
     Move a block of channels to start at destination.
@@ -610,6 +621,7 @@ def move_to(numbers: list[int], destination: int) -> OpResult:
         return False, str(e), []
 
 
+@undo.records
 def copy_memories(numbers: list[int], destination: int) -> OpResult:
     """
     Copy a block of channels to start at destination.
@@ -649,6 +661,7 @@ def copy_memories(numbers: list[int], destination: int) -> OpResult:
 # Clipboard paste (cut / copy / paste of whole rows)
 # ---------------------------------------------------------------------------
 
+@undo.records
 def paste_block(
     mems: list,
     destination: int,
@@ -755,6 +768,7 @@ def paste_block(
 # Sort and arrange
 # ---------------------------------------------------------------------------
 
+@undo.records
 def sort_range(numbers: list[int], attr: str, reverse: bool = False) -> OpResult:
     """
     Sort a contiguous range of channels by a Memory attribute.
@@ -798,6 +812,7 @@ def sort_range(numbers: list[int], attr: str, reverse: bool = False) -> OpResult
         return False, str(e), []
 
 
+@undo.records
 def arrange_range(numbers: list[int]) -> OpResult:
     """
     Compact a range: move all non-empty channels to the top of the range,

@@ -140,9 +140,16 @@ the transaction on failure or no-op). Mutating ops to decorate: `set_field`,
    history dropped on `unload`. Guarded so a driver that refuses attribute
    assignment just disables undo. Tests: load installs / unload clears; write in a
    transaction is undoable+redoable; write outside isn't recorded; reload resets.
-3. **Decorate `memory_ops` mutators** with `@undo.records` (label from result).
-   Tests: each op kind produces one entry that round-trips (op → undo → original,
-   then redo → post-op state), incl. a nested op (`delete_and_shift`).
+3. **Decorate `memory_ops` mutators** — ✅ DONE. `@undo.records` (in `undo.py`)
+   wraps each of the 13 mutators (`set_field`, `update_channel`, `import_memories`,
+   `delete_memory`, `delete_range`, `delete_and_shift`, `insert_row`,
+   `move_memories`, `move_to`, `copy_memories`, `paste_block`, `sort_range`,
+   `arrange_range`) in a transaction labeled from the op's result message; a not-ok
+   result or exception aborts (no entry); nested decorated ops collapse into the
+   outer entry (`begin` returns the outermost flag; `set_label` updates it). No-op
+   when no radio/undo is active (so the stub-radio `memory_ops` tests are
+   unaffected). Tests: update_channel/delete_range round-trip, nested
+   `delete_and_shift` → one entry, failed op → no entry.
 4. **`on_undo`/`on_redo` + Edit menu + context menu + `Ctrl+Z` / `Ctrl+Y` /
    `Ctrl+Shift+Z` + `APP_SHORTCUTS`** in `main_window.py`; gate on loaded radio;
    "Nothing to undo/redo" when empty; rebuild + focus + announce. Tests: handler

@@ -79,12 +79,22 @@ class UndoManager:
         finally:
             self.commit() if ok else self.abort()
 
-    def begin(self, label: str) -> None:
-        if self._depth == 0:
+    def begin(self, label: str) -> bool:
+        """Open (or nest into) a transaction. Returns True if this call opened the
+        **outermost** one — the level that owns the label and commits the entry."""
+        outermost = self._depth == 0
+        if outermost:
             self._label = label
             self._before = {}
             self._order = []
         self._depth += 1
+        return outermost
+
+    def set_label(self, label: str) -> None:
+        """Replace the open transaction's label (so ``@records`` can use the op's
+        result message). No-op when no transaction is open."""
+        if self._depth > 0:
+            self._label = label
 
     def record(self, number: int) -> None:
         """Capture the current (pre-write) state of ``number`` once per
@@ -190,3 +200,40 @@ class UndoManager:
         self._depth = 0
         self._applying = False
         self._reset_txn()
+
+
+def records(fn):
+    """Decorator: run a memory operation inside an undo transaction.
+
+    The active :class:`UndoManager` (``radio.get_undo_manager()``) records the
+    pre-image of every channel the op writes; on a successful result the entry is
+    committed with the op's **result message** as its label. A not-ok result or a
+    raised exception aborts the transaction (no history entry). A no-op when no
+    radio/undo is active, and transparently nested (an op that calls another
+    decorated op contributes to the outer entry, not a separate one)."""
+    import functools
+
+    @functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+        from chirp_backend.radio import get_undo_manager
+
+        mgr = get_undo_manager()
+        if mgr is None:
+            return fn(*args, **kwargs)
+        outermost = mgr.begin(fn.__name__)
+        try:
+            result = fn(*args, **kwargs)
+        except Exception:
+            mgr.abort()
+            raise
+        ok = bool(result[0]) if isinstance(result, tuple) and result else False
+        if not ok:
+            mgr.abort()
+            return result
+        # Label the (outermost) entry with the op's human-readable message.
+        if outermost and isinstance(result, tuple) and len(result) > 1 and result[1]:
+            mgr.set_label(result[1])
+        mgr.commit()
+        return result
+
+    return wrapper

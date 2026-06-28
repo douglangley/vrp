@@ -262,3 +262,72 @@ class TestUndoRecorderIntegration:
 
         radio_backend.load_image(IMAGE)  # reload -> fresh history
         assert not radio_backend.get_undo_manager().can_undo()
+
+
+def _first_nonempty():
+    lo, hi = radio_backend.get_state().memory_bounds
+    for n in range(lo, hi + 1):
+        if not radio_backend.get_memory(n).empty:
+            return n
+    return None
+
+
+class TestOpsAreUndoable:
+    """End-to-end: decorated memory_ops run through the recorder produce undo
+    entries that round-trip (op -> undo -> original, redo -> post-op)."""
+
+    def teardown_method(self):
+        radio_backend.unload()
+
+    def test_update_channel_round_trips(self):
+        from chirp_backend import memory_ops
+        radio_backend.load_image(IMAGE)
+        mgr = radio_backend.get_undo_manager()
+        n = _first_nonempty()
+        before_name = radio_backend.get_memory(n).name
+
+        ok, _, _ = memory_ops.update_channel(n, {"name": "ZQX"})
+        assert ok
+        assert radio_backend.get_memory(n).name == "ZQX"
+        assert mgr.can_undo()
+
+        mgr.undo()
+        assert radio_backend.get_memory(n).name == before_name
+        mgr.redo()
+        assert radio_backend.get_memory(n).name == "ZQX"
+
+    def test_delete_range_round_trips(self):
+        from chirp_backend import memory_ops
+        radio_backend.load_image(IMAGE)
+        mgr = radio_backend.get_undo_manager()
+        n = _first_nonempty()
+        before = _snap(n)
+
+        ok, _, _ = memory_ops.delete_range([n])
+        assert ok
+        assert radio_backend.get_memory(n).empty
+        mgr.undo()
+        assert _snap(n) == before  # restored (un-erased)
+
+    def test_nested_op_is_one_undo_entry(self):
+        from chirp_backend import memory_ops
+        radio_backend.load_image(IMAGE)
+        mgr = radio_backend.get_undo_manager()
+        n = _first_nonempty()
+
+        # delete_and_shift internally calls delete_range (both decorated).
+        ok, _, _ = memory_ops.delete_and_shift([n], mode="all")
+        assert ok
+        assert mgr.can_undo()
+        mgr.undo()                 # a single undo reverses the whole op
+        assert not mgr.can_undo()  # ...and there was exactly one entry
+
+    def test_failed_op_records_nothing(self):
+        from chirp_backend import memory_ops
+        radio_backend.load_image(IMAGE)
+        mgr = radio_backend.get_undo_manager()
+        n = _first_nonempty()
+
+        ok, _, _ = memory_ops.move_to([n], destination=999999)  # out of range
+        assert not ok
+        assert not mgr.can_undo()  # a not-ok op leaves no history entry
