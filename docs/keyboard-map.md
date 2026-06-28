@@ -88,6 +88,7 @@ speaks `"<value>, <column>"` through its supplemental (prism) speech.
 | `Ctrl+E` / `Enter` | Edit the focused channel — **all** fields (full dialog) |
 | `F2` | Edit the **focused cell** — a single-field dialog for the cursor's column. On the channel-number column, a read-only column, or where the cursor column isn't known (macOS until wx-accessible-grid#3), falls back to the full dialog |
 | `Del` | Delete the selected channel(s) (Channels-menu accelerator) |
+| `Applications` key / `Shift+F10` | Open the row context menu (Edit channel / Edit cell / Delete / Move up/down / Move to / Organize / Go to / Banks). The generic Windows DataViewCtrl raises this for the Applications key and a right-click natively; VRP wires `Shift+F10` itself (`ChannelGrid._on_shift_f10`) since the control doesn't |
 
 ### Reorganizing channels
 
