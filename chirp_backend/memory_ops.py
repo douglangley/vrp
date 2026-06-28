@@ -646,6 +646,112 @@ def copy_memories(numbers: list[int], destination: int) -> OpResult:
 
 
 # ---------------------------------------------------------------------------
+# Clipboard paste (cut / copy / paste of whole rows)
+# ---------------------------------------------------------------------------
+
+def paste_block(
+    mems: list,
+    destination: int,
+    *,
+    cut_from: Optional[list[int]] = None,
+    make_room: bool = False,
+) -> OpResult:
+    """Paste a snapshot block of Memory objects starting at ``destination``.
+
+    ``mems`` are duplicated and renumbered to ``destination .. destination+N-1``.
+    By default the destination slots are **overwritten**. With ``make_room`` the
+    occupied channels from ``destination`` onward are first shifted **down** by
+    ``N`` to open a gap; this fails (no change) if there aren't ``N`` empty slots
+    near the tail to absorb the shift, so nothing falls off the fixed-size radio.
+
+    ``cut_from`` (the cut/move case) is the list of original source channel
+    numbers; they are erased first, then the block is written — so source and
+    destination may overlap freely (the data lives in ``mems``). ``cut_from=None``
+    is a plain copy (source kept).
+
+    Returns ``(ok, message, affected_channels)``. Mirrors the overwrite behavior
+    of :func:`copy_memories`/:func:`move_to` but takes a snapshot block instead of
+    re-reading by number, and adds the make-room (insert) option.
+    """
+    if not mems:
+        return False, "Nothing to paste", []
+
+    try:
+        radio = _get_radio()
+        first_bound, last_bound = _mem_bounds()
+        n = len(mems)
+        dest_end = destination + n - 1
+        dest_range = list(range(destination, dest_end + 1))
+        cut_set = set(cut_from or [])
+
+        if destination < first_bound or dest_end > last_bound:
+            return False, f"Destination out of range ({first_bound}-{last_bound})", []
+
+        if make_room:
+            # Highest occupied channel in [destination, last_bound], treating the
+            # cut sources as already empty (they get erased below). Everything
+            # from destination up to it shifts down by n, so require room for it
+            # before touching anything (atomic: fail leaves the radio unchanged).
+            last_nonempty = None
+            for k in range(destination, last_bound + 1):
+                if k in cut_set:
+                    continue
+                if not _get_mem(radio, k).empty:
+                    last_nonempty = k
+            if last_nonempty is not None and last_nonempty + n > last_bound:
+                return (
+                    False,
+                    f"Not enough empty channels to make room for {n} channel(s)",
+                    [],
+                )
+
+        affected: list[int] = []
+
+        # Cut: erase the sources first (their data is safely in `mems`). Doing it
+        # up front keeps the make-room math simple and makes overlap a non-issue.
+        for s in cut_set:
+            _erase_mem(radio, s)
+            affected.append(s)
+
+        if make_room:
+            # Open the gap: shift [destination, last_bound-n] down by n, high to
+            # low so an unread source is never clobbered. The bottom n slots keep
+            # stale copies until the paste overwrites them just below.
+            for k in range(last_bound - n, destination - 1, -1):
+                mem = _get_mem(radio, k).dupe()
+                mem.number = k + n
+                if mem.empty:
+                    _erase_mem(radio, k + n)
+                else:
+                    _set_mem(radio, mem)
+                affected.append(k + n)
+
+        # Write the snapshot block over the destination slots.
+        for i, src in enumerate(mems):
+            mem = src.dupe()
+            mem.number = dest_range[i]
+            if mem.empty:
+                _erase_mem(radio, mem.number)
+            else:
+                _set_mem(radio, mem)
+            affected.append(mem.number)
+
+        from chirp_backend.radio import invalidate_cache
+        invalidate_cache(sorted(set(affected)))
+
+        verb = "Moved" if cut_set else "Pasted"
+        return (
+            True,
+            f"{verb} {n} channel(s) to channel {destination}",
+            sorted(set(affected)),
+        )
+
+    except Exception as e:
+        LOG.exception("paste_block")
+        return False, str(e), []
+
+
+# ---------------------------------------------------------------------------
 # Sort and arrange
 # ---------------------------------------------------------------------------
 

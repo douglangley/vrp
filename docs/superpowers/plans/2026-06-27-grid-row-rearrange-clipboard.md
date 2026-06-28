@@ -227,8 +227,14 @@ On paste, if any destination slot in `[dest, dest+len-1]` is non-empty:
    (reading the real selection, not the fallback); catch `Space`/`Ctrl+Space` in
    the existing `EVT_KEY_DOWN` handler and consume; announce via `Announcer`.
    That's the *only* selection wiring (no focus cursor / anchor). NVDA pass.
-2. **Backend `paste_block`** + unit tests (overwrite, make-room success/﻿fail on
-   fixed count, cut+erase-source, overlap, immutable, empty). Per the testing rule.
+2. **Backend `paste_block`** — ✅ DONE. `chirp_backend/memory_ops.py`:
+   `paste_block(mems, destination, *, cut_from=None, make_room=False)`. Overwrites
+   by default; `make_room` shifts occupied channels down by N (atomic pre-check of
+   tail room, fails cleanly if not enough); `cut_from` erases sources first so
+   source/dest overlap is safe. 9 unit tests (overwrite into empty/occupied,
+   cut+erase-source, overlap, make-room shift, make-room no-room failure,
+   out-of-range, empty clipboard, cut+make-room combo). Immutable handling is
+   best-effort via exceptions, matching `move_to`/`copy_memories` (no pre-check).
 3. **Clipboard + handlers** (`on_copy/on_cut/on_paste`, `_Clipboard`) in
    `main_window.py`; deferred-cut bookkeeping; selection/focus/announce after.
 4. **Conflict dialog** (overwrite / move / cancel), native + accessible.

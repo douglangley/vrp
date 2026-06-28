@@ -335,3 +335,102 @@ class TestGoto:
         from chirp_backend.memory_ops import goto
         ok, msg, affected = goto(99)
         assert not ok
+
+
+# ---------------------------------------------------------------------------
+# Tests: paste_block (cut / copy / paste of whole rows)
+# ---------------------------------------------------------------------------
+
+class TestPasteBlock:
+    def _clip(self, *names):
+        """Snapshot rows like the clipboard would. Numbers are placeholders —
+        paste_block renumbers each row to its destination slot."""
+        return [
+            StubMemory(i, freq=146_000_000 + i, name=nm)
+            for i, nm in enumerate(names)
+        ]
+
+    def test_copy_overwrite_into_empty(self, stub_radio):
+        from chirp_backend.memory_ops import paste_block
+        ok, msg, affected = paste_block(self._clip("A", "B"), destination=10)
+        assert ok
+        assert stub_radio.get_memory(10).name == "A"
+        assert stub_radio.get_memory(11).name == "B"
+        assert 10 in affected and 11 in affected
+        assert "Pasted" in msg
+
+    def test_copy_overwrites_occupied(self, stub_radio):
+        _fill(stub_radio, (10, "OLD"))
+        from chirp_backend.memory_ops import paste_block
+        ok, _, _ = paste_block(self._clip("NEW"), destination=10)
+        assert ok
+        assert stub_radio.get_memory(10).name == "NEW"
+
+    def test_cut_move_erases_source(self, stub_radio):
+        _fill(stub_radio, (5, "A"), (6, "B"))
+        from chirp_backend.memory_ops import paste_block
+        ok, msg, _ = paste_block(self._clip("A", "B"), destination=10, cut_from=[5, 6])
+        assert ok
+        assert stub_radio.get_memory(10).name == "A"
+        assert stub_radio.get_memory(11).name == "B"
+        assert stub_radio.get_memory(5).empty
+        assert stub_radio.get_memory(6).empty
+        assert "Moved" in msg
+
+    def test_cut_move_with_overlap(self, stub_radio):
+        # Cut 5,6,7 then paste at 6 (overlaps source). Snapshot makes it safe.
+        _fill(stub_radio, (5, "A"), (6, "B"), (7, "C"))
+        from chirp_backend.memory_ops import paste_block
+        ok, _, _ = paste_block(
+            self._clip("A", "B", "C"), destination=6, cut_from=[5, 6, 7]
+        )
+        assert ok
+        assert stub_radio.get_memory(6).name == "A"
+        assert stub_radio.get_memory(7).name == "B"
+        assert stub_radio.get_memory(8).name == "C"
+        assert stub_radio.get_memory(5).empty  # source not in dest range, erased
+
+    def test_make_room_shifts_occupied_down(self, stub_radio):
+        # 6,7,8 occupied; insert 2 rows at 6 -> old 6,7,8 shift to 8,9,10.
+        _fill(stub_radio, (6, "X"), (7, "Y"), (8, "Z"))
+        from chirp_backend.memory_ops import paste_block
+        ok, _, _ = paste_block(self._clip("A", "B"), destination=6, make_room=True)
+        assert ok
+        assert stub_radio.get_memory(6).name == "A"
+        assert stub_radio.get_memory(7).name == "B"
+        assert stub_radio.get_memory(8).name == "X"
+        assert stub_radio.get_memory(9).name == "Y"
+        assert stub_radio.get_memory(10).name == "Z"
+
+    def test_make_room_fails_without_empty_tail(self, stub_radio):
+        # Fill every channel 0..19; no room to shift -> fail, radio unchanged.
+        _fill(stub_radio, *[(i, f"C{i}") for i in range(20)])
+        from chirp_backend.memory_ops import paste_block
+        ok, msg, affected = paste_block(self._clip("A"), destination=5, make_room=True)
+        assert not ok
+        assert affected == []
+        assert stub_radio.get_memory(5).name == "C5"  # unchanged
+
+    def test_out_of_range_fails(self, stub_radio):
+        from chirp_backend.memory_ops import paste_block
+        ok, _, _ = paste_block(self._clip("A", "B"), destination=19)  # 19,20 -> OOB
+        assert not ok
+
+    def test_empty_clipboard_fails(self, stub_radio):
+        from chirp_backend.memory_ops import paste_block
+        ok, _, _ = paste_block([], destination=5)
+        assert not ok
+
+    def test_cut_make_room_combined(self, stub_radio):
+        # Cut source below destination, paste with make_room at occupied slots.
+        _fill(stub_radio, (2, "S1"), (3, "S2"), (10, "X"), (11, "Y"))
+        from chirp_backend.memory_ops import paste_block
+        ok, _, _ = paste_block(
+            self._clip("S1", "S2"), destination=10, cut_from=[2, 3], make_room=True
+        )
+        assert ok
+        assert stub_radio.get_memory(2).empty and stub_radio.get_memory(3).empty
+        assert stub_radio.get_memory(10).name == "S1"
+        assert stub_radio.get_memory(11).name == "S2"
+        assert stub_radio.get_memory(12).name == "X"
+        assert stub_radio.get_memory(13).name == "Y"
