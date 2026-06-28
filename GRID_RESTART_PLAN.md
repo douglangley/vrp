@@ -51,9 +51,13 @@
   cursor's *audible* output (the announce string is verified; prism audio is not
   verifiable here). Per the verify-before-commit rule, do not finalize/commit the
   screen-reader claim until that pass is done.
-- **Follow-up available (not done):** wire **contextual `F2`** ("F2 — Edit
-  frequency", "Change CTCSS") to edit just the cursor's column, using
-  `grid.current_cell()`. Today `F2`/`Enter`/`Ctrl+E` open the full-channel
+- **Contextual `F2` single-cell edit: LANDED.** `F2` edits just the cursor's
+  column via `grid.focused_cell()` (`on_edit_cell`), falling back to the
+  full-channel dialog on the number column / immutable fields / when the cursor
+  column is unknown (macOS until #3). After a successful edit it re-announces the
+  new value as `"<value>, <column>"` (the same form the Left/Right cursor
+  speaks) via `ChannelGrid.cell_display()`. **Verified audible under NVDA**
+  (2026-06-27, commit `bbd9a74`). `Ctrl+E`/`Enter` still open the full-channel
   `edit_dialog`.
 - **Known collateral:** 0.7.0's API dropped `ContextMenuItem` and the editor
   constants (`COMBO/TEXT/...`, `SetResult`), so the retired `--webview` stack
