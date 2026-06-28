@@ -6,6 +6,24 @@ architecture, keyboard map, and CHIRP feature-coverage checklist.
 
 ---
 
+## 2026-06-28 — Bumped the CHIRP pin (6dadd6b → 906e039)
+
+First CHIRP update since the project started. Ran `tools/update_chirp.py`, which
+fetched the latest CHIRP, checked it out, ran VRP's suite against it, and — on
+green (198 passing) — bumped **`CHIRP_COMMIT`** to `906e03930c7d` (2026-06-25,
+"uvk5_egzumer: Fix battery_text and mic_bar never being saved"). Mostly driver
+fixes since 6dadd6b (2026-06-10); nothing VRP relies on changed — the band-plan
+tests that assert specific offsets (2 m 0.6, 70 cm 5.0, etc.) still pass, so the
+recent offset/auto-edits features are unaffected. Updated the "current pin"
+references in `CLAUDE.md` and `README.md` (historical PROGRESS_LOG mentions of
+6dadd6b left as-is).
+
+Not re-derived this pass: `docs/chirp-feature-coverage.md` (CLAUDE.md asks to
+re-check it after a CHIRP bump in case new menu items/dialogs appeared) — a
+driver-fix-heavy bump is unlikely to have added UI surface, but it's an open
+follow-up if we want to be thorough. A release rebuild (`uv run python build.py`)
+is the other deliberate step before shipping.
+
 ## 2026-06-28 — "Apply band-plan defaults" (mode / tuning step / tone), opt-in
 
 Rounds out the band-plan auto-fill: an opt-in **Preferences** toggle that, when

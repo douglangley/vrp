@@ -301,7 +301,7 @@ update script fetches the latest CHIRP, runs the test suite, and — only if it
 passes — bumps `CHIRP_COMMIT` to the new commit (rolling `./chirp` back to the
 pin on failure). After a successful bump, commit `CHIRP_COMMIT` and rebuild.
 
-Current pin: `6dadd6b` (2026-06-10). (An optional in-app "Update CHIRP from
+Current pin: `906e039` (2026-06-25). (An optional in-app "Update CHIRP from
 GitHub" for advanced users is a possible future addition; not part of the normal
 flow.)
 

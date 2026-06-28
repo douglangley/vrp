@@ -324,7 +324,7 @@ uv sync --extra dev
 ```
 
 CHIRP is pinned for reproducibility; record the commit when updating (current:
-6dadd6b, 2026-06-10). `uv sync` installs the editable ./chirp automatically —
+906e039, 2026-06-25). `uv sync` installs the editable ./chirp automatically —
 no separate `uv pip install -e ./chirp` step.
 
 ## Testing
@@ -347,7 +347,7 @@ Debug logging:  uv run python main.py --debug
 ## Updating CHIRP
 
 CHIRP is vendored at ./chirp, pinned to a tested commit recorded in the
-**`CHIRP_COMMIT`** file (currently 6dadd6b), and bundled into the exe. The
+**`CHIRP_COMMIT`** file (currently 906e039), and bundled into the exe. The
 `./chirp` tree itself is gitignored, not committed; `run-win.bat`/`run-mac.sh`
 clone it and check out the `CHIRP_COMMIT` SHA so everyone runs identical code.
 To update:
