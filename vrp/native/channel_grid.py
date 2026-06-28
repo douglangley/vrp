@@ -152,6 +152,23 @@ class ChannelGrid(wx.Panel):
             return None
         return grid_model.index_to_number(self._model.rows, row)
 
+    def focused_cell(self) -> tuple[int, str] | None:
+        """(channel number, column name) at the Left/Right cell cursor, or None.
+
+        The column tracks the grid's cell cursor, which is currently Windows-only
+        (on macOS it stays column 0 until upstream cursor tracking lands —
+        wx-accessible-grid#3 — so callers fall back to a full-channel edit there)."""
+        cell = self._grid.current_cell()
+        if cell is None:
+            return None
+        row_idx, col_idx = cell
+        if not (0 <= row_idx < len(self._model.rows)):
+            return None
+        cols = self._model.columns()
+        if not (0 <= col_idx < len(cols)):
+            return None
+        return grid_model.index_to_number(self._model.rows, row_idx), cols[col_idx].name
+
     def selected_count(self) -> int:
         """Actual number of selected rows (no focused-row fallback)."""
         return self._list.GetSelectedItemsCount()

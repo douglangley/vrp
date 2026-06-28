@@ -1,10 +1,12 @@
 # Plan — Wiring the grid keys (native channel grid)
 
-> **Status:** DRAFT / planning. Branch: `feat/grid-key-wiring`. No code yet.
+> **Status:** IN PROGRESS. Branch: `feat/grid-key-wiring`. Windows implementation
+> of `Ctrl+E` (full edit) + `F2` (single-cell edit) + the contextual context-menu
+> item is **done and unit/smoke-tested**; the NVDA hand pass and the macOS path
+> (gated on wx-accessible-grid#3) are still owed. Decisions A/B/C resolved below.
 > This realizes the "Keyboard & function spec" in `GRID_RESTART_PLAN.md` against
 > the *current* native grid (wx-accessible-grid 0.8.0 `AccessibleGrid`, a
 > `DataViewListCtrl`), and is honest about what that architecture can and can't do.
-> Edit freely — open decisions are marked **DECISION**.
 
 ---
 
@@ -66,46 +68,44 @@ regressing screen-reader correctness on NVDA (Windows) or VoiceOver (macOS).
    hand pass is required before the work is considered done; functional tests
    prove wiring/strings, not audible output.
 
-## Open decisions (resolve before/while implementing)
+## Decisions (RESOLVED)
 
-- **DECISION A — Tab/Enter for columns:** recommend *not* hijacking `Tab` (keep
-  native traversal) and keeping `Enter` = activate→edit. `Left`/`Right` stay the
-  cell cursor. Confirm.
-- **DECISION B — `F2`/`Enter` split vs. `Ctrl+E`:** spec wants `Ctrl+E` = full
-  channel and `F2` = this cell. Options:
-  - **B1 (recommended):** `Ctrl+E` and `Enter`/double-click → full dialog
-    (unchanged); `F2` → full dialog **pre-focused on the cursor's column**
-    (Windows) / first editable field (macOS). Lowest risk, one editing surface.
-  - **B2:** `F2` opens a **single-field** dialog for just that column. Closer to
-    the spec's wording, but a second editing surface to build/maintain.
-- **DECISION C — context-menu `Edit <column>`:** label it from the cursor column
-  on Windows ("Edit frequency"); on macOS, omit it or show generic "Edit cell"
-  (no column known). Confirm wording.
+- **A — Tab/Enter for columns → resolved: don't hijack `Tab`.** `Tab` stays
+  native focus traversal; `Enter`/double-click stays full-channel edit;
+  `Left`/`Right` are the cell cursor.
+- **B — per-cell editor → resolved: B2, a single-field editor.** `F2` opens
+  `EditCellDialog` (one column, the right control type) for the cursor's cell;
+  `Ctrl+E`/`Enter`/double-click open the full `EditChannelDialog`.
+- **C — context-menu `Edit <column>` → resolved: contextual, from the cursor
+  column** ("Edit cell — Frequency"), shown only when the cursor is on an
+  editable, named column (Windows now; macOS once #3 lands).
 
-## Implementation steps (sequenced; each lands with tests)
+## Implementation steps (sequenced)
 
-1. **`Ctrl+E` → full-channel edit.** Add the accelerator to the Channels menu
-   (`_add(..., "edit_full", "&Edit channel…\tCtrl+E", self.on_edit_channel)`)
-   and to `APP_SHORTCUTS`; update `docs/keyboard-map.md` + F1 list. (Keep `F2`
-   for now; step 3 changes it.) *Test:* menu/accelerator present.
-2. **Per-cell field focus in `EditChannelDialog`.** Add an optional
-   `focus_field: str | None` param; when set, focus that field's control instead
-   of the default. *Test:* dialog focuses the named field (headless wx smoke).
-3. **`F2` → edit the cursor's cell.** New `on_edit_cell` handler: read
-   `grid.current_cell()` → column name; open `EditChannelDialog(..., focus_field=col)`.
-   On macOS (column unknown) fall back to the full dialog. Rebind `F2` (Channels
-   menu) to `on_edit_cell`; keep `Enter`/double-click → full dialog (`on_edit_channel`).
-   *Test:* with a known cursor column, the handler computes the right field.
-4. **Context menu: contextual edit + `U`/`D`.** In `on_grid_context_menu`, add an
-   "Edit `<column>`\tF2" item (Windows) wired to `on_edit_cell`, and `&Up\tU` /
-   `&Down\tD` items wired to the existing move handlers (the menu is open, so
-   single letters are safe). Keep the existing `Ctrl+E`/Delete/Move-to/etc.
-   *Test:* menu contains the contextual + U/D items for a loaded radio.
-5. **Docs + F1 sync.** Update `docs/keyboard-map.md`, `APP_SHORTCUTS` (F1), and
-   `GRID_RESTART_PLAN.md` ("Keyboard & function spec" → mark done/divergences).
-6. **Hand pass.** NVDA (Windows): `Ctrl+E`, `F2`-on-cell, context-menu items all
-   read and act correctly. VoiceOver (macOS): `Ctrl+E` + dialog path. Record
-   results; only then commit the screen-reader claim.
+1. **`Ctrl+E` → full-channel edit.** ✅ DONE — Channels-menu item
+   `&Edit channel…\tCtrl+E` → `on_edit_channel`; `APP_SHORTCUTS`/F1 updated.
+   `Enter`/double-click still open the full dialog (unchanged).
+2. **Single-cell editor.** ✅ DONE — `EditCellDialog` (`vrp/edit_dialog.py`): one
+   column, the right control type, same validate-on-OK path. Control builders
+   factored to module-level helpers (`make_field_control`/`control_value`) shared
+   with `EditChannelDialog`. *Tests:* text + choice value round-trips.
+3. **`F2` → edit the cursor's cell.** ✅ DONE — `ChannelGrid.focused_cell()`
+   returns `(channel, column_name)` from the cell cursor; `on_edit_cell` opens
+   `EditCellDialog` for that column, applies via `update_channel({col: value})`,
+   refreshes/refocuses. Number column / read-only / unknown column (macOS) →
+   falls back to `on_edit_channel`. `F2` is the Channels-menu `Edit cell…`
+   accelerator. *Tests:* cursor→cell mapping; smoke confirms routing
+   (number col → full dialog, data col → single-cell dialog).
+4. **Context menu: contextual edit.** ✅ DONE — `on_grid_context_menu` adds
+   "Edit cell — `<column>`\tF2" when the cursor is on an editable named column.
+   `U`/`D` move already work as the open menu's `&up`/`&down` mnemonics (no change
+   needed). *Smoke:* contextual item present on a data column.
+5. **Docs + F1 sync.** ✅ DONE — `docs/keyboard-map.md` (menu table + grid table),
+   `APP_SHORTCUTS` (F1). `GRID_RESTART_PLAN.md` spec annotation: TODO at merge.
+6. **Hand pass.** ⏳ OWED — NVDA (Windows): `Ctrl+E`, `F2`-on-cell, context-menu
+   item all read and act correctly. macOS: gated on #3 (per-cell `F2` falls back
+   to the full dialog until then). Per verify-before-commit, confirm on device
+   before the screen-reader claim is final.
 
 ## Test strategy
 
