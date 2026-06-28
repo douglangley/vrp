@@ -1,10 +1,10 @@
 # Plan — Undo/Redo for channel edits (Edit menu, context menu, Ctrl+Z / Ctrl+Y)
 
-> **Status:** DRAFT (design 2026-06-27, all decisions resolved — redo is IN v1).
-> Adds a bounded **undo + redo history** for channel-memory operations to the
-> native UI, reversing/replaying edits, deletes, moves, copies, cut/paste, sort,
-> insert, arrange, and import. Builds on [[project-grid-row-clipboard]] / the
-> native grid.
+> **Status:** ✅ COMPLETE 2026-06-28 — all steps (1–6) done and NVDA-verified on
+> Windows; `Ctrl+Shift+Z` redo alias deferred and macOS/VoiceOver is the remaining
+> follow-up. A bounded **undo + redo history** for channel-memory operations:
+> reverses/replays edits, deletes, moves, copies, cut/paste, sort, insert,
+> arrange, and import. Builds on [[project-grid-row-clipboard]] / the native grid.
 
 ---
 
@@ -150,16 +150,24 @@ the transaction on failure or no-op). Mutating ops to decorate: `set_field`,
    when no radio/undo is active (so the stub-radio `memory_ops` tests are
    unaffected). Tests: update_channel/delete_range round-trip, nested
    `delete_and_shift` → one entry, failed op → no entry.
-4. **`on_undo`/`on_redo` + Edit menu + context menu + `Ctrl+Z` / `Ctrl+Y` /
-   `Ctrl+Shift+Z` + `APP_SHORTCUTS`** in `main_window.py`; gate on loaded radio;
-   "Nothing to undo/redo" when empty; rebuild + focus + announce. Tests: handler
-   routes, empty-stack announces, post-undo/redo selection/focus (headless, like
-   `tests/test_clipboard.py`).
-5. **Docs** — `docs/keyboard-map.md` (Edit menu + Ctrl+Z/Ctrl+Y), F1 list,
-   `docs/chirp-feature-coverage.md`; relax the "cannot be undone" confirm text.
-6. **NVDA hand pass** — undo *and redo* of edit / delete / move / cut-paste /
-   paste-make-room read and restore correctly; the "Nothing to undo/redo" paths;
-   macOS/VoiceOver follow-up (menu/context-menu work there regardless).
+4. **`on_undo`/`on_redo` + Edit menu + context menu + `APP_SHORTCUTS`** — ✅ DONE.
+   `main_window.py`: Undo (`Ctrl+Z`) / Redo (`Ctrl+Y`) at the top of the Edit menu
+   and the row context menu (labelled with the op, or disabled when empty);
+   `_on_menu_open` relabels them ("Undo Deleted channel 5"). Handlers gate on a
+   loaded radio, announce "Nothing to undo/redo" when empty, else `grid.rebuild()`
+   + select/focus the affected block + announce "Undone/Redone: {label}. Now on
+   channel N." F1 list updated. **`Ctrl+Shift+Z` deferred** — skipped the wx
+   AcceleratorTable that could clobber the menu accelerators; `Ctrl+Y` is the
+   redo key. Tests: round-trip through the handlers, empty-history safe, Edit menu
+   has both, menu-open relabel.
+5. **Docs** — ✅ DONE. `docs/keyboard-map.md` (Edit-menu rows, grid keys,
+   reorganizing paragraph), `docs/chirp-feature-coverage.md` (Undo/Redo ☑), F1
+   list; the "This cannot be undone." confirm text → "You can undo this with
+   Ctrl+Z." on delete/shift/sort/arrange.
+6. **NVDA hand pass** — ✅ DONE (2026-06-28): undo/redo of edit / delete / move /
+   cut-paste / paste-make-room read and restore correctly; "Nothing to undo/redo"
+   paths; Edit-menu relabels. macOS/VoiceOver follow-up (menu/context-menu work
+   there regardless).
 
 ## Test strategy
 

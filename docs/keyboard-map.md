@@ -36,6 +36,8 @@ arrow keys move across top-level menus; NVDA reads it like any native app menu.
 | File | Export to CSV… | — | needs a loaded radio |
 | File | Preferences… | — | |
 | File | Exit | `Ctrl+Q` | |
+| Edit | Undo | `Ctrl+Z` | needs a loaded radio; reverses the last channel op (announces "Nothing to undo" when empty) |
+| Edit | Redo | `Ctrl+Y` | needs a loaded radio; replays the last undone op |
 | Edit | Select All Channels | `Ctrl+A` | needs a loaded radio |
 | Edit | Clear Selection | — | needs a loaded radio |
 | Edit | Copy | `Ctrl+C` | needs a loaded radio; copies the selected channel(s) |
@@ -93,6 +95,7 @@ speaks `"<value>, <column>"` through its supplemental (prism) speech.
 | `Shift+Up` / `Shift+Down` | Extend a contiguous selection |
 | `Ctrl+A` | Select all channels |
 | `Ctrl+C` / `Ctrl+X` / `Ctrl+V` | Copy / Cut (deferred — moves on paste) / Paste the selected channel(s) at the focused channel |
+| `Ctrl+Z` / `Ctrl+Y` | Undo / Redo the last channel operation |
 | `Ctrl+E` / `Enter` | Edit the focused channel — **all** fields (full dialog) |
 | `F2` | Edit the **focused cell** — a single-field dialog for the cursor's column. On the channel-number column, a read-only column, or where the cursor column isn't known (macOS until wx-accessible-grid#3), falls back to the full dialog |
 | `Del` | Delete the selected channel(s) (Channels-menu accelerator) |
@@ -107,6 +110,7 @@ Then:
 
 | Key | Action |
 |-----|--------|
+| `Ctrl+Z` / `Ctrl+Y` | Undo / Redo the last channel operation |
 | `Ctrl+C` / `Ctrl+X` / `Ctrl+V` | Copy / Cut / Paste the selected channel(s) |
 | `Ctrl+Shift+Up` | Move the selected channel(s) up one slot |
 | `Ctrl+Shift+Down` | Move the selected channel(s) down one slot |
@@ -128,6 +132,13 @@ destination, but when the destination is occupied a dialog offers **Overwrite**,
 **Make room** (shift the existing channels down to insert — blocked if there
 aren't enough empty slots near the end), or **Cancel**. The radio's channel
 count is fixed, so nothing is ever added or pushed off the end.
+
+**Undo / redo** cover every channel operation — edit, delete, move, copy,
+cut/paste, sort, insert, arrange, import. `Ctrl+Z` undoes the last one and
+announces what it reversed (e.g. "Undone: Deleted channel 5"); `Ctrl+Y` redoes
+it. The Edit menu's Undo/Redo items show the operation they'd act on; the history
+is bounded (most-recent ops) and cleared when you load, close, or download an
+image. Radio Settings and bank assignments are not yet undoable.
 
 ### Dialogs (shared with the webview UI)
 

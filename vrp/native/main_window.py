@@ -62,6 +62,8 @@ APP_SHORTCUTS = [
     ("Ctrl+E / Enter", "Edit the focused channel (all fields)"),
     ("F2", "Edit the focused cell (one column)"),
     ("Del", "Delete the selected channel(s)"),
+    ("Ctrl+Z", "Undo the last change"),
+    ("Ctrl+Y", "Redo the last undone change"),
     ("Space / Ctrl+Space", "Select or deselect the focused channel"),
     ("Ctrl+Up / Ctrl+Down", "Move the cursor without changing the selection"),
     ("Shift+Up / Shift+Down", "Extend the selection"),
@@ -148,6 +150,9 @@ class MainWindow(wx.Frame):
         self._find_last: int | None = None
         self._build_menubar()
         self._update_menu_state()
+        # Refresh the Undo/Redo item labels with the next op's description when the
+        # Edit menu opens (discoverability; relabeling is safe for accelerators).
+        self.Bind(wx.EVT_MENU_OPEN, self._on_menu_open)
         self.grid.SetFocus()
         # Deferred and delayed: wx.CallAfter alone fires on the very next idle
         # tick, which can race ahead of NVDA's own window-title announcement
@@ -245,6 +250,13 @@ class MainWindow(wx.Frame):
 
     def _build_edit_menu(self) -> wx.Menu:
         m = wx.Menu()
+        self._edit_menu = m
+        # Undo/Redo gated on a loaded radio only (kept enabled so the accelerator
+        # always fires; the handlers announce "Nothing to undo/redo"). Labels are
+        # refreshed with the next op's description on menu-open (_on_menu_open).
+        self._add(m, "undo", "&Undo\tCtrl+Z", self.on_undo, needs_radio=True)
+        self._add(m, "redo", "&Redo\tCtrl+Y", self.on_redo, needs_radio=True)
+        m.AppendSeparator()
         self._add(m, "select_all", "Select &All Channels\tCtrl+A",
                   self.on_select_all, needs_radio=True)
         self._add(m, "clear_selection", "&Clear Selection",
@@ -423,6 +435,23 @@ class MainWindow(wx.Frame):
             item = menu.Append(wx.ID_ANY, label)
             self.grid.Bind(wx.EVT_MENU, lambda _e: handler(), item)
 
+        # Undo/Redo first, labelled with the op they'd reverse/replay (or a
+        # disabled item when there's nothing).
+        from chirp_backend.radio import get_undo_manager
+
+        mgr = get_undo_manager()
+        ulabel = mgr.peek_undo_label() if mgr else None
+        rlabel = mgr.peek_redo_label() if mgr else None
+        if ulabel:
+            add(f"&Undo {self._menu_safe(ulabel)}\tCtrl+Z", self.on_undo)
+        else:
+            menu.Append(wx.ID_ANY, "&Undo\tCtrl+Z").Enable(False)
+        if rlabel:
+            add(f"&Redo {self._menu_safe(rlabel)}\tCtrl+Y", self.on_redo)
+        else:
+            menu.Append(wx.ID_ANY, "&Redo\tCtrl+Y").Enable(False)
+        menu.AppendSeparator()
+
         add(f"&Edit channel {number}\tCtrl+E", self.on_edit_channel)
         # Contextual single-cell edit, when the cursor is on an editable column
         # whose name we know (Windows today; macOS once cursor tracking lands).
@@ -487,7 +516,7 @@ class MainWindow(wx.Frame):
         first, last, count = numbers[0], numbers[-1], len(numbers)
         rng = f"channel {first}" if count == 1 else f"{count} channels, {first} to {last}"
         if not self._confirm(
-            f"Delete {rng}? Their contents will be cleared. This cannot be undone."
+            f"Delete {rng}? Their contents will be cleared. You can undo this with Ctrl+Z."
         ):
             return
         ok, message, _affected = mo.delete_range(numbers)
@@ -552,6 +581,64 @@ class MainWindow(wx.Frame):
         self.grid.clear_selection()
         self._suppress_next_count = True
         self.announce.announce("Selection cleared.")
+
+    # -- undo / redo --------------------------------------------------
+
+    def on_undo(self, _evt=None) -> None:
+        """Undo the last channel operation (Ctrl+Z)."""
+        self._history_step("undo", "Undone")
+
+    def on_redo(self, _evt=None) -> None:
+        """Redo the last undone channel operation (Ctrl+Y)."""
+        self._history_step("redo", "Redone")
+
+    def _history_step(self, which: str, verb: str) -> None:
+        from chirp_backend.radio import get_undo_manager
+
+        if not radio_backend.get_state().loaded:
+            self.announce.announce("No radio image is open.", assertive=True)
+            return
+        mgr = get_undo_manager()
+        result = (mgr.undo() if which == "undo" else mgr.redo()) if mgr else None
+        if result is None:
+            self.announce.announce(f"Nothing to {which}.")
+            return
+        label, numbers = result
+        # The op rewrote these channels; refresh the whole grid (a structural op
+        # may have shifted rows) and re-anchor on the affected block.
+        self.grid.rebuild()
+        numbers = sorted(n for n in numbers) if numbers else []
+        if numbers:
+            low, high = radio_backend.get_state().memory_bounds
+            target = min(max(numbers[0], low), high)
+            self.grid.select_channels([n for n in numbers if low <= n <= high])
+            self.grid.focus_channel(target)
+            self.announce.announce(f"{verb}: {label}. Now on channel {target}.",
+                                   assertive=True)
+        else:
+            self.announce.announce(f"{verb}: {label}.", assertive=True)
+
+    def _on_menu_open(self, event) -> None:
+        """When the Edit menu opens, relabel Undo/Redo with the op they'd act on
+        (e.g. 'Undo Deleted channel 5'). Relabeling doesn't affect accelerators."""
+        if event.GetMenu() is getattr(self, "_edit_menu", None):
+            from chirp_backend.radio import get_undo_manager
+
+            mgr = get_undo_manager()
+            u = mgr.peek_undo_label() if mgr else None
+            r = mgr.peek_redo_label() if mgr else None
+            self._menu_items["undo"].SetItemLabel(
+                (f"&Undo {self._menu_safe(u)}" if u else "&Undo") + "\tCtrl+Z")
+            self._menu_items["redo"].SetItemLabel(
+                (f"&Redo {self._menu_safe(r)}" if r else "&Redo") + "\tCtrl+Y")
+        event.Skip()
+
+    @staticmethod
+    def _menu_safe(text: str) -> str:
+        """A menu-safe op label: escape mnemonic '&', drop tabs/newlines, and
+        keep it short so the menu item stays readable."""
+        text = text.replace("&", "&&").replace("\t", " ").replace("\n", " ").strip()
+        return text if len(text) <= 50 else text[:49] + "…"
 
     # -- clipboard: cut / copy / paste (whole rows) -------------------
 
@@ -872,7 +959,7 @@ class MainWindow(wx.Frame):
         if key == "delete":
             return (
                 f"Delete {rng}? Their contents will be cleared. "
-                "This cannot be undone."
+                "You can undo this with Ctrl+Z."
             )
         if key == "delete_shift":
             scope = (
@@ -880,17 +967,17 @@ class MainWindow(wx.Frame):
                 if op.get("mode", "all") == "all"
                 else "and shift channels within the block"
             )
-            return f"Delete {rng} {scope}? This cannot be undone."
+            return f"Delete {rng} {scope}? You can undo this with Ctrl+Z."
         if key == "sort":
             order = "descending" if op.get("reverse") else "ascending"
             return (
                 f"Sort {rng} by {op.get('attr')} {order}? This reorders and "
-                "renumbers these channels. This cannot be undone."
+                "renumbers these channels. You can undo this with Ctrl+Z."
             )
         if key == "arrange":
             return (
                 f"Compact {rng}, removing empty slots? Channels will be "
-                "renumbered. This cannot be undone."
+                "renumbered. You can undo this with Ctrl+Z."
             )
         return None
 
