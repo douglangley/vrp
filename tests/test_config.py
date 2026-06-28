@@ -16,22 +16,22 @@ def _point_config_base(monkeypatch, tmp_path):
 
 def test_defaults_on_missing_file(tmp_path):
     c = Config(path=str(tmp_path / "c.json"))
-    assert c.get("channels_per_page") == 100
+    assert c.get("recent_files_count") == 9
     assert c.get("speak_status_messages") is False
     assert c.recent() == []
 
 
 def test_set_persists_across_instances(tmp_path):
     path = str(tmp_path / "c.json")
-    Config(path=path).set("channels_per_page", 50)
-    assert Config(path=path).get("channels_per_page") == 50
+    Config(path=path).set("recent_files_count", 5)
+    assert Config(path=path).get("recent_files_count") == 5
 
 
 def test_corrupt_file_falls_back_to_defaults(tmp_path):
     p = tmp_path / "c.json"
     p.write_text("{ this is not valid json", encoding="utf-8")
     c = Config(path=str(p))
-    assert c.get("channels_per_page") == 100  # didn't raise; used defaults
+    assert c.get("recent_files_count") == 9  # didn't raise; used defaults
 
 
 def test_add_recent_dedup_cap_and_order(tmp_path):
@@ -107,12 +107,12 @@ def test_migrates_legacy_openmemorywriter_config(monkeypatch, tmp_path):
     legacy = tmp_path / "OpenMemoryWriter"
     legacy.mkdir()
     (legacy / "config.json").write_text(
-        json.dumps({"channels_per_page": 250}), encoding="utf-8"
+        json.dumps({"recent_files_count": 7}), encoding="utf-8"
     )
     p = cfg._default_path()  # triggers migration
     assert os.path.basename(os.path.dirname(p)) == "VRP"
     assert os.path.exists(p)
-    assert json.loads(open(p, encoding="utf-8").read())["channels_per_page"] == 250
+    assert json.loads(open(p, encoding="utf-8").read())["recent_files_count"] == 7
 
 
 def test_no_migration_when_new_config_already_exists(monkeypatch, tmp_path):
@@ -120,13 +120,13 @@ def test_no_migration_when_new_config_already_exists(monkeypatch, tmp_path):
     new = tmp_path / "VRP"
     new.mkdir()
     (new / "config.json").write_text(
-        json.dumps({"channels_per_page": 50}), encoding="utf-8"
+        json.dumps({"recent_files_count": 3}), encoding="utf-8"
     )
     legacy = tmp_path / "OpenMemoryWriter"
     legacy.mkdir()
     (legacy / "config.json").write_text(
-        json.dumps({"channels_per_page": 250}), encoding="utf-8"
+        json.dumps({"recent_files_count": 7}), encoding="utf-8"
     )
     p = cfg._default_path()
     # Existing VRP config must NOT be overwritten by the legacy one.
-    assert json.loads(open(p, encoding="utf-8").read())["channels_per_page"] == 50
+    assert json.loads(open(p, encoding="utf-8").read())["recent_files_count"] == 3

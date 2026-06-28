@@ -68,8 +68,7 @@ main.py  (entry; parse_mode() returns native unless --webview forces the webview
 
 - **Grid is unpaged.** The `DataViewListCtrl` is populated with every channel at
   once (`AppendItem` per row from `grid_model.build_rows`), so there's no
-  page-by-page reading and no "channels per page" preference (the webview UI's
-  channels-per-page preference is vestigial — see below). The native list-view
+  page-by-page reading and no "channels per page" preference. The native list-view
   handles 500+ rows without paging; if eager population ever became a problem,
   `DataViewCtrl` + a `DataViewVirtualListModel` is the virtualized form (see the
   migration sketch in the research doc).

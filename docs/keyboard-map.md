@@ -335,9 +335,7 @@ Real-radio verification is still owed (no hardware in dev).
 
 Settings persist in a JSON file under the user config dir (atomic writes;
 corrupt/missing falls back to defaults). File ▸ Preferences… (a native dialog)
-has **Channels per page** (25/50/100/250/500 — vestigial since the
-`AccessibleGrid` loads every channel regardless; changing it just re-shows
-the grid and announces "The accessible grid now loads all channels") and
+has **Recently opened files to show** (0–9; 0 hides the Open Recent submenu) and
 **Speak status messages aloud** (off by default;
 gates the *supplemental* prism speech — the screen reader always reads the live
 region regardless). File ▸ Open Recent ▸ lists the last 8 opened images

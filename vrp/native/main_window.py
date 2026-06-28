@@ -10,8 +10,8 @@ Key differences vs the webview app:
 - on_radio_info: describe_radio_html() returns HTML; we build a plain-text
   summary instead and show it with wx.MessageBox.
 - on_shortcuts: displayed with wx.MessageBox (plain text, not HTML).
-- on_preferences: channels_per_page is omitted (no paging in native grid);
-  only speak_status_messages is offered.
+- on_preferences: the native grid has no paging, so there is no channels-per-page
+  setting; only the recent-files count and speak-status toggle are offered.
 - CHIRP attribution: shown in the About box (wx.adv.AboutBox description),
   satisfying the GPLv3 requirement documented in CLAUDE.md.
 """
@@ -1295,17 +1295,13 @@ class MainWindow(wx.Frame):
         """File > Preferences — app settings.
 
         Exposes the supplemental-speech toggle and the number of recent files to
-        show in File > Open Recent (0 hides it). The native grid has no paging,
-        so channels_per_page is collected by the shared dialog but ignored here.
+        show in File > Open Recent (0 hides it).
         """
         from vrp.config import get_config
         from vrp.prefs_dialog import PreferencesDialog
 
         cfg = get_config()
-        # Pass a dummy channels_per_page so PreferencesDialog renders correctly;
-        # the native grid ignores it.
         current = {
-            "channels_per_page": int(cfg.get("channels_per_page", 100)),
             "speak_status_messages": bool(cfg.get("speak_status_messages", False)),
             "recent_files_count": cfg.recent_count(),
         }

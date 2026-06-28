@@ -29,7 +29,6 @@ _LEGACY_DIRNAME = "OpenMemoryWriter"
 
 _DEFAULTS = {
     "version": 1,
-    "channels_per_page": 100,
     "speak_status_messages": False,  # screen reader already reads the live region
     "recent_files": [],
     "recent_files_count": 9,  # how many recent files to show in the menu (0 hides it)

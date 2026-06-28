@@ -1,7 +1,6 @@
 """Native wx Preferences dialog (app settings with a real wired effect).
 
 Prefs that take effect immediately:
-- Channels per page (grid paging size) — a wx.Choice of known-good values.
 - Recently opened files to show — a wx.Choice of 0..9. 0 hides the File >
   Open Recent submenu; 1..9 shows that many recent files.
 - Speak status messages aloud — gates the prism supplemental speech. Default
@@ -15,7 +14,6 @@ from __future__ import annotations
 
 import wx
 
-PAGE_CHOICES = [25, 50, 100, 250, 500]
 RECENT_COUNT_CHOICES = list(range(10))  # 0..9; 0 hides the Recent submenu
 
 
@@ -25,16 +23,6 @@ class PreferencesDialog(wx.Dialog):
         outer = wx.BoxSizer(wx.VERTICAL)
 
         grid = wx.FlexGridSizer(cols=2, vgap=8, hgap=10)
-        grid.Add(wx.StaticText(self, label="Channels per page:"), 0,
-                 wx.ALIGN_CENTER_VERTICAL)
-        self.page = wx.Choice(self, choices=[str(n) for n in PAGE_CHOICES])
-        self.page.SetName("Channels per page")
-        cur = int(current.get("channels_per_page", 100))
-        self.page.SetSelection(
-            PAGE_CHOICES.index(cur) if cur in PAGE_CHOICES else PAGE_CHOICES.index(100)
-        )
-        grid.Add(self.page)
-
         grid.Add(wx.StaticText(self, label="Recently opened files to show:"), 0,
                  wx.ALIGN_CENTER_VERTICAL)
         self.recent_count = wx.Choice(
@@ -65,11 +53,10 @@ class PreferencesDialog(wx.Dialog):
         outer.Add(self.CreateStdDialogButtonSizer(wx.OK | wx.CANCEL), 0,
                   wx.EXPAND | wx.ALL, 8)
         self.SetSizerAndFit(outer)
-        self.page.SetFocus()
+        self.recent_count.SetFocus()
 
     def get_values(self) -> dict:
         return {
-            "channels_per_page": PAGE_CHOICES[self.page.GetSelection()],
             "recent_files_count": self.recent_count.GetSelection(),  # index == value (0..9)
             "speak_status_messages": self.speak.GetValue(),
         }
