@@ -1,11 +1,10 @@
 # Plan — Rearranging memory channels: selection model + clipboard (cut/copy/paste)
 
-> **Status:** AGREED 2026-06-27 — all design decisions resolved. **Step 0 (NVDA
-> selection spike) DONE** — see "Step 0 results" below; the selection model needs
-> far less hand-wiring than feared. Ready for Step 1. Extends the native channel
-> grid (`vrp/native/`) so whole **rows** (channels) can be selected and rearranged
-> with a clipboard, on top of the existing Move up/down/to. **Rows only — cells
-> are never moved.**
+> **Status:** ✅ COMPLETE 2026-06-27 — all steps (0–7) done and NVDA-verified on
+> Windows; macOS/VoiceOver is the one remaining follow-up (Step 7). The native
+> channel grid (`vrp/native/`) now supports selecting and rearranging whole
+> **rows** (channels) with a clipboard, on top of the existing Move up/down/to.
+> **Rows only — cells are never moved.**
 
 ## Step 0 results (NVDA spike, 2026-06-27)
 
@@ -258,8 +257,13 @@ On paste, if any destination slot in `[dest, dest+len-1]` is non-empty:
 6. **Docs** — ✅ DONE. `docs/keyboard-map.md` (Edit-menu rows, grid selection +
    clipboard keys, context menu, Reorganizing section), `docs/chirp-feature-
    coverage.md` (Cut/Paste ☑), F1 list.
-7. **Full NVDA hand pass** of the whole flow — ⏳ OWED before committing the
-   user-facing claim; macOS/VoiceOver noted as follow-up.
+7. **Full NVDA hand pass** of the whole flow — ✅ DONE (2026-06-27): selection
+   (Space/Ctrl+Space, Ctrl+Arrow, Shift+Arrow, Select All/Clear), copy/paste into
+   empty, paste-onto-occupied dialog (Overwrite / Make room / Cancel), cut=move,
+   and the context menu all verified audible/correct under NVDA on Windows.
+   **macOS/VoiceOver remains a follow-up** (same caveat as the rest of the native
+   grid — arrow-key selection is VoiceOver-driven there; menu/context-menu items
+   always work).
 
 ## Test strategy
 - Backend: `paste_block` gets full unit coverage (every memory op must — project
