@@ -65,6 +65,26 @@ def test_edit_cell_dialog_choice_value_round_trips(app):
         radio_backend.unload()
 
 
+def test_cell_display_matches_model_text(app):
+    from vrp.native.channel_grid import ChannelGrid
+    from vrp.native import grid_model
+
+    radio_backend.load_image(IMAGE)
+    try:
+        frame = wx.Frame(None)
+        grid = ChannelGrid(frame)
+        grid.set_state(radio_backend.get_state())
+        assert grid.cell_display(2, "number") == "2"
+        idx = grid_model.number_to_index(grid._model.rows, 2)
+        assert grid.cell_display(2, "name") == grid_model.cell_text(
+            grid._model.rows[idx], "name"
+        )
+        assert grid.cell_display(99999, "name") == ""  # unknown channel
+        frame.Destroy()
+    finally:
+        radio_backend.unload()
+
+
 def test_focused_cell_maps_cursor_to_channel_and_column(app):
     from vrp.native.channel_grid import ChannelGrid
 

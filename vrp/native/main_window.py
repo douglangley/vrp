@@ -347,7 +347,16 @@ class MainWindow(wx.Frame):
         self.grid.refresh_numbers([number])
         self.grid.select_channels([number])
         self.grid.focus_channel(number)
-        self.announce.announce(message, assertive=not ok)
+        if ok:
+            # Re-announce the edited cell's NEW value, in the same
+            # "<value>, <column>" form the Left/Right cursor speaks, so the user
+            # hears the result of their edit (not just "channel updated").
+            # Non-assertive so it queues behind the screen reader's focus read of
+            # the row rather than clipping it.
+            shown = self.grid.cell_display(number, col_name)
+            self.announce.announce(f"{shown if shown else 'blank'}, {col.label}")
+        else:
+            self.announce.announce(message, assertive=True)
 
     # -- context menu / delete / selection feedback -------------------
 

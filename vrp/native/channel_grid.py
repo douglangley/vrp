@@ -173,6 +173,14 @@ class ChannelGrid(wx.Panel):
         """Actual number of selected rows (no focused-row fallback)."""
         return self._list.GetSelectedItemsCount()
 
+    def cell_display(self, number: int, col_name: str) -> str:
+        """The display text shown (and read) for a cell — the same text the
+        Left/Right cursor speaks. Empty after a refresh returns ``""``."""
+        idx = grid_model.number_to_index(self._model.rows, number)
+        if idx is None:
+            return ""
+        return grid_model.cell_text(self._model.rows[idx], col_name)
+
     def select_channels(self, numbers: list[int]) -> None:
         """Replace the selection with exactly ``numbers``."""
         idxs = []
