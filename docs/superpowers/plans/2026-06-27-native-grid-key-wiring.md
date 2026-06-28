@@ -43,13 +43,24 @@ regressing screen-reader correctness on NVDA (Windows) or VoiceOver (macOS).
    accessible in-cell editor per column. The "editor" is `EditChannelDialog` (a
    real native dialog that NVDA/VoiceOver read correctly). So "edit this cell"
    realistically means "open the dialog focused on this cell's field."
-2. **macOS can't see the cell cursor.** wx-accessible-grid 0.8.0 only binds the
-   `Left`/`Right` key handler when an `announce` callback is passed — which VRP
-   does **only on Windows** (on macOS VoiceOver drives its own cell cursor that
-   the app can't observe). So `grid.current_cell()` returns the real column only
-   on Windows; on macOS it's always column 0. **Per-cell `F2` is therefore a
-   Windows capability**; on macOS `F2` falls back to the full dialog (or VoiceOver
-   + the dialog). This is inherent, not a bug.
+2. **macOS can't see the cell cursor — fix requested upstream.**
+   wx-accessible-grid 0.8.0 only binds the `Left`/`Right` key handler when an
+   `announce` callback is passed — which VRP does **only on Windows** (on macOS
+   VoiceOver drives its own cell cursor and we stay silent). So
+   `grid.current_cell()` returns the real column only on Windows; on macOS it's
+   always column 0, so per-cell `F2` can't know the column there.
+   **This is being addressed:** we asked the maintainer to let the cursor's
+   column *tracking* be enabled without a *speaking* callback (so the host can
+   track the column silently on macOS and let VoiceOver speak) —
+   [Community-Access/wx-accessible-grid#3](https://github.com/Community-Access/wx-accessible-grid/issues/3).
+   - **If #3 lands:** pass `track_cursor=True` (announce stays `None`) on macOS →
+     `current_cell()` works there → per-cell `F2` works on both platforms.
+   - **Until then (or if declined):** per-cell `F2` is Windows-only; on macOS
+     `F2` falls back to the full dialog. Optionally bind our own key handler on
+     `grid.control` to track the column downstream (the issue notes this fallback).
+   - **Open feasibility question (in #3):** whether plain `Left`/`Right` reach the
+     control's `EVT_KEY_DOWN` under VoiceOver at all — gating whether even the
+     downstream fallback works on macOS.
 3. **Verify on device.** Every change here is screen-reader behavior. Per the
    project's verify-before-commit rule, the NVDA (and, where relevant, VoiceOver)
    hand pass is required before the work is considered done; functional tests
