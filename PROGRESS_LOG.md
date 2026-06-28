@@ -6,6 +6,59 @@ architecture, keyboard map, and CHIRP feature-coverage checklist.
 
 ---
 
+## 2026-06-27 — Native channel grid moved onto wx-accessible-grid 0.8.0 (+ Left/Right cell cursor)
+
+**Direction realized.** The native channel grid no longer uses VRP's bespoke
+`wx.dataview.DataViewListCtrl`; it is now built on the **wx-accessible-grid**
+library, which we had been waiting on to gain a native (non-WebView) backend.
+The library iterated rapidly the same day, and we tracked it to the right
+landing spot:
+
+- **0.5.0** dropped the WebView/ARIA grid for a native virtual `wx.ListCtrl` —
+  but that control is *silent under VoiceOver* on macOS (wx's report-mode
+  ListCtrl falls back to a generic custom-drawn control there).
+- **0.7.0** rebased onto `DataViewListCtrl` (NSTableView on macOS → VoiceOver
+  reads each cell natively; native list view on Windows/GTK), but in doing so
+  removed the app-level cell cursor 0.6.x had.
+- **0.8.0** restored an **opt-in Left/Right cell cursor** on the
+  DataViewListCtrl backend (`AccessibleGrid(..., announce=callable)`), in
+  response to our request — filed as
+  [Community-Access/wx-accessible-grid#2](https://github.com/Community-Access/wx-accessible-grid/issues/2)
+  (request text in `WX_ACCESSIBLE_GRID_CELL_CURSOR_REQUEST.md`).
+
+**What landed (commits `7d1fa9c`, `ad2e8c8`):**
+- `pyproject.toml` now depends on `wx-accessible-grid>=0.8.0`, pinned via a
+  `[tool.uv.sources]` git source at commit `e2087ed` (0.8.0 is not on PyPI yet —
+  PyPI's latest is 0.4.1, the retired WebView grid).
+- `vrp/native/channel_grid.py` is now a thin `wx.Panel` over the library's
+  `AccessibleGrid` + a `GridModel` adapter (`_ChannelGridModel`). The public
+  method surface is unchanged, so `main_window.py` only needed to pass the grid's
+  event handlers — and a Windows-only `cell_announce` callable — as callbacks.
+- **Cell cursor:** on Windows the generic DataViewCtrl announces no per-cell
+  cursor, so VRP voices the moved-to cell ("<value>, <column>") through its prism
+  `Announcer` (assertive). On macOS `announce` is left `None` so VoiceOver's
+  native VO+Left/Right cell reading stays the single voice.
+- `grid_model.py` gained `build_row()` for per-row refreshes.
+- **Focus fix (`ad2e8c8`):** a freshly populated DataViewListCtrl has no current
+  item, so `SetFocus()` after a load landed on no row — nothing was announced and
+  the cell cursor had no row to read until you alt-tabbed away and back.
+  `set_state` now sets the current item to the first row after populating
+  (without taking focus). **Confirmed working on-device by the user** (NVDA):
+  loading an image now speaks immediately, and all four arrow keys work.
+
+**Verification:** all 119 tests pass; a functional smoke (UV-5R, 128 rows) covers
+populate/select/focus/refresh/reorder/rebuild and the cell-cursor announce
+strings. The cursor's audible output and the focus fix were confirmed in the
+real app by the user.
+
+**Collateral / follow-ups:** 0.7.0+ dropped `ContextMenuItem` and the editor
+constants, so the retired `--webview` stack (`vrp/app.py`,
+`vrp/channel_grid_model.py`, `tools/grid_preview.py`) no longer imports — the
+default native UI is unaffected; decide later whether to leave `--webview`
+broken, fail it gracefully, or port it. Open enhancement: wire contextual `F2`
+("Edit frequency" / "Change CTCSS") to edit just the cursor's column via
+`grid.current_cell()`. See `GRID_RESTART_PLAN.md` for the full status.
+
 ## 2026-06-25 — Native UI is the default on every platform + docs reconciled
 
 **Direction set.** VRP is moving to **native wx controls for everything on both
