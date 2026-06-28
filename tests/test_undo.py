@@ -188,3 +188,77 @@ def test_clear_drops_history():
     mgr.undo()
     mgr.clear()
     assert not mgr.can_undo() and not mgr.can_redo()
+
+
+# ---------------------------------------------------------------------------
+# Integration: the recorder hook wired into chirp_backend.radio
+# ---------------------------------------------------------------------------
+
+from chirp_backend import radio as radio_backend  # noqa: E402
+
+IMAGE = os.path.abspath(
+    os.path.join(
+        os.path.dirname(__file__), "..", "chirp", "tests", "images",
+        "Baofeng_UV-5R.img",
+    )
+)
+
+
+def _snap(n):
+    m = radio_backend.get_memory(n)
+    return (m.empty, m.name)
+
+
+class TestUndoRecorderIntegration:
+    def teardown_method(self):
+        radio_backend.unload()
+
+    def test_load_installs_manager_unload_clears(self):
+        radio_backend.load_image(IMAGE)
+        assert radio_backend.get_undo_manager() is not None
+        radio_backend.unload()
+        assert radio_backend.get_undo_manager() is None
+
+    def test_write_in_transaction_is_undoable(self):
+        radio_backend.load_image(IMAGE)
+        mgr = radio_backend.get_undo_manager()
+        n = radio_backend.get_state().memory_bounds[0]
+        before = _snap(n)
+
+        with mgr.transaction("rename"):
+            m = radio_backend.get_memory(n).dupe()
+            m.empty = False
+            m.name = "ZZTOP"
+            radio_backend.set_memory(m)
+        assert radio_backend.get_memory(n).name == "ZZTOP"
+
+        assert mgr.can_undo()
+        mgr.undo()
+        assert _snap(n) == before  # restored (name + empty)
+
+        mgr.redo()
+        assert radio_backend.get_memory(n).name == "ZZTOP"
+
+    def test_write_outside_transaction_is_not_recorded(self):
+        radio_backend.load_image(IMAGE)
+        mgr = radio_backend.get_undo_manager()
+        n = radio_backend.get_state().memory_bounds[0]
+        m = radio_backend.get_memory(n).dupe()
+        m.empty = False
+        m.name = "NOREC"
+        radio_backend.set_memory(m)  # no transaction open
+        assert not mgr.can_undo()
+
+    def test_reload_resets_history(self):
+        radio_backend.load_image(IMAGE)
+        mgr = radio_backend.get_undo_manager()
+        n = radio_backend.get_state().memory_bounds[0]
+        with mgr.transaction("op"):
+            m = radio_backend.get_memory(n).dupe()
+            m.empty = False
+            m.name = "AAA"
+            radio_backend.set_memory(m)
+        assert mgr.can_undo()
+
+        radio_backend.load_image(IMAGE)  # reload -> fresh history
+        assert not radio_backend.get_undo_manager().can_undo()

@@ -132,10 +132,14 @@ the transaction on failure or no-op). Mutating ops to decorate: `set_field`,
    restores after, new op clears redo, nesting → one entry, empty txn → nothing,
    first-touch-only per channel, empty pre-image → erase, stack bound, empty
    stacks → None, abort on exception, clear).
-2. **Recorder hook** — wrap the loaded radio's `set_memory`/`erase_memory` (in
-   `radio.py`'s load path) to feed the recorder when a transaction is open;
-   `clear()` both stacks on load/close/download. Tests: a write inside a
-   transaction captures the pre-image; outside, it doesn't.
+2. **Recorder hook** — ✅ DONE. `radio.py` `_install_undo(radio)` wraps the CHIRP
+   radio's `set_memory`/`erase_memory` (the real choke point — `memory_ops._set_mem`
+   /`_erase_mem` call them directly) so each write `record()`s a pre-image into a
+   fresh module-singleton `UndoManager` (`get_undo_manager()`); restores go through
+   the *original* methods + `invalidate_cache`. Called on load_image/download;
+   history dropped on `unload`. Guarded so a driver that refuses attribute
+   assignment just disables undo. Tests: load installs / unload clears; write in a
+   transaction is undoable+redoable; write outside isn't recorded; reload resets.
 3. **Decorate `memory_ops` mutators** with `@undo.records` (label from result).
    Tests: each op kind produces one entry that round-trips (op → undo → original,
    then redo → post-op state), incl. a nested op (`delete_and_shift`).

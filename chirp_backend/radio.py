@@ -20,6 +20,8 @@ import threading
 from dataclasses import dataclass, field
 from typing import Callable, Generator, Optional
 
+from chirp_backend.undo import UndoManager
+
 LOG = logging.getLogger(__name__)
 
 # Lazily import chirp so we can give a friendly error if it's not installed
@@ -91,12 +93,14 @@ def get_state() -> RadioState:
 
 def unload() -> None:
     """Clear the active radio (e.g. File ▸ Close), returning to no-radio state."""
+    global _undo
     with _state_lock:
         _state.radio = None
         _state.image_path = None
         _state.is_modified = False
         _state.serial_port = None
         _state._mem_cache = {}
+    _undo = None  # drop the undo history with the radio
 
 
 def load_image(path: str) -> tuple[bool, str]:
@@ -123,6 +127,7 @@ def load_image(path: str) -> tuple[bool, str]:
             _state.image_path = path
             _state.is_modified = False
             _state._mem_cache = {}
+        _install_undo(radio)  # fresh, empty history for the new radio
 
         LOG.info("Loaded image: %s (%s %s)", path,
                  radio.VENDOR, radio.MODEL)
@@ -217,6 +222,71 @@ def invalidate_cache(numbers: Optional[list[int]] = None) -> None:
         else:
             for n in numbers:
                 _state._mem_cache.pop(n, None)
+
+
+# ---------------------------------------------------------------------------
+# Undo / redo history (see chirp_backend/undo.py and the undo-history plan)
+# ---------------------------------------------------------------------------
+
+# One UndoManager per loaded radio. Reset (and the radio re-wrapped) on every
+# load/download; cleared on close. None when no radio is loaded.
+_undo: Optional[UndoManager] = None
+
+
+def get_undo_manager() -> Optional[UndoManager]:
+    """The active UndoManager, or None when no radio is loaded."""
+    return _undo
+
+
+def _install_undo(radio) -> None:
+    """Wrap the CHIRP radio's ``set_memory``/``erase_memory`` so every channel
+    write records a pre-image, and (re)create a fresh UndoManager for it.
+
+    This is the single choke point: ``memory_ops._set_mem``/``_erase_mem`` call
+    ``radio.set_memory``/``radio.erase_memory`` directly, and so does this
+    module's own ``set_memory``/``erase_memory`` — wrapping the radio object
+    catches both. ``record`` is a no-op unless an op has opened a transaction
+    (see the ``@records`` decorator), so writes during load aren't recorded.
+
+    Restores (undo/redo) go through the *original* methods, so they never
+    re-record, and invalidate the cache so the next read is fresh. If a driver
+    refuses attribute assignment, undo is simply disabled for that radio."""
+    global _undo
+    _undo = None
+    try:
+        orig_get = radio.get_memory
+        orig_set = radio.set_memory
+        orig_erase = radio.erase_memory
+
+        def recording_set(mem):
+            if _undo is not None:
+                _undo.record(mem.number)
+            return orig_set(mem)
+
+        def recording_erase(number):
+            if _undo is not None:
+                _undo.record(number)
+            return orig_erase(number)
+
+        radio.set_memory = recording_set
+        radio.erase_memory = recording_erase
+
+        def restore_set(mem):
+            orig_set(mem)
+            invalidate_cache([mem.number])
+
+        def restore_erase(number):
+            orig_erase(number)
+            invalidate_cache([number])
+
+        _undo = UndoManager(
+            get_memory=lambda n: orig_get(n),
+            set_memory=restore_set,
+            erase_memory=restore_erase,
+        )
+    except Exception:  # noqa: BLE001 — undo is best-effort; never block loading
+        LOG.exception("Could not install undo recorder; undo disabled for this radio")
+        _undo = None
 
 
 def open_image_as_source(path: str) -> tuple:
@@ -601,6 +671,7 @@ def download_from_radio(
             _state.image_path = None   # downloaded, not yet saved to disk
             _state.is_modified = True
             _state._mem_cache = {}
+        _install_undo(radio)  # a downloaded image starts with empty history
 
         return True, f"Downloaded {label} from {port}"
 
