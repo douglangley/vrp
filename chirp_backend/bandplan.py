@@ -18,18 +18,54 @@ import logging
 
 LOG = logging.getLogger(__name__)
 
-# Which CHIRP band plan to read offsets from. North America is CHIRP's own
-# default for new users; the others are bandplan_au / bandplan_iaru_r1/r2/r3.
-# (Could become a user preference later — see suggest_offset_hz.)
-_PLAN_SHORTNAME = "north_america"
+# The CHIRP band plans VRP can read offsets from, as (shortname, UI label),
+# in menu order. The shortname must match each plan module's SHORTNAME
+# (bandplan_na / bandplan_au / bandplan_iaru_r1/r2/r3). North America is CHIRP's
+# own default for new users.
+REGIONS = [
+    ("north_america", "North America"),
+    ("australia", "Australia"),
+    ("iaru_r1", "IARU Region 1 (Europe, Africa, Northern Asia)"),
+    ("iaru_r2", "IARU Region 2 (the Americas)"),
+    ("iaru_r3", "IARU Region 3 (Asia-Pacific)"),
+]
+_VALID_REGIONS = {shortname for shortname, _ in REGIONS}
+DEFAULT_REGION = "north_america"
+
+# Active region. Read *live* by _StubConfig.get_bool, so set_region() takes
+# effect without rebuilding the cached BandPlans (get_defaults_for_frequency
+# re-checks which plan is enabled on every call).
+_region = DEFAULT_REGION
+
+
+def set_region(shortname: str) -> None:
+    """Choose which CHIRP band plan supplies offset suggestions. Unknown names
+    are ignored (the current region stays)."""
+    global _region
+    if shortname in _VALID_REGIONS:
+        _region = shortname
+
+
+def get_region() -> str:
+    """The active band-plan region shortname."""
+    return _region
+
+
+def region_label(shortname: str) -> str:
+    """Human-readable label for a region shortname (the shortname if unknown)."""
+    for sn, label in REGIONS:
+        if sn == shortname:
+            return label
+    return shortname
 
 
 class _StubConfig:
     """Minimal config satisfying ``bandplan.BandPlans``: enable one plan only.
 
     BandPlans calls get/set_bool/is_defined/get_bool/remove_option during init
-    and get_bool(shortname, "bandplan") when resolving. We report the chosen
-    plan as enabled and everything else off, and no legacy "autorpt" to migrate.
+    and get_bool(shortname, "bandplan") when resolving. We report the active
+    region (read live, so set_region works) as enabled and everything else off,
+    and no legacy "autorpt" to migrate.
     """
 
     def get(self, key, section):
@@ -45,7 +81,7 @@ class _StubConfig:
         return True
 
     def get_bool(self, key, section, default=False):
-        return key == _PLAN_SHORTNAME
+        return key == _region
 
 
 _plans = None

@@ -6,6 +6,37 @@ architecture, keyboard map, and CHIRP feature-coverage checklist.
 
 ---
 
+## 2026-06-28 — Band-plan region preference for offset suggestions
+
+The offset suggestion (entry below) was hardcoded to the North American band
+plan. It's now a **Preferences** setting so operators outside North America get
+their region's offsets. **NVDA-verified on Windows.**
+
+- **Placement decision: Preferences, not the Radio menu.** The region is a
+  global, set-once, where-you-operate setting that applies to every image (and
+  with no radio loaded) — exactly like the existing speak-aloud / recent-files
+  prefs, and how CHIRP itself stores the band plan. The Radio menu is for actions
+  on the *loaded* radio, so it didn't fit.
+- **`chirp_backend/bandplan.py`.** Added `REGIONS` (the 5 CHIRP plans:
+  North America, Australia, IARU R1/R2/R3), `set_region()`/`get_region()`/
+  `region_label()`, and `DEFAULT_REGION`. The active region is read **live** by
+  `_StubConfig.get_bool`, so `set_region()` takes effect with no rebuild of the
+  cached `BandPlans` (`get_defaults_for_frequency` re-checks the enabled plan
+  each call). Unknown names are ignored.
+- **`vrp/prefs_dialog.py`** gained a "Band plan (region):" `wx.Choice` (accessible
+  name set), defaulting to the saved region and falling back to North America on
+  an unknown stored value. **`vrp/config.py`** added the `bandplan_region`
+  default. **`vrp/native/main_window.py`** applies the saved region at startup and
+  re-applies + persists it on Preferences-OK (immediate effect).
+- **Note:** CHIRP's IARU R2/R3 plans carry sparse repeater-offset data, so some
+  bands return no suggestion under those regions (Offset stays blank). North
+  America is the most complete — that's CHIRP's data, not a VRP bug.
+
+Tests: region get/set/label/invalid + region-changes-suggestion in
+`tests/test_bandplan.py`; a Preferences-dialog region round-trip +
+unknown-region fallback in `tests/test_prefs_dialog.py` (new). Full suite 191
+passing.
+
 ## 2026-06-28 — Suggested repeater offset from CHIRP's band plan (auto-fill on frequency entry)
 
 The channel editor's **Offset** field was "very unclear" — you had to already

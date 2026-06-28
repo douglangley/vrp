@@ -33,6 +33,7 @@ _DEFAULTS = {
     "recent_files": [],
     "recent_files_count": 9,  # how many recent files to show in the menu (0 hides it)
     "last_serial_port": None,  # device string (e.g. "COM4") last used for a clone
+    "bandplan_region": "north_america",  # CHIRP band plan for offset suggestions
 }
 
 

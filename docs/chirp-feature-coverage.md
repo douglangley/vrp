@@ -87,6 +87,7 @@ update (`git pull` ./chirp) in case new dialogs appear.
   frequency and Offset is blank (`chirp_backend/bandplan.py`,
   `EditChannelDialog._maybe_suggest_offset`). VRP fills the *magnitude only* and
   leaves the +/- **Duplex** direction to the user (deliberately unlike CHIRP,
-  which also sets duplex/step/mode/tone). The full "Auto edits toggle" row above
-  (band-plan defaults for the other fields, with an on/off switch and a region
-  picker) remains ☐.
+  which also sets duplex/step/mode/tone). The band plan is chosen in **File ▸
+  Preferences ▸ Band plan (region)** (North America / Australia / IARU R1–R2–R3;
+  default North America). The full "Auto edits toggle" row above (band-plan
+  defaults for the *other* fields, with an on/off switch) remains ☐.

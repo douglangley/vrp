@@ -150,6 +150,12 @@ class MainWindow(wx.Frame):
         self._find_last: int | None = None
         self._build_menubar()
         self._update_menu_state()
+        # Apply the saved band-plan region so offset suggestions match where the
+        # operator is (Preferences > Band plan). Default: North America.
+        from chirp_backend import bandplan
+        from vrp.config import get_config
+
+        bandplan.set_region(get_config().get("bandplan_region", bandplan.DEFAULT_REGION))
         # Refresh the Undo/Redo item labels with the next op's description when the
         # Edit menu opens (discoverability; relabeling is safe for accelerators).
         self.Bind(wx.EVT_MENU_OPEN, self._on_menu_open)
@@ -1300,10 +1306,13 @@ class MainWindow(wx.Frame):
         from vrp.config import get_config
         from vrp.prefs_dialog import PreferencesDialog
 
+        from chirp_backend import bandplan
+
         cfg = get_config()
         current = {
             "speak_status_messages": bool(cfg.get("speak_status_messages", False)),
             "recent_files_count": cfg.recent_count(),
+            "bandplan_region": cfg.get("bandplan_region", bandplan.DEFAULT_REGION),
         }
         dlg = PreferencesDialog(self, current)
         if dlg.ShowModal() != wx.ID_OK:
@@ -1315,6 +1324,8 @@ class MainWindow(wx.Frame):
 
         cfg.set("speak_status_messages", values["speak_status_messages"])
         cfg.set_recent_count(values["recent_files_count"])
+        cfg.set("bandplan_region", values["bandplan_region"])
+        bandplan.set_region(values["bandplan_region"])  # takes effect immediately
         self._refresh_recent_menu()
         self.announce.announce("Preferences saved.")
         self.grid.SetFocus()

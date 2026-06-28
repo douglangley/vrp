@@ -3,6 +3,8 @@
 Prefs that take effect immediately:
 - Recently opened files to show — a wx.Choice of 0..9. 0 hides the File >
   Open Recent submenu; 1..9 shows that many recent files.
+- Band plan (region) — a wx.Choice of CHIRP's band plans; picks which one
+  supplies the channel editor's suggested repeater offsets.
 - Speak status messages aloud — gates the prism supplemental speech. Default
   OFF: the screen reader already reads the live region, so this is opt-in extra
   speech (the label says so to avoid double-speak confusion).
@@ -13,6 +15,8 @@ Pure value collector (get_values()); the app applies + persists on OK.
 from __future__ import annotations
 
 import wx
+
+from chirp_backend.bandplan import DEFAULT_REGION, REGIONS
 
 RECENT_COUNT_CHOICES = list(range(10))  # 0..9; 0 hides the Recent submenu
 
@@ -38,6 +42,21 @@ class PreferencesDialog(wx.Dialog):
         self.recent_count.SetSelection(cur_recent)  # choices are 0..9, so index == value
         grid.Add(self.recent_count)
 
+        grid.Add(wx.StaticText(self, label="Band plan (region):"), 0,
+                 wx.ALIGN_CENTER_VERTICAL)
+        self._region_codes = [code for code, _ in REGIONS]
+        self.region = wx.Choice(self, choices=[label for _, label in REGIONS])
+        self.region.SetName(
+            "Band plan region for suggested repeater offsets"
+        )
+        cur_region = current.get("bandplan_region", DEFAULT_REGION)
+        try:
+            region_idx = self._region_codes.index(cur_region)
+        except ValueError:
+            region_idx = self._region_codes.index(DEFAULT_REGION)
+        self.region.SetSelection(region_idx)
+        grid.Add(self.region)
+
         outer.Add(grid, 0, wx.ALL, 12)
 
         self.speak = wx.CheckBox(
@@ -58,5 +77,6 @@ class PreferencesDialog(wx.Dialog):
     def get_values(self) -> dict:
         return {
             "recent_files_count": self.recent_count.GetSelection(),  # index == value (0..9)
+            "bandplan_region": self._region_codes[self.region.GetSelection()],
             "speak_status_messages": self.speak.GetValue(),
         }
