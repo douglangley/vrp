@@ -57,9 +57,9 @@ VRP solves the problem differently: rather than patching CHIRP's GUI, it
 uses the CHIRP *library* as a backend — keeping all the radio driver code
 exactly as the CHIRP team maintains it — and provides a new, fully accessible
 desktop front end built from native wx controls. Its channel grid is a
-`wx.dataview.DataViewListCtrl`, which wraps a real native list-view on each OS
-(SysListView32 on Windows, NSTableView on macOS), so **both NVDA on Windows and
-VoiceOver on macOS** read it directly. This native UI is the default on every
+`wx.dataview.DataViewListCtrl` — a real native control (NSTableView) on macOS,
+read directly by **VoiceOver**, and wx's generic custom-drawn control on Windows,
+which wx exposes to MSAA/UIA so **NVDA** reads it. This native UI is the default on every
 platform. (An older embedded-webview UI, which hosted an accessible HTML grid,
 is still reachable with `--webview` while it is retired; its remaining intended
 role is rendering in-app help and documentation.)
@@ -97,9 +97,9 @@ platform; an older webview UI is retained behind `--webview` while retired. Both
 share the same backend, native dialogs, and feature set.
 
 **Native UI (the default everywhere)** — a `wx.dataview.DataViewListCtrl`
-channel grid that wraps a native list-view per OS (SysListView32 on Windows,
-NSTableView on macOS), read directly by **both NVDA and VoiceOver**, with no
-webview involved:
+channel grid: native NSTableView on macOS (read directly by **VoiceOver**) and
+wx's generic custom-drawn control on Windows (exposed to MSAA/UIA so **NVDA**
+reads it), with no webview involved:
 - No paging — every channel is populated at once
 - Multi-select (Shift+Arrow for a contiguous block, Ctrl+Space for individual
   rows) drives in-place reordering: move up/down a slot or move-to a chosen
@@ -143,9 +143,10 @@ vrp/
     app.py                Entry point (vrp.native.app.run).
     main_window.py        MainWindow: menu bar, status bar, grid, and all
                          command handlers.
-    channel_grid.py       ChannelGrid: wx.dataview.DataViewListCtrl wrapping a
-                         native list-view per OS (SysListView32/NSTableView), so
-                         NVDA and VoiceOver both read it; no paging.
+    channel_grid.py       ChannelGrid: wx.dataview.DataViewListCtrl — native
+                         NSTableView on macOS (VoiceOver), wx's generic
+                         custom-drawn control on Windows exposed to MSAA (NVDA);
+                         no paging.
     grid_model.py         Pure data/selection model behind the grid (no wx).
     announce.py           Announcer: status bar + prism speech.
   app.py                  WEBVIEW UI (retained behind --webview, retired): wx
@@ -203,9 +204,9 @@ pyproject.toml           uv-managed project definition (Python 3.11 pinned).
 each command straight to a `wx.MenuBar` item — the accelerator in the item's
 label (e.g. `"&Save\tCtrl+S"`) *is* the global shortcut, since a real native
 menu has no WebView2 fighting it for Alt/Ctrl. `vrp/native/channel_grid.py` is a
-`wx.dataview.DataViewListCtrl`, which wraps a native list-view per OS
-(SysListView32 on Windows, NSTableView on macOS) so NVDA *and* VoiceOver read
-its rows/cells; it's populated with every channel at once, no paging. Channel
+`wx.dataview.DataViewListCtrl` — native NSTableView on macOS (VoiceOver) and
+wx's generic custom-drawn control on Windows, exposed to MSAA/UIA so NVDA reads
+its rows; it's populated with every channel at once, no paging. Channel
 editing is in a native dialog (F2/Enter), so the grid stays read-only/navigable.
 There's no JS bridge: handlers call `chirp_backend` directly and push results to
 the grid (`refresh_numbers`/`rebuild`) and to `vrp/native/announce.py`'s

@@ -73,10 +73,13 @@ brings every current-state doc in line with them.
   `vrp/native/channel_grid.py` is now a `wx.dataview.DataViewListCtrl` instead of
   the virtual report-mode `wx.ListCtrl`. The old generic `wx.ListCtrl` backend
   on macOS exposed nothing to NSAccessibility and was **silent under VoiceOver**
-  (the original reason a separate webview UI existed). `DataViewListCtrl` wraps a
-  real native list-view per OS — SysListView32 (Windows/NVDA) and **NSTableView
-  (macOS/VoiceOver)** — so both screen readers read its rows/cells. Rationale and
-  the candidate-control analysis are in
+  (the original reason a separate webview UI existed). On macOS `DataViewListCtrl`
+  is the native **NSTableView** (read by VoiceOver); on Windows it is wx's generic
+  custom-drawn control — *not* SysListView32, as an earlier version of this note
+  claimed — but wx exposes it to MSAA/UIA so NVDA reads its rows/cells. (Confirmed
+  by the 2026-06-27 NVDA pass; it's also why VRP adds its own Left/Right cell
+  cursor and Shift+F10 handler — the generic control provides neither.) Rationale
+  and the candidate-control analysis are in
   `docs/research/2026-06-24-native-grid-voiceover-feasibility.md`. The grid is
   populated eagerly (`AppendItem` per row, no paging); editing stays in the
   native `edit_dialog`, so the grid is read-only/navigable.

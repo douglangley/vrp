@@ -171,8 +171,12 @@
   no `SetCurrentColumn`, `GetAccessible()` is `None` on Windows, and there is no
   accessible per-cell cursor announced on Left/Right.
 - **`radio.erase_memory(n)` is the correct "clear, keep count" operation.**
-- **OPEN ITEM to verify at restart:** the committed docs claim
-  `DataViewListCtrl` wraps "SysListView32 on Windows." That is **likely wrong** —
-  `wxDataViewCtrl` is the *generic* (custom-drawn) control on Windows; it's
-  native only on GTK and macOS. Confirm with the NVDA pass and correct the docs
-  then (deferred now to avoid more doc churn before the rebuild).
+- **RESOLVED (2026-06-27):** the committed docs claimed `DataViewListCtrl` wraps
+  "SysListView32 on Windows." That was **wrong** — `wxDataViewCtrl` is the
+  *generic* (custom-drawn) control on Windows; it's native only on GTK and macOS
+  (NSTableView). wx still exposes the generic control to MSAA/UIA, so NVDA reads
+  its rows (confirmed by the NVDA pass) — but not via a native common control,
+  which is why VRP supplies its own Left/Right cell cursor and Shift+F10 handler.
+  The docs (`CLAUDE.md`, `README.md`, `docs/architecture.md`, `PROGRESS_LOG.md`,
+  `tests/test_native_entry.py`) were corrected accordingly; the research doc's
+  SysListView32 references are about the old `wx.ListCtrl` and remain accurate.

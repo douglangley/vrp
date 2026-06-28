@@ -17,12 +17,16 @@ the channel table or any other control.
 
 - **Native UI** (`vrp/native/`) — the default everywhere. A
   `wx.dataview.DataViewListCtrl` channel grid plus a real native `wx.MenuBar`,
-  no webview/WebView2/JS bridge. `DataViewListCtrl` wraps a real native control
-  on each OS (SysListView32 on Windows, NSTableView on macOS), so **both NVDA on
-  Windows and VoiceOver on macOS** read it directly. (The previous virtual
-  `wx.ListCtrl` fell back to wx's generic, custom-drawn control on macOS, which
-  exposed nothing to NSAccessibility and was silent under VoiceOver — see
-  `docs/research/2026-06-24-native-grid-voiceover-feasibility.md`.)
+  no webview/WebView2/JS bridge. On macOS `DataViewListCtrl` is a real native
+  control (NSTableView), so **VoiceOver** reads it directly; on Windows it is
+  wx's **generic, custom-drawn** control — not a native common control like
+  SysListView32 — but wx exposes it to MSAA/UIA so **NVDA** reads its rows. (This
+  is also why VRP adds its own Left/Right cell cursor and Shift+F10 handler: the
+  generic Windows control doesn't provide a per-cell cursor or raise the
+  context-menu event for Shift+F10.) The previous virtual `wx.ListCtrl` *did*
+  wrap the native SysListView32 on Windows, but fell back to wx's generic control
+  on macOS, which exposed nothing to NSAccessibility and was silent under
+  VoiceOver — see `docs/research/2026-06-24-native-grid-voiceover-feasibility.md`.
 - **Webview UI** (`vrp/app.py`) — an `AccessibleWebView` (from
   `wx-accessible-webview`) hosting an editable `AccessibleGrid` (from
   `wx-accessible-grid`) for the channel table, a menu bar via
@@ -100,10 +104,10 @@ the right thing to do. Do not remove or obscure it from either UI.
     - main_window.py   — MainWindow: menu bar, status bar, grid, and all
                          command handlers (file, edit, operations, find,
                          download/upload)
-    - channel_grid.py  — ChannelGrid: wx.dataview.DataViewListCtrl wrapping a
-                         native control per OS (SysListView32/NSTableView) so
-                         NVDA *and* VoiceOver read it; no paging — every channel
-                         is always populated
+    - channel_grid.py  — ChannelGrid: wx.dataview.DataViewListCtrl — native
+                         NSTableView on macOS (VoiceOver) and wx's generic
+                         custom-drawn control on Windows, exposed to MSAA so NVDA
+                         reads it; no paging — every channel is always populated
     - grid_model.py    — pure data/selection model behind the grid (no wx;
                          unit-testable headless)
     - announce.py      — Announcer: status bar + prism speech, the native

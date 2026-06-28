@@ -1,9 +1,9 @@
 """UI selection at startup.
 
 The native UI is the default on every platform: its
-``wx.dataview.DataViewListCtrl`` grid wraps a native control on each OS
-(SysListView32 on Windows, NSTableView on macOS), so both NVDA and VoiceOver
-read it. The webview UI stays available via ``--webview`` while it is retired;
+``wx.dataview.DataViewListCtrl`` grid is the native NSTableView on macOS (read by
+VoiceOver) and wx's generic custom-drawn control on Windows (exposed to MSAA so
+NVDA reads it). The webview UI stays available via ``--webview`` while it is retired;
 ``--native`` forces the native UI explicitly.
 """
 

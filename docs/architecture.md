@@ -12,9 +12,9 @@ webview retained behind a flag while it is retired:
 
 - **Native UI (`vrp/native/`)** — the default on **every platform**. A
   `wx.dataview.DataViewListCtrl` channel grid and a native `wx.MenuBar`. No
-  webview, no WebView2, no JS bridge. `DataViewListCtrl` wraps a real native
-  control per OS (SysListView32 on Windows, NSTableView on macOS), so **both
-  NVDA on Windows and VoiceOver on macOS** read it directly (see
+  webview, no WebView2, no JS bridge. On macOS `DataViewListCtrl` is a real
+  native control (NSTableView), read directly by **VoiceOver**; on Windows it is
+  wx's generic custom-drawn control, exposed to MSAA/UIA so **NVDA** reads it (see
   `docs/research/2026-06-24-native-grid-voiceover-feasibility.md` for why the
   old virtual `wx.ListCtrl` was silent under VoiceOver and this isn't).
 - **Webview UI (`vrp/app.py`)** — an `AccessibleWebView` hosting an editable
@@ -42,8 +42,8 @@ main.py  (entry; parse_mode() returns native unless --webview forces the webview
        │    Ctrl-combos automatically — no WebView2 in the way, so none of the
        │    webview UI's #24786 workarounds are needed.
        ├─ vrp/native/channel_grid.py : ChannelGrid (wx.dataview.DataViewListCtrl)
-       │    ├─ wraps a native list-view per OS (SysListView32 / NSTableView), so
-       │    │    NVDA and VoiceOver both read its rows/cells; multi-select; every
+       │    ├─ native NSTableView on macOS (VoiceOver), wx's generic custom-drawn
+       │    │    control on Windows exposed to MSAA (NVDA); multi-select; every
        │    │    channel populated at once (no paging) via AppendItem from
        │    │    vrp/native/grid_model.py
        │    ├─ EVT_DATAVIEW_ITEM_ACTIVATED → on_edit_channel (F2/Enter opens the
@@ -96,10 +96,12 @@ main.py  (entry; parse_mode() returns native unless --webview forces the webview
   native-backed list-view and `wx.MenuBar` get screen-reader support, Alt/Ctrl
   accelerators, and large-list population for free from wxWidgets itself — no JS
   bridge, no paging, no fight with WebView2 swallowing keyboard input (wx
-  #24786). `DataViewListCtrl` wraps SysListView32 on Windows and **NSTableView
-  on macOS**, both of which carry their platform's full accessibility table
-  implementation, so this control reads under VoiceOver where the earlier
-  generic-backed `wx.ListCtrl` was silent (see PROGRESS_LOG.md "2026-06-21 —
+  #24786). On macOS `DataViewListCtrl` is the native **NSTableView**, which
+  carries the platform's full accessibility table implementation, so this control
+  reads under VoiceOver where the earlier generic-backed `wx.ListCtrl` was silent;
+  on Windows it is wx's generic custom-drawn control (not a native common control
+  like SysListView32), but wx exposes it to MSAA/UIA so NVDA reads its rows (see
+  PROGRESS_LOG.md "2026-06-21 —
   Platform-aware UI default" for the original ListCtrl regression and
   `docs/research/2026-06-24-native-grid-voiceover-feasibility.md` for the fix).
   That is why the native UI is now the default on every platform.
