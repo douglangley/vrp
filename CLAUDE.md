@@ -136,7 +136,8 @@ the right thing to do. Do not remove or obscure it from either UI.
   - speech.py          — prism speech wrapper, graceful no-op if unavailable (shared)
   - _chirp_path.py     — makes the editable ./chirp package importable (shared)
 - chirp_backend/       — all chirp library interaction (framework-agnostic):
-                         radio, memory_ops, col_defs, bank_ops, query
+                         radio, memory_ops, undo (channel-edit undo/redo),
+                         col_defs, bank_ops, query
 - static/css/main.css  — webview UI only: design-system styles, retained for
                          future inlining into the webview (not currently loaded)
 - templates/           — webview UI only: Jinja2 view fragments (welcome,

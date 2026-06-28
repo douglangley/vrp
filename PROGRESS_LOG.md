@@ -6,6 +6,27 @@ architecture, keyboard map, and CHIRP feature-coverage checklist.
 
 ---
 
+## 2026-06-28 — Go to Channel rekeyed to Ctrl+G + removed the vestigial "Channels per page" preference
+
+Two small native-UI cleanups (commits `0a945b0`, `71a4313`):
+
+- **Go to Channel rekeyed.** Stays on the **Channels** menu but moves from
+  `Ctrl+Shift+G` to **`Ctrl+G`** (the requested hotkey); **Find next** moves
+  `Ctrl+G` → **`F3`** (the standard Windows find-next key) to free `Ctrl+G`. The
+  existing `on_goto` handler is unchanged (prompt → select + focus → announce);
+  the context menu and F1 list updated.
+- **Removed "Channels per page" preference.** The native grid loads every channel
+  at once (no paging), so the chooser did nothing — `on_preferences` collected it
+  from the shared dialog and discarded it; only the retired webview ever paged.
+  Dropped the control (`vrp/prefs_dialog.py`, initial focus → "Recently opened
+  files to show"), the `channels_per_page` config default (`vrp/config.py`), and
+  the handler's dummy pass-in. `tests/test_config.py`'s generic Config get/set/
+  persist/migrate tests used it as a sample key — switched to `recent_files_count`.
+  Retired webview (`vrp/app.py`, `vrp/views.py`) left as-is (they read with a
+  `.get(..., default)` fallback).
+
+**Verification:** 176 tests pass; both confirmed under NVDA on Windows.
+
 ## 2026-06-28 — Undo/redo for channel edits (Ctrl+Z / Ctrl+Y / Ctrl+Shift+Z)
 
 **Feature.** Every channel-memory operation is now undoable and redoable from the

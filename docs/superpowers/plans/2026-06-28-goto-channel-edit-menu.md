@@ -1,10 +1,11 @@
 # Plan — Go to Channel on the Edit menu (Ctrl+G)
 
-> **Status:** IMPLEMENTED 2026-06-28 (pending NVDA verify). **Revised:** Go to
-> channel **stays on the Channels menu** (user changed their mind — not the Edit
-> menu), rekeyed from `Ctrl+Shift+G` to **`Ctrl+G`**; Find next moved to **`F3`**
-> to free `Ctrl+G`. Tests green. (More Channels-menu additions to come — separate
-> follow-up.)
+> **Status:** ✅ COMPLETE 2026-06-28 (NVDA-verified, commit `0a945b0`).
+> **Revised from the original title:** Go to channel **stays on the Channels
+> menu** (the user changed their mind — *not* the Edit menu), rekeyed from
+> `Ctrl+Shift+G` to **`Ctrl+G`**; Find next moved to **`F3`** to free `Ctrl+G`.
+> The `Ctrl+Shift+G` alias was dropped. (The user mentioned more Channels-menu
+> additions — those are a separate, not-yet-specified follow-up.)
 
 ---
 
