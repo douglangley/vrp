@@ -120,6 +120,15 @@ class ChannelGrid(wx.Panel):
         control (a different radio can have a different feature/column set)."""
         self._model.set_data(grid_model.column_meta(state), grid_model.build_rows(state))
         self._grid.set_columns()
+        # Establish a current (focused) row on the freshly populated control.
+        # A just-populated DataViewListCtrl has *no* current item, so a later
+        # SetFocus() lands on the control but on no row: the screen reader
+        # announces nothing and the Left/Right cell cursor has no row to read
+        # (focused_row() is None), until the user alt-tabs away and back, which
+        # makes wx re-establish a current item. We set it here, WITHOUT taking
+        # focus — the caller decides when to focus the grid.
+        if self._model.rows:
+            self._list.SetCurrentItem(self._list.RowToItem(0))
 
     def clear(self) -> None:
         self._model.set_data([], [])
