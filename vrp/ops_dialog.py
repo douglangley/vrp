@@ -37,7 +37,7 @@ class ChannelOperationsDialog(wx.Dialog):
     """Pick a channel selection + an operation to apply to it."""
 
     def __init__(self, parent, low: int, high: int, default_from: int, columns) -> None:
-        super().__init__(parent, title="Organize Channels")
+        super().__init__(parent, title="Bulk operations")
         self._low = low
         self._high = high
         self._columns = list(columns)  # [(name, label), ...] for sort

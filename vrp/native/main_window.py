@@ -76,7 +76,7 @@ APP_SHORTCUTS = [
     ("Ctrl+Shift+Up", "Move selected channel(s) up"),
     ("Ctrl+Shift+Down", "Move selected channel(s) down"),
     ("Ctrl+Shift+M", "Move selected channel(s) to a chosen slot"),
-    ("Ctrl+M", "Organize Channels dialog"),
+    ("Ctrl+M", "Bulk operations dialog"),
     ("Ctrl+F", "Find a channel"),
     ("F3", "Find next match"),
     ("F1", "Show this list of keyboard shortcuts"),
@@ -332,7 +332,7 @@ class MainWindow(wx.Frame):
         self._add(m, "move_up", "Move &up\tCtrl+Shift+Up", self.on_move_up, needs_radio=True)
         self._add(m, "move_down", "Move &down\tCtrl+Shift+Down", self.on_move_down, needs_radio=True)
         self._add(m, "move_to", "&Move to channel…\tCtrl+Shift+M", self.on_move_to, needs_radio=True)
-        self._add(m, "organize", "&Organize Channels…\tCtrl+M", self.on_organize, needs_radio=True)
+        self._add(m, "organize", "Bulk &operations…\tCtrl+M", self.on_organize, needs_radio=True)
         m.AppendSeparator()
         self._add(m, "find", "&Find…\tCtrl+F", self.on_find, needs_radio=True)
         self._add(m, "find_next", "Find &next\tF3", self.on_find_next, needs_radio=True)
@@ -511,7 +511,7 @@ class MainWindow(wx.Frame):
         add("Move &up\tCtrl+Shift+Up", self.on_move_up)
         add("Move &down\tCtrl+Shift+Down", self.on_move_down)
         add("&Move to channel…\tCtrl+Shift+M", self.on_move_to)
-        add("&Organize channels…", self.on_organize)
+        add("Bulk &operations…", self.on_organize)
         menu.AppendSeparator()
         add("&Go to channel…\tCtrl+G", self.on_goto)
         add("Channel &banks…", self.on_banks)
@@ -881,7 +881,7 @@ class MainWindow(wx.Frame):
             self.announce.announce(message, assertive=True)
 
     def on_organize(self, _evt=None) -> None:
-        """Open the Organize Channels dialog; dispatch the chosen operation."""
+        """Open the Bulk operations dialog; dispatch the chosen operation."""
         from chirp_backend import memory_ops as mo
         from vrp.native import grid_model
         from vrp.ops_dialog import ChannelOperationsDialog

@@ -58,7 +58,7 @@ arrow keys move across top-level menus; NVDA reads it like any native app menu.
 | Channels | Move up | `Ctrl+Shift+Up` | needs a loaded radio |
 | Channels | Move down | `Ctrl+Shift+Down` | needs a loaded radio |
 | Channels | Move to channel… | `Ctrl+Shift+M` | needs a loaded radio |
-| Channels | Organize Channels… | `Ctrl+M` | needs a loaded radio |
+| Channels | Bulk operations… | `Ctrl+M` | needs a loaded radio; delete/delete+shift/insert/move/copy/sort/arrange over a range or list |
 | Channels | Find… | `Ctrl+F` | needs a loaded radio |
 | Channels | Find next | `F3` | needs a loaded radio |
 | Help | Keyboard Shortcuts | `F1` | shows this list as a plain-text message box |
@@ -101,7 +101,7 @@ speaks `"<value>, <column>"` through its supplemental (prism) speech.
 | `Ctrl+E` / `Enter` | Edit the focused channel — **all** fields (full dialog) |
 | `F2` | Edit the **focused cell** — a single-field dialog for the cursor's column. On the channel-number column, a read-only column, or where the cursor column isn't known (macOS until wx-accessible-grid#3), falls back to the full dialog |
 | `Del` | Delete the selected channel(s) (Channels-menu accelerator) |
-| `Applications` key / `Shift+F10` | Open the row context menu (Edit channel / Edit cell / Delete / Copy / Cut / Paste / Move up/down / Move to / Organize / Go to / Banks). The generic Windows DataViewCtrl raises this for the Applications key and a right-click natively; VRP wires `Shift+F10` itself (`ChannelGrid._on_grid_key`) since the control doesn't |
+| `Applications` key / `Shift+F10` | Open the row context menu (Edit channel / Edit cell / Delete / Copy / Cut / Paste / Move up/down / Move to / Bulk operations / Go to / Banks). The generic Windows DataViewCtrl raises this for the Applications key and a right-click natively; VRP wires `Shift+F10` itself (`ChannelGrid._on_grid_key`) since the control doesn't |
 
 ### Reorganizing channels
 
@@ -117,7 +117,7 @@ Then:
 | `Ctrl+Shift+Up` | Move the selected channel(s) up one slot |
 | `Ctrl+Shift+Down` | Move the selected channel(s) down one slot |
 | `Ctrl+Shift+M` | Move the selected channel(s) to a chosen channel |
-| `Ctrl+M` | Organize (delete/copy/sort/insert/arrange) dialog |
+| `Ctrl+M` | Bulk operations (delete/copy/sort/insert/arrange) dialog |
 | `Ctrl+G` | Go to channel |
 | `Ctrl+F` / `F3` | Find / Find next |
 | `Ctrl+B` | Channel banks for the focused channel |
