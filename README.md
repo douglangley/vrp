@@ -125,8 +125,12 @@ role: help/docs rendering):
   field editor, bulk operations, find, settings, banks, download/upload
 - Bulk operations (delete, delete+shift, insert, move, copy, sort, arrange) over
   a From/To range or an advanced channel list (e.g. `1-5,8,10-12`) — no drag/drop
+- Suggested repeater offset from CHIRP's band plan when you enter a frequency
+  (magnitude only — you pick the +/- direction); optional band-plan defaults for
+  mode/step/tone; band-plan region selectable in Preferences
 - Find / Find Next (frequency, name, or comment) with wrap-around
-- Download from / upload to radio with live progress announcements (background thread)
+- Download from / upload to radio with live progress announcements (background
+  thread), favorite-radios list, and a "Radio details" view of any model's specs
 - Radio settings editor, banks editor, and online query sources (AMSAT, SatNOGS;
   more sources are incremental)
 - High contrast and forced-colors (Windows High Contrast) support

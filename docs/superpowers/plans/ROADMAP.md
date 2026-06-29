@@ -45,14 +45,26 @@ Query sources (Phase 7):
 
 Smaller deferred items (chirp-feature-coverage.md "☐"/"◐" rows):
 - ☐ Bank renaming + "channels in a bank" overview (Phase 6.1).
-- ☐ Cut/Paste clipboard semantics on the Edit menu (copy/move already cover
-  the need; revisit only if actually wanted).
+- ☑ Cut/Paste clipboard (done 2026-06-27 — native grid row clipboard).
 - ☐ File menu: New (empty image), New Window, Open Stock Config, Load
   Module — all need a model-picker UX decision first.
 - ☐ View menu: font size / large font, language.
-- ☐ Radio menu: Auto edits toggle, Select bandplan.
+- ☑ Auto edits + band plan (done 2026-06-28): offset suggestion (always on,
+  magnitude only), opt-in "Apply band-plan defaults" (mode/step/tone), and the
+  band-plan **region** chosen in Preferences (not the Radio menu — it's a global
+  setting). See PROGRESS_LOG and `chirp_backend/bandplan.py`.
 - ☐ Developer-only items (reload driver/module, serial trace, bug report) —
   Phase 10, low priority.
+
+New since 2026-06-28 (VRP-only enhancements, done — see PROGRESS_LOG):
+- ☑ Favorite radios (Radio ▸ Favorite radios… manager + Download All/Favorites
+  toggle; `vrp/serial_dialogs.py`, `vrp/config.py`).
+- ☑ Radio Info as a read-only edit box + "Radio details…" in the browsing
+  dialogs (`vrp/info_dialog.py`, `chirp_backend.radio.describe_model`).
+- ☑ Type-ahead model/favorites lists (`RadioListView`, a wx.ListCtrl) — NVDA on
+  Windows; **macOS VoiceOver of these serial dialogs is unverified** and
+  wx.ListCtrl is generic there, so revisit the control if the macOS pass covers
+  them.
 
 Platform follow-through:
 - ☐ macOS run-from-source smoke test (`run-mac.sh` + full suite) — flagged

@@ -123,21 +123,32 @@ the right thing to do. Do not remove or obscure it from either UI.
                          checks in vrp/app.py but aren't reached in normal
                          operation — the production channel view is the
                          AccessibleGrid, not this
-  - edit_dialog.py     — native wx dialog to edit one channel (shared by both UIs)
-  - ops_dialog.py      — native wx dialog for bulk operations, shared (delete/move/…)
+  - edit_dialog.py     — native wx dialog to edit one channel + single cell;
+                         on a frequency change it fills the band's offset
+                         (always) and, opt-in, mode/step/tone (shared)
+  - ops_dialog.py      — native wx "Bulk operations" dialog, shared
+                         (delete/delete+shift/insert/move/copy/sort/arrange)
   - find_dialog.py     — native wx Find dialog (shared by both UIs)
-  - serial_dialogs.py  — native wx Download/Upload/progress dialogs (shared)
+  - serial_dialogs.py  — native wx Download/Upload/Favorites/progress dialogs +
+                         the shared filter ModelPicker and type-ahead
+                         RadioListView (a wx.ListCtrl) (shared)
   - settings_dialog.py — native wx radio settings editor, Treebook (shared)
   - bank_dialog.py     — native wx dialog to assign a channel to banks (shared)
   - query_dialogs.py   — native wx query-source param + import dialogs (shared)
-  - prefs_dialog.py    — native wx Preferences dialog (shared)
-  - config.py          — persistent JSON config, preferences + recent files (shared)
+  - prefs_dialog.py    — native wx Preferences dialog: recent-files count, band
+                         plan region, apply-band-defaults, speak-aloud (shared)
+  - info_dialog.py     — read-only multiline edit box for reviewing text (Radio
+                         Info, "Radio details…"); navigable + copyable (shared)
+  - config.py          — persistent JSON config: prefs + recent files +
+                         favorite radios + band-plan region (shared)
   - html.py            — webview UI: Jinja2 rendering to strings + attribution footer
   - speech.py          — prism speech wrapper, graceful no-op if unavailable (shared)
   - _chirp_path.py     — makes the editable ./chirp package importable (shared)
 - chirp_backend/       — all chirp library interaction (framework-agnostic):
-                         radio, memory_ops, undo (channel-edit undo/redo),
-                         col_defs, bank_ops, query
+                         radio (incl. describe_model), memory_ops, undo
+                         (channel-edit undo/redo), bandplan (suggested repeater
+                         offset + band defaults, by region), col_defs, bank_ops,
+                         query
 - static/css/main.css  — webview UI only: design-system styles, retained for
                          future inlining into the webview (not currently loaded)
 - templates/           — webview UI only: Jinja2 view fragments (welcome,
