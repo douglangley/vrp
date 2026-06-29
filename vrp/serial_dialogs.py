@@ -194,6 +194,86 @@ class PortPicker(wx.Panel):
             self._on_change()
 
 
+class RadioListView(wx.ListCtrl):
+    """A single-column list with **native incremental type-ahead** — typing
+    several letters jumps to the first item starting with them. ``wx.ListBox``
+    only does single-letter cycling on Windows; ``wx.ListCtrl`` is the native
+    SysListView32 there, which does true type-ahead and is read by NVDA.
+
+    Exposes a small ``wx.ListBox``-compatible API (Set / GetCount / GetString /
+    GetSelection / SetSelection / SetStringSelection) so the dialogs and their
+    tests stay simple; ``on_select`` is called when the selection changes.
+
+    Platform note: on Windows this is the native list-view (type-ahead + NVDA).
+    On macOS ``wx.ListCtrl`` is wx's generic control and may read poorly under
+    VoiceOver — these serial dialogs are NVDA/Windows-verified; revisit the
+    control choice if/when the macOS VoiceOver pass covers them.
+    """
+
+    def __init__(self, parent, *, name: str, on_select=None,
+                 size=(280, 200)) -> None:
+        super().__init__(
+            parent,
+            style=wx.LC_REPORT | wx.LC_SINGLE_SEL | wx.LC_NO_HEADER,
+            size=size,
+        )
+        self.SetName(name)
+        self.InsertColumn(0, "")
+        self._on_select = on_select
+        self.Bind(wx.EVT_LIST_ITEM_SELECTED, self._fire_select)
+        self.Bind(wx.EVT_SIZE, self._on_size)
+
+    def _on_size(self, event) -> None:
+        event.Skip()
+        w = self.GetClientSize().width
+        if w > 0:
+            self.SetColumnWidth(0, w)  # single column fills the width
+
+    def _fire_select(self, event) -> None:
+        event.Skip()
+        if self._on_select:
+            self._on_select()
+
+    # -- wx.ListBox-compatible surface -------------------------------------
+    def Set(self, labels) -> None:
+        # Freeze around the rebuild: suppresses flicker and the burst of
+        # accessibility events NVDA would announce per item at ~552 rows.
+        self.Freeze()
+        try:
+            self.DeleteAllItems()
+            for label in labels:
+                self.InsertItem(self.GetItemCount(), label)
+            w = self.GetClientSize().width
+            self.SetColumnWidth(0, w if w > 0 else wx.LIST_AUTOSIZE)
+            if labels:
+                self.Select(0)
+                self.Focus(0)
+        finally:
+            self.Thaw()
+
+    def GetCount(self) -> int:
+        return self.GetItemCount()
+
+    def GetString(self, i: int) -> str:
+        return self.GetItemText(i)
+
+    def GetSelection(self) -> int:
+        return self.GetFirstSelected()  # -1 (wx.NOT_FOUND) when none
+
+    def SetSelection(self, i: int) -> None:
+        if 0 <= i < self.GetItemCount():
+            self.Select(i)
+            self.Focus(i)
+            self.EnsureVisible(i)
+
+    def SetStringSelection(self, s: str) -> bool:
+        for i in range(self.GetItemCount()):
+            if self.GetItemText(i) == s:
+                self.SetSelection(i)
+                return True
+        return False
+
+
 class ModelPicker:
     """Accessible filter + radio-model list + count, shared by the Download and
     Favorites dialogs.
@@ -224,10 +304,10 @@ class ModelPicker:
         self.filter.SetName("Model filter")
         sizer.Add(self.filter, 0, wx.EXPAND | wx.ALL, 4)
         sizer.Add(wx.StaticText(parent, label=list_label + ":"), 0, wx.LEFT | wx.TOP, 4)
-        self.list = wx.ListBox(parent, choices=[m["label"] for m in self._models])
-        self.list.SetName(list_label)
-        if self._models:
-            self.list.SetSelection(0)
+        # A list-view (not a ListBox) so typing several letters jumps within the
+        # list, not just first-letter cycling. on_select keeps OK/buttons in sync.
+        self.list = RadioListView(parent, name=list_label, on_select=self._changed)
+        self.list.Set([m["label"] for m in self._models])
         sizer.Add(self.list, 1, wx.EXPAND | wx.ALL, 4)
         self.count = wx.StaticText(parent, label=self._count_label(len(self._models)))
         self.count.SetName("Model count")
@@ -235,7 +315,6 @@ class ModelPicker:
 
         self.filter.Bind(wx.EVT_TEXT, lambda _e: self._apply_filter())
         self.filter.Bind(wx.EVT_KEY_DOWN, self._on_filter_key)
-        self.list.Bind(wx.EVT_LISTBOX, lambda _e: self._changed())
 
     @staticmethod
     def _count_label(n: int) -> str:
@@ -249,13 +328,7 @@ class ModelPicker:
 
     def _apply_filter(self) -> None:
         self._filtered = filter_models(self._models, self.filter.GetValue())
-        self.list.Freeze()
-        try:
-            self.list.Set([m["label"] for m in self._filtered])
-            if self._filtered:
-                self.list.SetSelection(0)
-        finally:
-            self.list.Thaw()
+        self.list.Set([m["label"] for m in self._filtered])  # selects row 0
         self.count.SetLabel(self._count_label(len(self._filtered)))
         self._changed()
 
@@ -456,8 +529,8 @@ class FavoritesDialog(wx.Dialog):
 
         right = wx.StaticBoxSizer(wx.VERTICAL, self, "Your favorites")
         right.Add(wx.StaticText(self, label="Favorites:"), 0, wx.LEFT | wx.TOP, 4)
-        self.fav_list = wx.ListBox(self)
-        self.fav_list.SetName("Your favorites")
+        self.fav_list = RadioListView(self, name="Your favorites",
+                                      on_select=self._update_buttons)
         right.Add(self.fav_list, 1, wx.EXPAND | wx.ALL, 4)
         self.remove_btn = wx.Button(self, label="Remove from favorites")
         right.Add(self.remove_btn, 0, wx.ALL, 4)
@@ -474,7 +547,7 @@ class FavoritesDialog(wx.Dialog):
 
         self.add_btn.Bind(wx.EVT_BUTTON, self._on_add)
         self.remove_btn.Bind(wx.EVT_BUTTON, self._on_remove)
-        self.fav_list.Bind(wx.EVT_LISTBOX, lambda _e: self._update_buttons())
+        # fav_list selection -> _update_buttons via RadioListView's on_select.
         self.Bind(wx.EVT_BUTTON, lambda _e: self.EndModal(wx.ID_CLOSE), id=wx.ID_CLOSE)
         self.Bind(wx.EVT_INIT_DIALOG, self._on_init_dialog)
         self._refresh_favorites()

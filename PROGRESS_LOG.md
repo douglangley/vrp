@@ -6,6 +6,32 @@ architecture, keyboard map, and CHIRP feature-coverage checklist.
 
 ---
 
+## 2026-06-28 — Favorites/Download lists: list-view with type-ahead (was ListBox)
+
+The model list and the favorites list were `wx.ListBox`, which on Windows only
+does single-letter cycling — you couldn't type several letters to jump to a part
+of the list. Both are now `wx.ListCtrl` list-views (native SysListView32 on
+Windows), which do **true incremental type-ahead** (type "uv5r" → jumps to it).
+NVDA reads the list-view rows. **NVDA-verified on Windows.**
+
+- **`vrp/serial_dialogs.py` `RadioListView`** — a single-column, no-header,
+  single-select `wx.ListCtrl` exposing a `wx.ListBox`-compatible surface
+  (`Set`/`GetCount`/`GetString`/`GetSelection`/`SetSelection`/`SetStringSelection`)
+  plus an `on_select` callback, so `ModelPicker` and `FavoritesDialog` (and their
+  tests) barely changed. A single column is auto-sized to the width on resize;
+  the rebuild is wrapped in Freeze/Thaw (flicker + a11y-event burst at ~552 rows).
+- Switched `ModelPicker.list` and `FavoritesDialog.fav_list` to it; dropped the
+  `EVT_LISTBOX` bindings (selection now drives `on_select`).
+- **Platform note (in the code):** on macOS `wx.ListCtrl` is wx's *generic*
+  control and may read poorly under VoiceOver — these serial dialogs are
+  NVDA/Windows-verified and unverified on macOS regardless, so this is a known,
+  deliberate tradeoff; revisit the control (per-platform, or `DataViewListCtrl`)
+  when the macOS VoiceOver pass covers them.
+
+Tests: the existing favorites/download dialog tests pass unchanged (the
+ListBox-compatible API), plus an assertion that both lists are `wx.ListCtrl`.
+Full suite 212 passing.
+
 ## 2026-06-28 — Radio info in a read-only edit box + "Radio details…" in the browsing dialogs
 
 Two related accessibility/usability improvements around radio information.
