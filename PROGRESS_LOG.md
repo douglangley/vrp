@@ -6,6 +6,41 @@ architecture, keyboard map, and CHIRP feature-coverage checklist.
 
 ---
 
+## 2026-06-28 — Favorite radios (manager dialog + Download All/Favorites toggle)
+
+A favorites system for radio models, so a user who only programs a handful of
+radios can browse a short list instead of scrolling ~552. **NVDA-verified on
+Windows.**
+
+- **Storage** (`vrp/config.py`): favorites are CHIRP **driver ids** under
+  `favorite_radios`; `favorites()`/`is_favorite()`/`add_favorite()`/
+  `remove_favorite()` mirror the recent-files pattern (dedupe, order preserved).
+- **Manager dialog** (`vrp/serial_dialogs.py` `FavoritesDialog`), on **Radio ▸
+  Favorite radios…** (no loaded radio needed). Dual-list "builder": left = all
+  radios with a filter + **Add to favorites**; right = **Your favorites** +
+  **Remove from favorites**; Close. Opens on the filter; Add keeps focus on the
+  list so you can star several; add/remove announce via status line + prism
+  ("Added X. N total." / "is already a favorite."); stale ids (driver gone after
+  a CHIRP update) are dropped from the view. Escape closes (`SetEscapeId`).
+- **Download toggle**: `DownloadDialog` gained a **Show: All radios / Favorites**
+  radio group above the filter. Default **All radios**, so prior behavior is
+  unchanged; Favorites narrows the list to the starred set (still filterable).
+  Upload is untouched — it has no model list (uploads the loaded image).
+- **Shared `ModelPicker`**: the filter + list + count (the a11y-tuned chooser)
+  was factored out of `DownloadDialog` and reused by both dialogs.
+  **Important:** `ModelPicker` is **not** a `wx.Panel` — it builds its controls
+  as **direct children of the host dialog** and appends them to a caller sizer.
+  A first cut nested them in a `wx.Panel` inside the static box, which broke NVDA
+  tab order/exposure (the filter and Add button were unreachable — reported as
+  "search not working / no Add button"); reverting to direct children (the
+  original inline pattern) fixed it. A regression test asserts the controls are
+  direct dialog children and that the filter narrows the list.
+
+Tests: favorites config round-trip (`tests/test_config.py`); a new
+`tests/test_favorites_dialog.py` (add/remove/duplicate, stale-id drop, the
+direct-children + search regression, the Download All/Favorites toggle). Existing
+`filter_models`/`PortPicker` tests still pass. Full suite 204 passing.
+
 ## 2026-06-28 — Bumped the CHIRP pin (6dadd6b → 906e039)
 
 First CHIRP update since the project started. Ran `tools/update_chirp.py`, which

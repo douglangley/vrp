@@ -130,3 +130,24 @@ def test_no_migration_when_new_config_already_exists(monkeypatch, tmp_path):
     p = cfg._default_path()
     # Existing VRP config must NOT be overwritten by the legacy one.
     assert json.loads(open(p, encoding="utf-8").read())["recent_files_count"] == 3
+
+
+def test_favorites_add_remove_dedup_order(tmp_path):
+    c = Config(path=str(tmp_path / "c.json"))
+    assert c.favorites() == []
+    c.add_favorite("Baofeng_UV-5R")
+    c.add_favorite("Yaesu_FT-60")
+    c.add_favorite("Baofeng_UV-5R")  # dup -> no change, order preserved
+    assert c.favorites() == ["Baofeng_UV-5R", "Yaesu_FT-60"]
+    assert c.is_favorite("Yaesu_FT-60") is True
+    assert c.is_favorite("Icom_IC-9700") is False
+    c.remove_favorite("Baofeng_UV-5R")
+    assert c.favorites() == ["Yaesu_FT-60"]
+    c.remove_favorite("not_present")  # no-op
+    assert c.favorites() == ["Yaesu_FT-60"]
+
+
+def test_favorites_persist_across_instances(tmp_path):
+    path = str(tmp_path / "c.json")
+    Config(path=path).add_favorite("Wouxun_KG-UV9D")
+    assert Config(path=path).favorites() == ["Wouxun_KG-UV9D"]

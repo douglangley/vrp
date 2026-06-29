@@ -23,6 +23,12 @@ import threading
 import wx
 
 from vrp.config import get_config
+from vrp.speech import Speaker
+
+# Supplemental speech for transient confirmations that don't move focus (e.g.
+# adding/removing a favorite). Module-level so the prism backend is acquired
+# once; a no-op when speech is unavailable.
+_speaker = Speaker()
 
 
 def _normalize_for_search(text: str) -> str:
@@ -173,13 +179,100 @@ class PortPicker(wx.Panel):
             self._on_change()
 
 
+class ModelPicker:
+    """Accessible filter + radio-model list + count, shared by the Download and
+    Favorites dialogs.
+
+    **Not a wx.Panel.** Its controls are created as direct children of the host
+    dialog and appended to a caller-provided ``sizer``. An earlier version nested
+    these in a ``wx.Panel`` inside the static box, which broke screen-reader tab
+    order/exposure (the filter and neighbouring buttons became unreachable). The
+    controls live directly on the dialog exactly as the original inline picker
+    did, so Tab and the static box behave normally.
+
+    A real preceding StaticText names the list for screen readers (SetName alone
+    is ignored, and the nearest other label, "Filter:", would otherwise misname
+    the list). Down-arrow from the filter drops into the list. The list is rebuilt
+    inside Freeze/Thaw to suppress flicker and the burst of accessibility events
+    NVDA would otherwise announce on every keystroke at ~552 items. ``on_change``
+    fires when the filtered result or the selection changes.
+    """
+
+    def __init__(self, parent, sizer, models, *, on_change=None,
+                 list_label: str = "Radio model") -> None:
+        self._models = list(models)
+        self._filtered = list(models)
+        self._on_change = on_change
+
+        sizer.Add(wx.StaticText(parent, label="Filter:"), 0, wx.LEFT | wx.TOP, 4)
+        self.filter = wx.TextCtrl(parent)
+        self.filter.SetName("Model filter")
+        sizer.Add(self.filter, 0, wx.EXPAND | wx.ALL, 4)
+        sizer.Add(wx.StaticText(parent, label=list_label + ":"), 0, wx.LEFT | wx.TOP, 4)
+        self.list = wx.ListBox(parent, choices=[m["label"] for m in self._models])
+        self.list.SetName(list_label)
+        if self._models:
+            self.list.SetSelection(0)
+        sizer.Add(self.list, 1, wx.EXPAND | wx.ALL, 4)
+        self.count = wx.StaticText(parent, label=self._count_label(len(self._models)))
+        self.count.SetName("Model count")
+        sizer.Add(self.count, 0, wx.ALL, 4)
+
+        self.filter.Bind(wx.EVT_TEXT, lambda _e: self._apply_filter())
+        self.filter.Bind(wx.EVT_KEY_DOWN, self._on_filter_key)
+        self.list.Bind(wx.EVT_LISTBOX, lambda _e: self._changed())
+
+    @staticmethod
+    def _count_label(n: int) -> str:
+        return "1 model matches" if n == 1 else f"{n} models match"
+
+    def set_models(self, models) -> None:
+        """Replace the base list (e.g. All radios <-> Favorites), reapplying the
+        current filter text."""
+        self._models = list(models)
+        self._apply_filter()
+
+    def _apply_filter(self) -> None:
+        self._filtered = filter_models(self._models, self.filter.GetValue())
+        self.list.Freeze()
+        try:
+            self.list.Set([m["label"] for m in self._filtered])
+            if self._filtered:
+                self.list.SetSelection(0)
+        finally:
+            self.list.Thaw()
+        self.count.SetLabel(self._count_label(len(self._filtered)))
+        self._changed()
+
+    def _on_filter_key(self, event) -> None:
+        # Down-arrow from the filter drops into the list without clearing it.
+        if event.GetKeyCode() == wx.WXK_DOWN and self._filtered:
+            self.list.SetFocus()
+            if self.list.GetSelection() == wx.NOT_FOUND:
+                self.list.SetSelection(0)  # so the screen reader announces a row
+        else:
+            event.Skip()
+
+    def selected_model(self):
+        i = self.list.GetSelection()
+        return self._filtered[i] if 0 <= i < len(self._filtered) else None
+
+    def focus_filter(self) -> None:
+        self.filter.SetFocus()
+
+    def _changed(self) -> None:
+        if self._on_change:
+            self._on_change()
+
+
 class DownloadDialog(wx.Dialog):
-    """Pick a serial port + a radio model to download from."""
+    """Pick a serial port + a radio model to download from. The model list can
+    show all radios or just the user's favorites (default: all, so the prior
+    behavior is unchanged)."""
 
     def __init__(self, parent, list_ports_fn, models) -> None:
         super().__init__(parent, title="Download from radio")
-        self._models = list(models)
-        self._filtered = list(models)
+        self._all_models = list(models)
 
         outer = wx.BoxSizer(wx.VERTICAL)
         self.port = PortPicker(
@@ -189,22 +282,17 @@ class DownloadDialog(wx.Dialog):
         outer.Add(self.port, 0, wx.EXPAND | wx.ALL, 10)
 
         box = wx.StaticBoxSizer(wx.VERTICAL, self, "Radio model")
-        box.Add(wx.StaticText(self, label="Filter:"), 0, wx.LEFT | wx.TOP, 4)
-        self.filter = wx.TextCtrl(self)
-        self.filter.SetName("Model filter")
-        box.Add(self.filter, 0, wx.EXPAND | wx.ALL, 4)
-        # A real preceding StaticText is what NVDA/VoiceOver read as the list's
-        # name; SetName() alone is ignored by screen readers (and the nearest
-        # other label, "Filter:", would otherwise misname the list).
-        box.Add(wx.StaticText(self, label="Radio model:"), 0, wx.LEFT | wx.TOP, 4)
-        self.list = wx.ListBox(self, choices=[m["label"] for m in self._models])
-        self.list.SetName("Radio model")
-        if self._models:
-            self.list.SetSelection(0)
-        box.Add(self.list, 1, wx.EXPAND | wx.ALL, 4)
-        self.count = wx.StaticText(self, label=self._count_label(len(self._models)))
-        self.count.SetName("Model count")
-        box.Add(self.count, 0, wx.ALL, 4)
+        show_row = wx.BoxSizer(wx.HORIZONTAL)
+        show_row.Add(wx.StaticText(self, label="Show:"), 0,
+                     wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 6)
+        self.show_all = wx.RadioButton(self, label="All radios", style=wx.RB_GROUP)
+        self.show_favs = wx.RadioButton(self, label="Favorites")
+        show_row.Add(self.show_all, 0, wx.RIGHT, 12)
+        show_row.Add(self.show_favs, 0)
+        box.Add(show_row, 0, wx.ALL, 4)
+
+        self.picker = ModelPicker(self, box, self._all_models,
+                                  on_change=self._update_ok)
         outer.Add(box, 1, wx.EXPAND | wx.LEFT | wx.RIGHT, 10)
 
         buttons = self.CreateStdDialogButtonSizer(wx.OK | wx.CANCEL)
@@ -214,58 +302,37 @@ class DownloadDialog(wx.Dialog):
         outer.Add(buttons, 0, wx.EXPAND | wx.ALL, 8)
 
         self.SetSizerAndFit(outer)
-        self.filter.Bind(wx.EVT_TEXT, self._on_filter)
-        self.filter.Bind(wx.EVT_KEY_DOWN, self._on_filter_key)
-        self.list.Bind(wx.EVT_LISTBOX, lambda _e: self._update_ok())
+        self.show_all.Bind(wx.EVT_RADIOBUTTON, self._on_show_changed)
+        self.show_favs.Bind(wx.EVT_RADIOBUTTON, self._on_show_changed)
         self.Bind(wx.EVT_BUTTON, self._on_ok, id=wx.ID_OK)
-        # Land on the serial port first (tab order then flows port -> filter ->
-        # list -> Download, matching control creation order). Done from
-        # EVT_INIT_DIALOG via CallAfter so it runs AFTER wx's own default focus
-        # placement (which would otherwise clobber it, esp. on macOS).
+        # Land on the serial port first (tab order then flows port -> show
+        # toggle -> filter -> list -> Download). Done from EVT_INIT_DIALOG via
+        # CallAfter so it runs AFTER wx's own default focus placement (which
+        # would otherwise clobber it, esp. on macOS).
         self.Bind(wx.EVT_INIT_DIALOG, self._on_init_dialog)
         self._update_ok()
 
-    @staticmethod
-    def _count_label(n: int) -> str:
-        return "1 model matches" if n == 1 else f"{n} models match"
+    def _favorite_models(self) -> list:
+        favs = set(get_config().favorites())
+        return [m for m in self._all_models if m["id"] in favs]
+
+    def _on_show_changed(self, _event) -> None:
+        self.picker.set_models(
+            self._favorite_models() if self.show_favs.GetValue() else self._all_models
+        )
+        self._update_ok()
 
     def _on_init_dialog(self, event) -> None:
         event.Skip()  # let wx's default init (data transfer, focus) run first
         wx.CallAfter(self.port.focus)
 
-    def _on_filter(self, _event) -> None:
-        self._filtered = filter_models(self._models, self.filter.GetValue())
-        # Freeze/Thaw around the full rebuild: at ~552 items this suppresses
-        # flicker and the burst of accessibility events NVDA would otherwise
-        # try to announce on every keystroke.
-        self.list.Freeze()
-        try:
-            self.list.Set([m["label"] for m in self._filtered])
-            if self._filtered:
-                self.list.SetSelection(0)
-        finally:
-            self.list.Thaw()
-        self.count.SetLabel(self._count_label(len(self._filtered)))
-        self._update_ok()
-
-    def _on_filter_key(self, event) -> None:
-        # Down-arrow from the filter drops into the list without clearing it.
-        if event.GetKeyCode() == wx.WXK_DOWN and self._filtered:
-            self.list.SetFocus()
-            if self.list.GetSelection() == wx.NOT_FOUND:
-                self.list.SetSelection(0)  # so the screen reader announces a row
-            # consume Down: focus moved into the list intentionally
-        else:
-            event.Skip()
-
     def _selected_model(self):
-        i = self.list.GetSelection()
-        return self._filtered[i] if 0 <= i < len(self._filtered) else None
+        return self.picker.selected_model()
 
     def _update_ok(self) -> None:
         # May be called by the PortPicker's on_change before this dialog has
-        # finished building (port/list/_ok not yet assigned) — no-op until ready.
-        if not getattr(self, "_ok", None) or not hasattr(self, "list"):
+        # finished building (picker/_ok not yet assigned) — no-op until ready.
+        if not getattr(self, "_ok", None) or not hasattr(self, "picker"):
             return
         self._ok.Enable(self.port.has_ports() and self._selected_model() is not None)
 
@@ -279,7 +346,7 @@ class DownloadDialog(wx.Dialog):
             return
         if self._selected_model() is None:
             wx.MessageBox("Choose a radio model.", "Download", wx.OK | wx.ICON_ERROR, self)
-            self.list.SetFocus()
+            self.picker.list.SetFocus()
             return
         get_config().set_last_serial_port(self.port.get_port())
         event.Skip()
@@ -326,6 +393,126 @@ class UploadDialog(wx.Dialog):
             return
         get_config().set_last_serial_port(self.port.get_port())
         event.Skip()
+
+
+class FavoritesDialog(wx.Dialog):
+    """Manage the user's favorite radios: a dual-list "builder".
+
+    Left: the full radio list with a filter and an "Add to favorites" button.
+    Right: the current favorites with a "Remove from favorites" button. Curating
+    here is separate from using a radio — the Download dialog's All/Favorites
+    toggle is what browses them. Add/remove are announced (status line + prism)
+    without moving focus, so you can star several radios in a row.
+    """
+
+    def __init__(self, parent, models) -> None:
+        super().__init__(parent, title="Favorite radios")
+        self._all_models = list(models)
+        self._by_id = {m["id"]: m for m in self._all_models}
+        self._fav_models: list = []
+
+        outer = wx.BoxSizer(wx.VERTICAL)
+        cols = wx.BoxSizer(wx.HORIZONTAL)
+
+        left = wx.StaticBoxSizer(wx.VERTICAL, self, "All radios")
+        self.picker = ModelPicker(
+            self, left, self._all_models, on_change=self._update_buttons,
+            list_label="All radios",
+        )
+        self.add_btn = wx.Button(self, label="Add to favorites")
+        left.Add(self.add_btn, 0, wx.ALL, 4)
+        cols.Add(left, 1, wx.EXPAND | wx.ALL, 6)
+
+        right = wx.StaticBoxSizer(wx.VERTICAL, self, "Your favorites")
+        right.Add(wx.StaticText(self, label="Favorites:"), 0, wx.LEFT | wx.TOP, 4)
+        self.fav_list = wx.ListBox(self)
+        self.fav_list.SetName("Your favorites")
+        right.Add(self.fav_list, 1, wx.EXPAND | wx.ALL, 4)
+        self.remove_btn = wx.Button(self, label="Remove from favorites")
+        right.Add(self.remove_btn, 0, wx.ALL, 4)
+        cols.Add(right, 1, wx.EXPAND | wx.ALL, 6)
+        outer.Add(cols, 1, wx.EXPAND)
+
+        self._status = wx.StaticText(self, label="")
+        self._status.SetName("Favorites status")
+        outer.Add(self._status, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 8)
+
+        outer.Add(self.CreateButtonSizer(wx.CLOSE), 0, wx.EXPAND | wx.ALL, 8)
+        self.SetSizerAndFit(outer)
+        self.SetEscapeId(wx.ID_CLOSE)  # Escape closes (no Cancel button here)
+
+        self.add_btn.Bind(wx.EVT_BUTTON, self._on_add)
+        self.remove_btn.Bind(wx.EVT_BUTTON, self._on_remove)
+        self.fav_list.Bind(wx.EVT_LISTBOX, lambda _e: self._update_buttons())
+        self.Bind(wx.EVT_BUTTON, lambda _e: self.EndModal(wx.ID_CLOSE), id=wx.ID_CLOSE)
+        self.Bind(wx.EVT_INIT_DIALOG, self._on_init_dialog)
+        self._refresh_favorites()
+
+    def _on_init_dialog(self, event) -> None:
+        event.Skip()
+        wx.CallAfter(self.picker.focus_filter)
+
+    def _refresh_favorites(self, select_id: str | None = None) -> None:
+        """Rebuild the favorites list from config (dropping ids whose driver is
+        no longer present, e.g. after a CHIRP update)."""
+        self._fav_models = [
+            self._by_id[d] for d in get_config().favorites() if d in self._by_id
+        ]
+        self.fav_list.Set([m["label"] for m in self._fav_models])
+        if self._fav_models:
+            idx = 0
+            if select_id is not None:
+                idx = next((i for i, m in enumerate(self._fav_models)
+                            if m["id"] == select_id), 0)
+            self.fav_list.SetSelection(min(idx, len(self._fav_models) - 1))
+        self._update_buttons()
+
+    def _selected_favorite(self):
+        i = self.fav_list.GetSelection()
+        return self._fav_models[i] if 0 <= i < len(self._fav_models) else None
+
+    def _update_buttons(self) -> None:
+        # Add is live whenever a model is selected (it announces "already a
+        # favorite" rather than going dead); Remove needs a selected favorite.
+        if not hasattr(self, "remove_btn"):
+            return
+        self.add_btn.Enable(self.picker.selected_model() is not None)
+        self.remove_btn.Enable(self._selected_favorite() is not None)
+
+    def _announce(self, message: str) -> None:
+        self._status.SetLabel(message)
+        _speaker.speak(message)
+
+    def _on_add(self, _event) -> None:
+        m = self.picker.selected_model()
+        if m is None:
+            return
+        if get_config().is_favorite(m["id"]):
+            self._announce(f"{m['label']} is already a favorite.")
+            return
+        get_config().add_favorite(m["id"])
+        self._refresh_favorites(select_id=m["id"])
+        self._announce(
+            f"Added {m['label']} to favorites. {len(self._fav_models)} total."
+        )
+
+    def _on_remove(self, _event) -> None:
+        i = self.fav_list.GetSelection()
+        m = self._selected_favorite()
+        if m is None:
+            return
+        get_config().remove_favorite(m["id"])
+        self._refresh_favorites()
+        remaining = len(self._fav_models)
+        if remaining:  # keep focus in the favorites list, on the next item
+            self.fav_list.SetSelection(min(i, remaining - 1))
+            self.fav_list.SetFocus()
+        else:
+            self.picker.list.SetFocus()
+        self._update_buttons()
+        self._announce(
+            f"Removed {m['label']} from favorites. {remaining} total."
+        )
 
 
 class CloneProgressDialog(wx.Dialog):

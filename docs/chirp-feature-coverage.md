@@ -79,6 +79,11 @@ update (`git pull` ./chirp) in case new dialogs appear.
 
 ## Notes
 
+- **Favorite radios (VRP-only, not a CHIRP feature):** Radio ▸ Favorite radios…
+  manages a starred-radio list (`vrp/serial_dialogs.py` `FavoritesDialog`,
+  `vrp/config.py` favorites); the Download dialog gains a **Show: All radios /
+  Favorites** toggle (default All). Lets users who program a few radios browse a
+  short list instead of ~552.
 - Developer-only items (reload driver/module, interact with driver, serial
   trace, bug report) are lower priority; revisit in Phase 10.
 - **Auto edits (offset suggestion):** a partial form of CHIRP's "auto edits" is

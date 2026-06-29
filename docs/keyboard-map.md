@@ -43,8 +43,9 @@ arrow keys move across top-level menus; NVDA reads it like any native app menu.
 | Edit | Copy | `Ctrl+C` | needs a loaded radio; copies the selected channel(s) |
 | Edit | Cut | `Ctrl+X` | needs a loaded radio; deferred — moves on paste |
 | Edit | Paste | `Ctrl+V` | needs a loaded radio; pastes at the focused channel |
-| Radio | Download from Radio | `Ctrl+Shift+D` | |
+| Radio | Download from Radio | `Ctrl+Shift+D` | model list has a **Show: All radios / Favorites** toggle (default All) |
 | Radio | Upload to Radio | `Ctrl+Shift+U` | needs a loaded radio |
+| Radio | Favorite radios… | — | manage starred radios (no loaded radio needed); used by Download's Favorites toggle |
 | Radio | Query Source ▸ … | — | needs a loaded radio; one item per registered source |
 | Radio | Settings… | `Ctrl+Shift+P` | needs a loaded radio |
 | Radio | Radio Info… | — | needs a loaded radio |

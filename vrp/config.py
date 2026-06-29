@@ -35,6 +35,7 @@ _DEFAULTS = {
     "last_serial_port": None,  # device string (e.g. "COM4") last used for a clone
     "bandplan_region": "north_america",  # CHIRP band plan for offset suggestions
     "auto_band_defaults": False,  # also fill mode/step/tone from the band plan
+    "favorite_radios": [],  # CHIRP driver ids the user has starred
 }
 
 
@@ -153,6 +154,29 @@ class Config:
     def recent_to_show(self) -> list:
         """The recent files to display, newest first, capped at recent_count()."""
         return self.recent()[: self.recent_count()]
+
+    # -- favorite radios ---------------------------------------------------
+
+    def favorites(self) -> list:
+        """The user's starred radio driver ids (insertion order preserved)."""
+        return list(self._data.get("favorite_radios", []))
+
+    def is_favorite(self, driver_id: str) -> bool:
+        return driver_id in self._data.get("favorite_radios", [])
+
+    def add_favorite(self, driver_id: str) -> None:
+        """Star a radio (no-op if already starred). Newest appended at the end."""
+        favs = self.favorites()
+        if driver_id not in favs:
+            favs.append(driver_id)
+            self._data["favorite_radios"] = favs
+            self.save()
+
+    def remove_favorite(self, driver_id: str) -> None:
+        self._data["favorite_radios"] = [
+            d for d in self.favorites() if d != driver_id
+        ]
+        self.save()
 
 
 _instance: Config | None = None

@@ -295,6 +295,7 @@ class MainWindow(wx.Frame):
         m = wx.Menu()
         self._add(m, "download", "&Download from Radio\tCtrl+Shift+D", self.on_download)
         self._add(m, "upload", "&Upload to Radio\tCtrl+Shift+U", self.on_upload, needs_radio=True)
+        self._add(m, "favorites", "&Favorite radios…", self.on_favorites)
         m.AppendSeparator()
 
         # Query Source submenu — one item per registered online source.
@@ -1336,6 +1337,16 @@ class MainWindow(wx.Frame):
         self.grid.SetFocus()
 
     # -- radio handlers -----------------------------------------------
+
+    def on_favorites(self, _evt=None) -> None:
+        """Radio > Favorite radios — manage the starred-radio list (no loaded
+        radio needed; it's used by the Download dialog's All/Favorites toggle)."""
+        from vrp.serial_dialogs import FavoritesDialog
+
+        dlg = FavoritesDialog(self, radio_backend.list_radio_models())
+        dlg.ShowModal()
+        dlg.Destroy()
+        self.grid.SetFocus()
 
     def on_download(self, _evt=None) -> None:
         """Radio > Download from Radio."""
