@@ -6,6 +6,40 @@ architecture, keyboard map, and CHIRP feature-coverage checklist.
 
 ---
 
+## 2026-06-28 — Radio info in a read-only edit box + "Radio details…" in the browsing dialogs
+
+Two related accessibility/usability improvements around radio information.
+
+- **Radio Info → read-only edit box.** Radio ▸ Radio Info… now opens
+  `vrp/info_dialog.py` `InfoDialog` (a `wx.TextCtrl`, `TE_MULTILINE |
+  TE_READONLY`, focus at line 1, Escape closes) instead of a `wx.MessageBox`.
+  A message box reads its text once and can't be navigated; the edit box lets a
+  screen-reader user arrow through line by line, re-read, and Ctrl+C it.
+- **"Radio details…" in Favorites + Download.** Each browsing dialog gained a
+  button (next to the model list) that shows the **highlighted model's** specs in
+  the same `InfoDialog`, so you can review a radio before picking it.
+  `chirp_backend.radio.describe_model(driver_id)` builds it by reading the driver
+  class's features from `cls(None)` (no hardware/image — confirmed safe for all
+  552 drivers). A shared `describe_features(features)` builds the capability/spec
+  block used by **both** `describe_model` and the loaded-radio Radio Info, so they
+  stay consistent.
+- **Fields shown:** channels, special channels (when any), channel-name length,
+  banks/settings/comments/DTCS, tone modes, power levels (with dBm, via
+  `repr`), tuning steps, bands, modes, baud rate. Optional fields are omitted when
+  a radio doesn't report them. **Clone prompts are intentionally NOT shown** in
+  Radio details — the pre-download dialog already shows them, so repeating them
+  was just noise (removed per user feedback).
+- **Wiring:** the dialogs take a `describe_fn` callback (kept decoupled/testable;
+  `main_window` passes `radio_backend.describe_model`); the details button appears
+  only when a describer is wired. Details opens modal and returns focus to the
+  model list.
+
+Tests: `tests/test_describe_model.py` (capabilities present, extra spec fields,
+clone prompts omitted, optional fields omitted when absent),
+`tests/test_info_dialog.py` (read-only/multiline/Escape), and details-button
+presence + no-op guard in `tests/test_favorites_dialog.py`. Full suite 212
+passing.
+
 ## 2026-06-28 — Favorite radios (manager dialog + Download All/Favorites toggle)
 
 A favorites system for radio models, so a user who only programs a handful of

@@ -93,6 +93,21 @@ def show_radio_prompts(parent, prompts: dict, *, pre_title: str = "Instructions"
     return True
 
 
+def show_model_details(parent, model, describe_fn) -> None:
+    """Open the highlighted model's capabilities + clone prompts in a read-only
+    review box (vrp.info_dialog.InfoDialog). No-op when nothing is selected or no
+    describer is wired."""
+    if model is None or describe_fn is None:
+        return
+    from vrp.info_dialog import InfoDialog
+
+    text = describe_fn(model["id"]) or "No information is available."
+    dlg = InfoDialog(parent, f"Radio details — {model['label']}", text,
+                     name="Radio details")
+    dlg.ShowModal()
+    dlg.Destroy()
+
+
 def _select_index(devices: list[str], *, current=None, preferred=None) -> int:
     """Which port index to select: keep the current one if it's still present
     (e.g. after a manual Refresh), else the preferred (last-used) port, else 0."""
@@ -270,9 +285,10 @@ class DownloadDialog(wx.Dialog):
     show all radios or just the user's favorites (default: all, so the prior
     behavior is unchanged)."""
 
-    def __init__(self, parent, list_ports_fn, models) -> None:
+    def __init__(self, parent, list_ports_fn, models, *, describe_fn=None) -> None:
         super().__init__(parent, title="Download from radio")
         self._all_models = list(models)
+        self._describe_fn = describe_fn
 
         outer = wx.BoxSizer(wx.VERTICAL)
         self.port = PortPicker(
@@ -293,6 +309,10 @@ class DownloadDialog(wx.Dialog):
 
         self.picker = ModelPicker(self, box, self._all_models,
                                   on_change=self._update_ok)
+        if self._describe_fn is not None:
+            self.details_btn = wx.Button(self, label="Radio details…")
+            self.details_btn.Bind(wx.EVT_BUTTON, self._on_details)
+            box.Add(self.details_btn, 0, wx.ALL, 4)
         outer.Add(box, 1, wx.EXPAND | wx.LEFT | wx.RIGHT, 10)
 
         buttons = self.CreateStdDialogButtonSizer(wx.OK | wx.CANCEL)
@@ -321,6 +341,10 @@ class DownloadDialog(wx.Dialog):
             self._favorite_models() if self.show_favs.GetValue() else self._all_models
         )
         self._update_ok()
+
+    def _on_details(self, _event) -> None:
+        show_model_details(self, self.picker.selected_model(), self._describe_fn)
+        self.picker.list.SetFocus()  # return focus to the list
 
     def _on_init_dialog(self, event) -> None:
         event.Skip()  # let wx's default init (data transfer, focus) run first
@@ -405,11 +429,12 @@ class FavoritesDialog(wx.Dialog):
     without moving focus, so you can star several radios in a row.
     """
 
-    def __init__(self, parent, models) -> None:
+    def __init__(self, parent, models, *, describe_fn=None) -> None:
         super().__init__(parent, title="Favorite radios")
         self._all_models = list(models)
         self._by_id = {m["id"]: m for m in self._all_models}
         self._fav_models: list = []
+        self._describe_fn = describe_fn
 
         outer = wx.BoxSizer(wx.VERTICAL)
         cols = wx.BoxSizer(wx.HORIZONTAL)
@@ -419,8 +444,14 @@ class FavoritesDialog(wx.Dialog):
             self, left, self._all_models, on_change=self._update_buttons,
             list_label="All radios",
         )
+        btn_row = wx.BoxSizer(wx.HORIZONTAL)
         self.add_btn = wx.Button(self, label="Add to favorites")
-        left.Add(self.add_btn, 0, wx.ALL, 4)
+        btn_row.Add(self.add_btn, 0, wx.RIGHT, 6)
+        if self._describe_fn is not None:
+            self.details_btn = wx.Button(self, label="Radio details…")
+            self.details_btn.Bind(wx.EVT_BUTTON, self._on_details)
+            btn_row.Add(self.details_btn, 0)
+        left.Add(btn_row, 0, wx.ALL, 4)
         cols.Add(left, 1, wx.EXPAND | wx.ALL, 6)
 
         right = wx.StaticBoxSizer(wx.VERTICAL, self, "Your favorites")
@@ -466,6 +497,10 @@ class FavoritesDialog(wx.Dialog):
                             if m["id"] == select_id), 0)
             self.fav_list.SetSelection(min(idx, len(self._fav_models) - 1))
         self._update_buttons()
+
+    def _on_details(self, _event) -> None:
+        show_model_details(self, self.picker.selected_model(), self._describe_fn)
+        self.picker.list.SetFocus()
 
     def _selected_favorite(self):
         i = self.fav_list.GetSelection()

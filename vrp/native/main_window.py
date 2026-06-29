@@ -1343,7 +1343,8 @@ class MainWindow(wx.Frame):
         radio needed; it's used by the Download dialog's All/Favorites toggle)."""
         from vrp.serial_dialogs import FavoritesDialog
 
-        dlg = FavoritesDialog(self, radio_backend.list_radio_models())
+        dlg = FavoritesDialog(self, radio_backend.list_radio_models(),
+                              describe_fn=radio_backend.describe_model)
         dlg.ShowModal()
         dlg.Destroy()
         self.grid.SetFocus()
@@ -1353,7 +1354,8 @@ class MainWindow(wx.Frame):
         from vrp.serial_dialogs import DownloadDialog, show_radio_prompts
 
         models = radio_backend.list_radio_models()
-        dlg = DownloadDialog(self, radio_backend.list_serial_ports, models)
+        dlg = DownloadDialog(self, radio_backend.list_serial_ports, models,
+                             describe_fn=radio_backend.describe_model)
         ok = dlg.ShowModal() == wx.ID_OK
         port, driver_id, label = dlg.get_selection() if ok else (None, None, "")
         dlg.Destroy()
@@ -1617,7 +1619,8 @@ class MainWindow(wx.Frame):
 
         vrp/app.py uses describe_radio_html() + show_message() (HTML in a
         webview dialog). In the native app we build an equivalent plain-text
-        summary from the same RadioState fields and show it with wx.MessageBox.
+        summary from the same RadioState fields and show it in a read-only edit
+        box (InfoDialog) so it can be reviewed line by line and copied.
         """
         state = radio_backend.get_state()
         if not state.loaded:
@@ -1626,18 +1629,12 @@ class MainWindow(wx.Frame):
 
         radio = state.radio
         f = radio.get_features()
-        lo, hi = f.memory_bounds
         variant = getattr(radio, "VARIANT", "") or ""
         source = (
             os.path.basename(state.image_path)
             if state.image_path
             else "Downloaded, not yet saved"
         )
-        bands = "; ".join(
-            f"{a / 1_000_000:.3f}–{b / 1_000_000:.3f} MHz"
-            for a, b in (getattr(f, "valid_bands", None) or [])
-        )
-        modes = ", ".join(getattr(f, "valid_modes", None) or [])
 
         lines = [
             f"{radio.VENDOR} {radio.MODEL}",
@@ -1652,19 +1649,18 @@ class MainWindow(wx.Frame):
             f"  Source:           {source}",
             f"  Unsaved changes:  {'Yes' if state.is_modified else 'No'}",
             "",
-            "Capacity",
-            f"  Channels:         {hi - lo + 1} (numbered {lo} to {hi})",
-            "",
-            "Capabilities",
-            f"  Channel names:    {'Yes' if getattr(f, 'has_name', False) else 'No'}",
-            f"  Banks:            {'Yes' if getattr(f, 'has_bank', False) else 'No'}",
-            f"  Settings:         {'Yes' if getattr(f, 'has_settings', False) else 'No'}",
-            f"  Comments:         {'Yes' if getattr(f, 'has_comment', False) else 'No'}",
-            f"  DTCS:             {'Yes' if getattr(f, 'has_dtcs', False) else 'No'}",
-            f"  Bands:            {bands or '—'}",
-            f"  Modes:            {modes or '—'}",
         ]
-        wx.MessageBox("\n".join(lines), "Radio Info", wx.OK | wx.ICON_INFORMATION, self)
+        # Same capability/spec block the model-details dialog uses, so Radio Info
+        # and "Radio details…" stay consistent.
+        lines += radio_backend.describe_features(f)
+
+        from vrp.info_dialog import InfoDialog
+
+        # A read-only edit box (not a MessageBox) so a screen-reader user can
+        # arrow through the summary line by line, re-read, and copy it.
+        dlg = InfoDialog(self, "Radio Info", "\n".join(lines), name="Radio information")
+        dlg.ShowModal()
+        dlg.Destroy()
         self.grid.SetFocus()
 
     # -- help handlers ------------------------------------------------

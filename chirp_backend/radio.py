@@ -535,6 +535,105 @@ def get_clone_prompts_for_loaded_radio() -> dict:
     return _prompts_dict(radio, upload=True)
 
 
+def _yesno(value) -> str:
+    return "Yes" if value else "No"
+
+
+def describe_features(feats) -> list[str]:
+    """Build the capability/spec lines for a radio's features — shared by
+    ``describe_model`` (a model) and the loaded-radio Radio Info, so both show
+    the same fields. Optional fields are listed only when the radio reports them.
+    """
+    lo, hi = feats.memory_bounds
+    lines = [
+        "Capacity",
+        f"  Channels:         {hi - lo + 1} (numbered {lo} to {hi})",
+    ]
+    special = list(getattr(feats, "valid_special_chans", None) or [])
+    if special:
+        lines.append(f"  Special channels: {', '.join(str(s) for s in special)}")
+
+    has_name = bool(getattr(feats, "has_name", False))
+    name_cell = "Yes" if has_name else "No"
+    name_len = getattr(feats, "valid_name_length", 0) if has_name else 0
+    if name_len:
+        name_cell = f"Yes (up to {name_len} characters)"
+    lines += [
+        "",
+        "Capabilities",
+        f"  Channel names:    {name_cell}",
+        f"  Banks:            {_yesno(getattr(feats, 'has_bank', False))}",
+        f"  Settings:         {_yesno(getattr(feats, 'has_settings', False))}",
+        f"  Comments:         {_yesno(getattr(feats, 'has_comment', False))}",
+        f"  DTCS:             {_yesno(getattr(feats, 'has_dtcs', False))}",
+    ]
+
+    tmodes = [t for t in (getattr(feats, "valid_tmodes", None) or []) if t]
+    if tmodes:
+        lines.append(f"  Tone modes:       {', '.join(tmodes)}")
+    powers = getattr(feats, "valid_power_levels", None) or []
+    if powers:
+        # repr() includes the dBm ("High (36 dBm)"); str() is just the label.
+        lines.append(f"  Power levels:     {', '.join(repr(p) for p in powers)}")
+    steps = getattr(feats, "valid_tuning_steps", None) or []
+    if steps:
+        lines.append(
+            f"  Tuning steps:     {', '.join(f'{s:g}' for s in steps)} kHz"
+        )
+
+    bands = "; ".join(
+        f"{a / 1_000_000:.3f}–{b / 1_000_000:.3f} MHz"
+        for a, b in (getattr(feats, "valid_bands", None) or [])
+    )
+    modes = ", ".join(getattr(feats, "valid_modes", None) or [])
+    lines += [
+        f"  Bands:            {bands or '—'}",
+        f"  Modes:            {modes or '—'}",
+    ]
+    return lines
+
+
+def describe_model(driver_id: str) -> str:
+    """A human-readable, multi-line description of a radio MODEL (driver class):
+    its capabilities and specs, for review before downloading.
+
+    Reads the class's features with no hardware or image — every CHIRP driver
+    instantiates with a ``None`` pipe and reports static features. Returns a short
+    message on an unknown/uncooperative driver rather than raising.
+
+    The driver's clone prompts (experimental warning, pre-download steps) are
+    intentionally NOT included here — they're shown in the pre-download dialog
+    right before a download, so repeating them here is just noise.
+    """
+    _ensure_chirp()
+    from chirp import directory
+
+    try:
+        cls = directory.get_radio(driver_id)
+    except Exception:  # noqa: BLE001
+        return f"No information is available for {driver_id}."
+
+    vendor = getattr(cls, "VENDOR", "")
+    model = getattr(cls, "MODEL", "")
+    variant = getattr(cls, "VARIANT", "") or ""
+    title = f"{vendor} {model}".strip()
+    if variant:
+        title += f" {variant}"
+    lines = [title, ""]
+
+    try:
+        feats = cls(None).get_features()
+    except Exception:  # noqa: BLE001 — a driver that won't describe itself
+        feats = None
+    if feats is not None:
+        lines += describe_features(feats)
+    baud = getattr(cls, "BAUD_RATE", None)
+    if baud:
+        lines.append(f"  Baud rate:        {baud}")
+
+    return "\n".join(lines)
+
+
 def _make_status_fn(progress_callback: Callable[[int, int, str], None]):
     """Adapt CHIRP's status_fn (called with a Status object) to our callback.
 

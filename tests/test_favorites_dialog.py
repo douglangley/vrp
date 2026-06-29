@@ -109,6 +109,29 @@ def test_favorites_dialog_drops_unknown_driver_ids(app, isolated_config):
         frame.Destroy()
 
 
+def test_radio_details_button_only_when_describer_wired(app, isolated_config):
+    from vrp.serial_dialogs import FavoritesDialog
+
+    frame = wx.Frame(None)
+    try:
+        with_fn = FavoritesDialog(frame, MODELS, describe_fn=lambda i: "info")
+        assert hasattr(with_fn, "details_btn")
+        with_fn.Destroy()
+        without = FavoritesDialog(frame, MODELS)  # no describer -> no button
+        assert not hasattr(without, "details_btn")
+        without.Destroy()
+    finally:
+        frame.Destroy()
+
+
+def test_show_model_details_is_noop_without_selection_or_describer(app):
+    from vrp.serial_dialogs import show_model_details
+
+    # Returns before creating any (blocking) modal when there's nothing to show.
+    show_model_details(None, None, lambda i: "x")
+    show_model_details(None, {"id": "x", "label": "X"}, None)
+
+
 def test_download_dialog_favorites_toggle(app, isolated_config):
     from vrp.serial_dialogs import DownloadDialog
 
