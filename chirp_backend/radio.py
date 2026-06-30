@@ -18,7 +18,7 @@ import os
 import re
 import threading
 from dataclasses import dataclass, field
-from typing import Callable, Generator, Optional
+from typing import Callable, Optional
 
 from chirp_backend.undo import UndoManager
 

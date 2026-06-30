@@ -32,11 +32,6 @@ ENTRY_POINT = "main.py"
 
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 
-# PyInstaller's --add-data wants "src<sep>dest", sep is OS-specific. The
-# generated .spec lives under --specpath, so relative source paths resolve
-# against THAT directory, not the cwd — use absolute paths to avoid surprises.
-_SEP = ";" if os.name == "nt" else ":"
-
 
 def build(onefile: bool = True) -> int:
     cmd = [
@@ -73,9 +68,11 @@ def build(onefile: bool = True) -> int:
         # ---- lark (used by chirp.bitwise_grammar) — needs its .lark grammar files
         "--collect-data=lark",
 
-        # ---- App data: templates + static (rendered/inlined at runtime) ----
-        f"--add-data={os.path.join(PROJECT_ROOT, 'static')}{_SEP}static",
-        f"--add-data={os.path.join(PROJECT_ROOT, 'templates')}{_SEP}templates",
+        # NOTE: the native UI (the default and only working front end) renders no
+        # HTML, so templates/ and static/ are intentionally NOT bundled. They are
+        # webview-only assets and the webview UI no longer imports (see main.py /
+        # CLAUDE.md). Re-add --add-data for them if the webview help/docs role is
+        # ever revived.
 
         # ---- Output locations (match the old Nuitka layout) ----
         "--distpath=dist",
