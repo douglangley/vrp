@@ -35,11 +35,13 @@ a wx GUI that idles on serial I/O.
 **Verified:** `uv run python build.py` (onedir) succeeds in ~30s; output is a
 ~80 MB `dist/vrp/` folder with `vrp.exe` + `_internal/`, and the authoritative
 PYZ check shows **192 driver modules** (the `chirp.drivers.*` set, ~552 radio
-models) compiled into the archive. User confirmed the frozen exe runs. The
-Inno Setup `--installer` step is **not** yet verified — Inno Setup 6 isn't
-installed on the dev box; install it (https://jrsoftware.org/isinfo.php) to
-compile `installer.iss`. Docs updated: `CLAUDE.md`, `README.md` ("Packaging
-with PyInstaller + Inno Setup"), `docs/architecture.md`.
+models) compiled into the archive. User confirmed the frozen exe runs. The full
+`build.py --installer` pipeline is also verified now: Inno Setup 6.7.3 compiles
+`installer.iss` cleanly (after switching `x64` → the preferred `x64compatible`
+to clear a deprecation warning) and produces a **27.7 MB** `dist/vrp-0.1.0-
+setup.exe` (lzma2-compressed from the ~80 MB onedir folder). Docs updated:
+`CLAUDE.md`, `README.md` ("Packaging with PyInstaller + Inno Setup"),
+`docs/architecture.md`.
 
 ## 2026-06-29 — Removed the retired webview UI
 
