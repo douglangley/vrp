@@ -6,6 +6,41 @@ architecture, keyboard map, and CHIRP feature-coverage checklist.
 
 ---
 
+## 2026-06-29 — Build: onedir PyInstaller default + Inno Setup installer
+
+Reworked the packaging step to fix the "big and slow" complaint. CHIRP itself
+ships a PyInstaller build wrapped in an installer (no Nuitka anywhere in its
+repo), so we stay on PyInstaller and match that shape rather than revisiting
+Nuitka.
+
+**What changed:**
+- `build.py` now defaults to **onedir** (`dist/vrp/`) instead of onefile.
+  Onefile re-extracts the whole interpreter + wxPython + 552 drivers to a temp
+  dir on *every* launch (the slow cold start) and trips Defender/SmartScreen
+  more often; onedir starts instantly. `--onefile` is now an opt-in flag for a
+  quick throwaway single-exe test (replaces the old `--no-onefile`).
+- New `installer.iss` (Inno Setup) + a `build.py --installer` step that wraps
+  `dist/vrp/` into `dist/vrp-<version>-setup.exe` — Start-menu shortcut +
+  uninstaller, a **stable `AppId` GUID** so upgrades replace rather than stack,
+  and a per-user install fallback for non-admin accounts. `build.py` reads the
+  version from `vrp/__init__.py` and locates `ISCC.exe` via PATH / the default
+  install dir / an `INNO_SETUP_ISCC` override.
+- UPX stays off (barely shrinks a wx app; itself an AV trigger).
+
+**Why not Nuitka (again):** the 552 drivers are loaded by dynamic `__import__`,
+so Nuitka can't follow them without force-compiling all of them — back to the
+20–30 min builds that never finished — and it yields no size or startup win for
+a wx GUI that idles on serial I/O.
+
+**Verified:** `uv run python build.py` (onedir) succeeds in ~30s; output is a
+~80 MB `dist/vrp/` folder with `vrp.exe` + `_internal/`, and the authoritative
+PYZ check shows **192 driver modules** (the `chirp.drivers.*` set, ~552 radio
+models) compiled into the archive. User confirmed the frozen exe runs. The
+Inno Setup `--installer` step is **not** yet verified — Inno Setup 6 isn't
+installed on the dev box; install it (https://jrsoftware.org/isinfo.php) to
+compile `installer.iss`. Docs updated: `CLAUDE.md`, `README.md` ("Packaging
+with PyInstaller + Inno Setup"), `docs/architecture.md`.
+
 ## 2026-06-29 — Removed the retired webview UI
 
 The webview UI was already retired (not the default on any platform, and
