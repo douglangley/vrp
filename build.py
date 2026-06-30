@@ -12,6 +12,14 @@ Usage:
   python build.py --installer      Build onedir, then compile a Windows installer
                                    (installer.iss) with Inno Setup. This is how
                                    the app is meant to ship.
+  python build.py --no-chirp-sync  Verify ./chirp matches the CHIRP_COMMIT pin
+                                   but don't auto-checkout it (abort on mismatch
+                                   instead of fixing the clone).
+
+Every build first ensures ./chirp is checked out at the tested CHIRP_COMMIT pin
+(a clean clone is synced to it automatically) so the frozen app bundles the exact
+driver set the test suite passed against — adopting a *newer* CHIRP stays the
+deliberate, tested step in tools/update_chirp.py.
 
 Requirements:
   uv sync --extra build            (installs pyinstaller)
@@ -51,6 +59,8 @@ ENTRY_POINT = "main.py"
 INSTALLER_SCRIPT = "installer.iss"
 
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
+CHIRP_DIR = os.path.join(PROJECT_ROOT, "chirp")
+CHIRP_PIN_FILE = os.path.join(PROJECT_ROOT, "CHIRP_COMMIT")
 
 
 def _read_version() -> str:
@@ -65,6 +75,66 @@ def _read_version() -> str:
     if not match:
         raise RuntimeError(f"Could not find __version__ in {init_py}")
     return match.group(1)
+
+
+def _git_chirp(*args) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        ["git", "-C", CHIRP_DIR, *args], capture_output=True, text=True
+    )
+
+
+def ensure_chirp_on_pin(auto_sync: bool = True) -> bool:
+    """Guarantee ./chirp is checked out at the tested CHIRP_COMMIT pin.
+
+    The frozen build must bundle the *exact* CHIRP commit VRP's test suite was
+    last run against (the SHA in CHIRP_COMMIT) — never whatever is incidentally
+    checked out, and never upstream HEAD. Adopting a newer CHIRP is a deliberate,
+    tested step (tools/update_chirp.py fetches, runs the suite, and only then
+    bumps the pin); it must not happen as a silent side effect of building, which
+    would ship untested driver code.
+
+    So "make CHIRP current" here means "make ./chirp match the pin", which this
+    does automatically for a clean clone. It never discards uncommitted work and
+    never pulls from the network. Returns True if the build may proceed.
+    """
+    if not os.path.isfile(CHIRP_PIN_FILE):
+        print("! CHIRP_COMMIT pin file missing — skipping the CHIRP version check.")
+        return True
+    if not os.path.isdir(os.path.join(CHIRP_DIR, ".git")):
+        print("! ./chirp is not a git clone — skipping the CHIRP version check.")
+        return True
+
+    with open(CHIRP_PIN_FILE, encoding="utf-8") as fh:
+        pin = fh.read().strip()
+
+    resolved = _git_chirp("rev-parse", "--verify", "--quiet", f"{pin}^{{commit}}")
+    if resolved.returncode != 0:
+        print(f"! Pinned CHIRP commit {pin[:12]} is not present in ./chirp.")
+        print("  Fetch it first:  uv run python tools/update_chirp.py")
+        return False
+    pinned_sha = resolved.stdout.strip()
+    head_sha = _git_chirp("rev-parse", "HEAD").stdout.strip()
+
+    if head_sha == pinned_sha:
+        print(f"CHIRP is at the pinned commit {pinned_sha[:12]} (OK).")
+        return True
+
+    print(f"! ./chirp is at {head_sha[:12]}, but CHIRP_COMMIT pins {pinned_sha[:12]}.")
+    if _git_chirp("status", "--porcelain").stdout.strip():
+        print("  ./chirp has uncommitted changes — refusing to touch it.")
+        print("  Clean/stash them or check out the pin manually, then rebuild.")
+        return False
+    if not auto_sync:
+        print("  Re-run without --no-chirp-sync to check out the pin automatically,")
+        print(f"  or do it by hand:  git -C chirp checkout --detach {pinned_sha[:12]}")
+        return False
+    print(f"  Syncing ./chirp to the pinned commit {pinned_sha[:12]}...")
+    checkout = _git_chirp("checkout", "--detach", "--quiet", pinned_sha)
+    if checkout.returncode != 0:
+        print("  git checkout failed:\n" + (checkout.stderr or "").strip())
+        return False
+    print("  Synced.")
+    return True
 
 
 def build(onefile: bool) -> int:
@@ -99,7 +169,15 @@ def build(onefile: bool) -> int:
         # ---- CHIRP library (drivers/sources loaded by dynamic import) ----
         "--collect-submodules=chirp.drivers",
         "--collect-submodules=chirp.sources",
-        "--collect-data=chirp",              # stock_configs, locale, etc.
+        # NOTE: deliberately NOT --collect-data=chirp. CHIRP is an editable
+        # install rooted at the repo, so --collect-data=chirp sweeps in the
+        # whole working tree — .git/ (~3.8 MB), tests/ radio .img images
+        # (~9.5 MB), CI/packaging dirs, and chirp's own branding (share/ logos)
+        # — none of which VRP runs. The drivers/sources are pure .py (collected
+        # above into the PYZ) with no companion data files, and VRP uses none of
+        # CHIRP's data assets (stock_configs/locale/share are wxui- or
+        # branding-only). If VRP ever loads a CHIRP data file at runtime, add it
+        # back with a targeted --add-data for that one subdir, not the repo.
 
         # ---- lark (used by chirp.bitwise_grammar) — needs its .lark grammar files
         "--collect-data=lark",
@@ -187,6 +265,13 @@ def main() -> None:
         help="After the onedir build, compile the Windows installer with Inno "
              "Setup (installer.iss). Incompatible with --onefile.",
     )
+    parser.add_argument(
+        "--no-chirp-sync",
+        action="store_true",
+        help="Don't auto-checkout ./chirp to the CHIRP_COMMIT pin; only verify "
+             "and abort on a mismatch. (The pin is always enforced — this just "
+             "refuses to modify the clone for you.)",
+    )
     args = parser.parse_args()
 
     if args.installer and args.onefile:
@@ -196,6 +281,10 @@ def main() -> None:
         )
 
     version = _read_version()
+
+    if not ensure_chirp_on_pin(auto_sync=not args.no_chirp_sync):
+        print("\nAborting: ./chirp is not at the tested CHIRP_COMMIT pin.")
+        sys.exit(1)
 
     rc = build(onefile=args.onefile)
     if rc != 0:

@@ -6,6 +6,28 @@ architecture, keyboard map, and CHIRP feature-coverage checklist.
 
 ---
 
+## 2026-06-29 — Build enforces the CHIRP pin before packaging
+
+`build.py` now runs `ensure_chirp_on_pin()` before every build. It verifies that
+`./chirp` is checked out at the `CHIRP_COMMIT` SHA and, for a clean clone, syncs
+it to the pin automatically (`git checkout --detach`), so the frozen app always
+bundles the exact driver set the test suite last passed against. The guard never
+fetches from the network and never discards uncommitted CHIRP changes: it aborts
+if the clone is off-pin **and** dirty, or if the pinned commit isn't present
+locally (pointing at `tools/update_chirp.py`). Adopting a *newer* CHIRP stays the
+deliberate, tested step in `update_chirp.py` — the build must not silently ship
+untested drivers, so "make CHIRP current" here means "match the tested pin," not
+"pull HEAD." New `--no-chirp-sync` flag verifies only (aborts on mismatch instead
+of fixing the clone).
+
+Also finalized the `build.py` change that drops `--collect-data=chirp` (it was
+sweeping the whole editable repo tree — `.git/`, test `.img` images, branding —
+into the bundle; drivers/sources are pure `.py` already collected into the PYZ).
+
+Verified: on-pin clone prints the OK line and proceeds with no git changes; a
+bogus pin SHA triggers the "not present" abort; the clone + pin file are
+unchanged afterward. Docs updated: `CLAUDE.md`, `README.md`.
+
 ## 2026-06-29 — Build: onedir PyInstaller default + Inno Setup installer
 
 Reworked the packaging step to fix the "big and slow" complaint. CHIRP itself

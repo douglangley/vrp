@@ -282,6 +282,14 @@ Notes:
 - `build.py` explicitly `--collect-submodules` for `chirp.drivers` and
   `chirp.sources` — both are loaded via dynamic `__import__`/
   `importlib.import_module`, which PyInstaller's static analysis can't follow.
+- **Every build first enforces the CHIRP pin** (`ensure_chirp_on_pin`): it
+  verifies `./chirp` is checked out at the `CHIRP_COMMIT` SHA and, for a clean
+  clone, syncs it there automatically, so the frozen app always bundles the exact
+  driver set the test suite passed against. It never fetches from the network and
+  never discards uncommitted CHIRP changes — adopting a *newer* CHIRP stays the
+  deliberate, tested step in `tools/update_chirp.py`. It aborts the build if the
+  clone is off-pin and dirty, or if the pinned commit isn't fetched locally.
+  `--no-chirp-sync` verifies only (aborts on mismatch instead of fixing it).
 - `uv sync --extra build` installs only the build extra (drops pytest). Use
   `uv sync --extra dev --extra build` to have both, or re-run `uv sync --extra dev`
   afterward to get the test tools back.

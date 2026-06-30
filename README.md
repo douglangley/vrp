@@ -245,6 +245,13 @@ win32more Windows-API surface; speech is opt-in and no-ops without it), and
 explicitly collects `chirp.drivers`/`chirp.sources` since CHIRP loads both
 via dynamic import that PyInstaller's static analysis can't follow on its own.
 
+Before building, `build.py` enforces the CHIRP pin: it checks that `./chirp` is
+at the `CHIRP_COMMIT` SHA and syncs a clean clone to it automatically, so the
+build always bundles the exact, tested driver set. It never pulls from the
+network — adopting a newer CHIRP is the deliberate, tested step in
+`tools/update_chirp.py`. Pass `--no-chirp-sync` to verify only (abort on a
+mismatch rather than fixing the clone).
+
 ## Files NOT to Modify
 
 - `chirp/`  — The upstream CHIRP library. Update via `git pull` only.
