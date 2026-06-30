@@ -41,10 +41,11 @@ AppSupportURL={#MyAppURL}
 DefaultDirName={autopf}\{#MyAppName}
 DefaultGroupName={#MyAppName}
 UninstallDisplayIcon={app}\{#MyAppExeName}
-; VRP is built as a native 64-bit app. "x64" installs in 64-bit mode on x64
-; Windows and is accepted by every Inno Setup 6.x (alias for x64os on 6.3+).
-ArchitecturesAllowed=x64
-ArchitecturesInstallIn64BitMode=x64
+; VRP is built as a native 64-bit app. "x64compatible" installs in 64-bit mode
+; on x64 Windows (and ARM64 under x64 emulation). Requires Inno Setup 6.3+
+; (we build with 6.7.x); older 6.x used the now-deprecated "x64".
+ArchitecturesAllowed=x64compatible
+ArchitecturesInstallIn64BitMode=x64compatible
 OutputDir=dist
 OutputBaseFilename=vrp-{#MyAppVersion}-setup
 Compression=lzma2
