@@ -8,14 +8,10 @@ description = "Versatile Radio Programmer (VRP) — accessible radio memory chan
 requires-python = "==3.11.*"
 
 dependencies = [
-    # Accessible desktop UI host: a wxPython app whose wx.html2.WebView is
-    # wrapped to expose semantic, screen-reader-friendly HTML (NVDA/JAWS).
+    # The wxPython GUI toolkit. VRP's UI is built entirely from native wx
+    # controls (DataViewListCtrl grid + wx.MenuBar); there is no web server,
+    # webview, or browser anywhere in the app.
     "wxpython>=4.2.0",
-    "wx-accessible-webview>=0.2.0",
-    # Keyboard-accessible native menu bar that works when a focused WebView2
-    # swallows Alt (the menu key handling is the library's, not inline here).
-    # 0.1.1 adds webview_listener_js for the single-bridge integration.
-    "wx-accessible-menubar>=0.1.1",
     # Accessible data grid (sibling library), a **native wx.dataview.DataViewListCtrl**
     # — no WebView, no HTML, no JS in the path (NSTableView on macOS, so VoiceOver
     # reads each cell natively; the native list view on Windows/GTK for
@@ -37,7 +33,6 @@ dependencies = [
     "pyserial>=3.5",
     "lark>=1.1.0",
     "requests>=2.28.0",
-    "jinja2>=3.1.0",
 ]
 
 [project.optional-dependencies]

@@ -1,11 +1,11 @@
 """Supplemental speech via prism (prismatoid bindings).
 
-The accessible webview conveys almost everything through semantic HTML and
-ARIA live regions, which the user's screen reader announces. A few things a
-screen reader cannot infer from the DOM alone — for example a transient
-confirmation that does not move focus, or progress on a long serial operation
-the user is waiting through — are better spoken directly. ``Speaker`` is a thin
-wrapper over prism for exactly those cases.
+The native wx controls convey almost everything to the screen reader directly
+(focus, names, roles, the status bar). A few things a screen reader cannot infer
+from focus alone — for example a transient confirmation that does not move focus,
+or progress on a long serial operation the user is waiting through — are better
+spoken directly. ``Speaker`` is a thin wrapper over prism for exactly those
+cases.
 
 It degrades gracefully: if no speech backend is available (no screen reader /
 TTS installed, or running in CI), every method becomes a no-op rather than

@@ -1,19 +1,16 @@
 """Native main window: menu bar, status bar, channel grid, command handlers.
 
-Handler bodies are ported from vrp/app.py (the webview app), swapping webview
-refresh for grid refresh + Announcer. Reorganization lives in the Channels menu
-(filled in by a later task).
+Each command handler calls ``chirp_backend`` directly and pushes results to the
+grid (``refresh_numbers``/``rebuild``) and the ``Announcer`` (status bar + prism
+speech). Notable points:
 
-Key differences vs the webview app:
-- No paging: the native grid is virtual and shows all channels at once.
-- No webview focus restore: grid.SetFocus() replaces _restore_webview_focus().
-- on_radio_info: describe_radio_html() returns HTML; we build a plain-text
-  summary instead and show it with wx.MessageBox.
-- on_shortcuts: displayed with wx.MessageBox (plain text, not HTML).
-- on_preferences: the native grid has no paging, so there is no channels-per-page
-  setting; only the recent-files count and speak-status toggle are offered.
-- CHIRP attribution: shown in the About box (wx.adv.AboutBox description),
-  satisfying the GPLv3 requirement documented in CLAUDE.md.
+- No paging: the grid shows all channels at once.
+- Focus management is the primary screen-reader signal; ``grid.SetFocus()`` and
+  per-row focus moves do the work, with the Announcer as a fallback.
+- on_radio_info: shows a plain-text summary in a read-only edit box (InfoDialog).
+- on_shortcuts: displayed with wx.MessageBox (plain text).
+- CHIRP attribution: shown permanently in status-bar field 1 and in the About
+  box (wx.adv.AboutBox description), satisfying the GPLv3 requirement in CLAUDE.md.
 """
 
 from __future__ import annotations
@@ -1521,12 +1518,12 @@ class MainWindow(wx.Frame):
     # -- query sources ------------------------------------------------
 
     def on_query_source(self, key: str) -> None:
-        """Radio > Query Source > <name> — ported from vrp/app.py on_query_source.
+        """Radio > Query Source > <name>.
 
-        Opens QueryParamsDialog (same class as the webview app) to gather any
-        source-specific parameters, then runs the fetch on a background thread
-        and imports results via _import_results (shared with Import from File).
-        Requires a loaded radio — gated in the menu and guarded here.
+        Opens QueryParamsDialog to gather any source-specific parameters, then
+        runs the fetch on a background thread and imports results via
+        _import_results (shared with Import from File). Requires a loaded radio —
+        gated in the menu and guarded here.
         """
         from chirp_backend import query
         from vrp.query_dialogs import QueryParamsDialog
@@ -1617,10 +1614,9 @@ class MainWindow(wx.Frame):
     def on_radio_info(self, _evt=None) -> None:
         """Radio > Radio Info — plain-text summary of the loaded radio.
 
-        vrp/app.py uses describe_radio_html() + show_message() (HTML in a
-        webview dialog). In the native app we build an equivalent plain-text
-        summary from the same RadioState fields and show it in a read-only edit
-        box (InfoDialog) so it can be reviewed line by line and copied.
+        Builds a plain-text summary from the RadioState fields and shows it in a
+        read-only edit box (InfoDialog) so it can be reviewed line by line and
+        copied.
         """
         state = radio_backend.get_state()
         if not state.loaded:
@@ -1679,8 +1675,8 @@ class MainWindow(wx.Frame):
         """Help > About — standard About box.
 
         The CHIRP attribution ("Radio driver support provided by the CHIRP
-        project — chirpmyradio.com.") is a GPLv3 requirement and must appear
-        in the About box now that the webview page footer is not present.
+        project — chirpmyradio.com.") is a GPLv3 requirement and appears here as
+        well as permanently in status-bar field 1.
         """
         info = wx.adv.AboutDialogInfo()
         info.SetName("Versatile Radio Programmer")

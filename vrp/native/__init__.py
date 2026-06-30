@@ -1,1 +1,1 @@
-"""Native wxPython UI for VRP (parallel to the webview app during migration)."""
+"""Native wxPython UI for VRP — the application's only UI."""

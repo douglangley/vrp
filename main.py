@@ -1,21 +1,16 @@
 """Versatile Radio Programmer (VRP) — application entry point.
 
 VRP is an accessible front end to the CHIRP radio programming library. It is a
-wxPython app with two interchangeable front ends, because no single channel
-grid reads on every screen reader (see PROGRESS_LOG.md and the memory note on
-the cross-platform grid split):
+wxPython app with a single, native UI (``vrp/native/``): a channel grid built on
+``wx-accessible-grid``'s ``AccessibleGrid`` (a ``wx.dataview.DataViewListCtrl``)
+plus a native ``wx.MenuBar``. The grid is a real native table on each OS (the
+native list view on Windows, NSTableView on macOS), so **both NVDA and
+VoiceOver** read its rows directly.
 
-* the **native** UI (``vrp/native/``) — a channel grid built on
-  ``wx-accessible-grid``'s ``AccessibleGrid`` (a ``wx.dataview.DataViewListCtrl``)
-  plus a native menu bar. The grid is a real native table on each OS
-  (the native list view on Windows, NSTableView on macOS), so **both NVDA and
-  VoiceOver** read its rows directly. This is the default on every platform.
-* the **webview** UI (``vrp/app.py``) — the ``AccessibleWebView`` rendering the
-  ``wx-accessible-grid`` Excel-style channel grid. Kept available via
-  ``--webview`` while the webview stack is retired.
-
-The native UI is the default everywhere; force the webview explicitly with
-``--webview`` (or the native UI with ``--native``).
+There used to be a second, webview-based UI; it was retired and removed once the
+native grid read on every screen reader (see PROGRESS_LOG.md "2026-06-25" and
+"2026-06-29 — Removed the retired webview UI"). There is no web server and no
+browser anywhere in the app.
 
 Importing ``vrp`` first applies the CHIRP import-path fix (see
 ``vrp/_chirp_path.py``) before anything imports the vendored ``chirp`` package.
@@ -23,38 +18,8 @@ Importing ``vrp`` first applies the CHIRP import-path fix (see
 
 import argparse
 import logging
-import os
-import sys
 
 import vrp  # noqa: F401  (import side effect: makes the vendored chirp importable)
-
-
-def parse_mode(argv: list[str], platform: str | None = None) -> str:
-    """Pick which front end to launch.
-
-    An explicit ``--webview`` or ``--native`` flag always wins. Otherwise the
-    default is the **native** UI on every platform: its ``AccessibleGrid``
-    channel grid (a ``wx.dataview.DataViewListCtrl``) is a real native table on
-    each OS (the native list view on Windows, NSTableView on macOS), so NVDA
-    *and* VoiceOver both read it. The webview UI remains available with
-    ``--webview``.
-    ``platform`` is accepted for tests/overrides but no longer changes the
-    default (it used to route macOS to the webview, before the grid migration).
-    """
-    if "--webview" in argv:
-        return "webview"
-    if "--native" in argv:
-        return "native"
-    return "native"
-
-
-# Opt-in local dev knob: point at an extracted WebView2 Fixed Version Runtime
-# folder to bypass the system Evergreen runtime. Must be set before any
-# wx.html2.WebView/AccessibleWebView is constructed. No-op unless set, so this
-# changes nothing for anyone who hasn't opted in. (Only matters for --webview.)
-_runtime_dir = os.environ.get("VRP_WEBVIEW2_RUNTIME_DIR")
-if _runtime_dir:
-    os.environ.setdefault("WEBVIEW2_BROWSER_EXECUTABLE_FOLDER", _runtime_dir)
 
 
 def main() -> None:
@@ -64,52 +29,12 @@ def main() -> None:
         action="store_true",
         help="Enable debug logging.",
     )
-    group = parser.add_mutually_exclusive_group()
-    group.add_argument(
-        "--webview",
-        action="store_true",
-        help="Force the AccessibleWebView UI (retained while the webview is retired).",
-    )
-    group.add_argument(
-        "--native",
-        action="store_true",
-        help=(
-            "Force the native UI (wx-accessible-grid AccessibleGrid, a native "
-            "DataViewListCtrl read by NVDA and VoiceOver; the default on every platform)."
-        ),
-    )
-    parser.add_argument(
-        "file",
-        nargs="?",
-        help="Optional radio image (.img) to open on launch.",
-    )
     args = parser.parse_args()
 
     logging.basicConfig(
         level=logging.DEBUG if args.debug else logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
-
-    if parse_mode(sys.argv[1:]) == "webview":
-        # The webview UI is retired as a channel-grid front end: it no longer
-        # imports cleanly against wx-accessible-grid 0.8.0 (which dropped the
-        # editable GridModel/ContextMenuItem API the webview grid used when the
-        # library went native — see CLAUDE.md). It's kept only for the planned
-        # in-app help/documentation role. Fail gracefully so --webview never
-        # crashes the app: warn and launch the native UI instead. (If app.py is
-        # later reworked to import again, --webview will launch it once more.)
-        try:
-            from vrp.app import run as run_webview
-        except ImportError as exc:
-            logging.warning(
-                "--webview is retired and currently unavailable as a channel "
-                "grid (%s); launching the native UI instead. The webview stack "
-                "is retained only for future in-app help/documentation.",
-                exc,
-            )
-        else:
-            run_webview(open_path=args.file)
-            return
 
     from vrp.native.app import run
 

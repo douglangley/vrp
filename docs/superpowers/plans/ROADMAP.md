@@ -69,17 +69,12 @@ New since 2026-06-28 (VRP-only enhancements, done — see PROGRESS_LOG):
 Platform follow-through:
 - ☐ macOS run-from-source smoke test (`run-mac.sh` + full suite) — flagged
   as unverified in PROGRESS_LOG "2026-06-21 — Per-OS run scripts".
-- ◐ Retire the webview channel-grid stack. The native UI is now the default on
-  every platform (PROGRESS_LOG "2026-06-25"), so this is unblocked in principle
-  — gated only on the owed VoiceOver hand pass on the native grid above. Plan:
-  - Decide the webview's future. The current direction is to **repurpose** the
-    `wx-accessible-webview` host for in-app **help/docs** rendering rather than
-    delete it outright; the channel-grid pieces (`AccessibleGrid`,
-    `vrp/channel_grid_model.py`, `vrp/views.py`, `templates/`, `static/`) are
-    what gets retired.
-  - **Partly done (2026-06-27, "graceful for now"):** deleted the dead webview
-    channel-grid files `vrp/channel_grid_model.py` and `tools/grid_preview.py`;
-    `main.py --webview` now fails over to the native UI (it no longer imports).
-    `vrp/app.py`, `vrp/views.py`, `templates/`, `static/` are kept for the
-    help/docs role. Still to do: strip the dead channel-grid code out of
-    `vrp/app.py` (or build the help/docs role), gated on the VoiceOver pass.
+- ☑ **Retire the webview UI — done (2026-06-29).** The whole webview stack was
+  removed: `vrp/app.py`, `vrp/views.py`, `vrp/html.py`, `templates/`, `static/`,
+  `tests/test_views.py`, the `--webview`/`--native` mode flags, and the
+  `wx-accessible-webview`, `wx-accessible-menubar`, and `jinja2` dependencies. On
+  inspection it wasn't a reusable "host" — it was a full alternate front end for
+  the editable channel grid (1,642-line `app.py` duplicating every command) and
+  it no longer even imported. If in-app **help/docs** want an HTML view later,
+  build a small purpose-made read-only `wx.html2.WebView` viewer (wxPython core,
+  no extra dependency) rather than reviving this. See PROGRESS_LOG "2026-06-29".

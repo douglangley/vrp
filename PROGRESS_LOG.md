@@ -6,6 +6,49 @@ architecture, keyboard map, and CHIRP feature-coverage checklist.
 
 ---
 
+## 2026-06-29 — Removed the retired webview UI
+
+The webview UI was already retired (not the default on any platform, and
+`--webview` failed over to native since it could no longer import against
+wx-accessible-grid 0.8.0). A full-source audit confirmed it was dead weight, so
+it was removed outright.
+
+**What was deleted:**
+- `vrp/app.py` (1,642 lines — a complete *second* copy of the whole app: every
+  command re-implemented through the JS bridge), `vrp/views.py`, `vrp/html.py`,
+  `tests/test_views.py`, `templates/` (welcome/channels/_row_macro), `static/`
+  (main.css + the empty Flask-era `js/`).
+- The `--webview`/`--native` mode flags and `parse_mode()` in `main.py` (one UI
+  now; `main.py` just launches the native UI with a `--debug` flag). The dead
+  positional `file` arg went too — native never honored it.
+- Dependencies `wx-accessible-webview`, `wx-accessible-menubar`, and `jinja2`
+  (jinja2 confirmed not used by CHIRP). `uv sync` uninstalled them + markupsafe.
+- `build.py`: the `--add-data static/templates` bundling and the now-unused
+  `_SEP` helper.
+
+**Why not keep it "for help/docs":** the documented plan was to *repurpose* the
+webview host for in-app help. But on inspection it isn't a reusable host — it's a
+broken full alternate front end for the editable channel grid, coupled to the old
+bridge/grid design, that doesn't even import. A help viewer needs almost none of
+it: a read-only `wx.html2.WebView` (wxPython core, **no extra dependency**) in a
+`wx.Frame`/`wx.Dialog` is ~50–150 lines and has neither the
+WebView2-swallows-Alt problem `wx-accessible-menubar` solves nor the
+editable-grid-re-read problem `wx-accessible-webview` solves. Decision: remove
+now; build a purpose-made viewer if/when help lands. (Recorded in
+`docs/superpowers/plans/ROADMAP.md`.)
+
+**Docs updated:** `CLAUDE.md`, `README.md`, `docs/architecture.md`,
+`docs/keyboard-map.md`, `ROADMAP.md`, the run scripts, and stale docstrings in
+`vrp/__init__.py`, `vrp/speech.py`, `vrp/native/__init__.py`,
+`vrp/native/main_window.py` — all rewritten native-only (with a short "history"
+note where useful). Attribution requirement unchanged (status-bar field 1 +
+About box).
+
+**Verified:** `uv run python -m pytest` → 176 passed (was 212; the ~36
+`test_views.py` cases went with the webview, and the 3 `parse_mode` entry tests
+became 2 launch tests). `main` + `vrp.native.*` import clean; no live references
+to the removed modules/deps remain.
+
 ## 2026-06-28 — Favorites/Download lists: list-view with type-ahead (was ListBox)
 
 The model list and the favorites list were `wx.ListBox`, which on Windows only

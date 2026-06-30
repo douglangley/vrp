@@ -4,16 +4,14 @@ REM  Run Versatile Radio Programmer from source (Windows). See run-mac.sh for
 REM  the macOS equivalent.
 REM
 REM  First run: clones the CHIRP library, downloads Python 3.11 + dependencies
-REM  via uv, then launches the app (the native UI by default on Windows).
-REM  Subsequent runs just launch (fast). Any arguments (e.g. --debug,
-REM  --webview) are passed through to main.py.
+REM  via uv, then launches the app. Subsequent runs just launch (fast). Any
+REM  arguments (e.g. --debug) are passed through to main.py.
 REM
 REM  Prerequisites (one-time):
 REM    - uv     ->  winget install --id=astral-sh.uv
 REM    - git    ->  https://git-scm.com/download/win  (Git for Windows)
-REM  The --webview UI (VoiceOver-oriented; macOS's default) needs the
-REM  WebView2 runtime, which ships with Windows 11 / Microsoft Edge; the
-REM  default native UI doesn't need it.
+REM  The UI is built entirely from native wx controls — no webview or browser,
+REM  so no WebView2 runtime is required.
 REM ===========================================================================
 setlocal
 cd /d "%~dp0"

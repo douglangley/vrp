@@ -68,11 +68,9 @@ def build(onefile: bool = True) -> int:
         # ---- lark (used by chirp.bitwise_grammar) — needs its .lark grammar files
         "--collect-data=lark",
 
-        # NOTE: the native UI (the default and only working front end) renders no
-        # HTML, so templates/ and static/ are intentionally NOT bundled. They are
-        # webview-only assets and the webview UI no longer imports (see main.py /
-        # CLAUDE.md). Re-add --add-data for them if the webview help/docs role is
-        # ever revived.
+        # NOTE: the native UI renders no HTML, so there are no templates/ or
+        # static/ assets to bundle (the webview UI that needed them was removed —
+        # see CLAUDE.md / PROGRESS_LOG.md "2026-06-29").
 
         # ---- Output locations (match the old Nuitka layout) ----
         "--distpath=dist",

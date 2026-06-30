@@ -4,10 +4,9 @@
 #  the Windows equivalent.
 #
 #  First run: clones the CHIRP library, downloads Python 3.11 + dependencies
-#  via uv, then launches the app (the webview UI by default on macOS, since
-#  VoiceOver reads its grid; pass --native to force the NVDA-oriented native
-#  UI instead). Subsequent runs just launch (fast). Any arguments (e.g.
-#  --debug, --native) are passed through to main.py.
+#  via uv, then launches the app (a native wx UI; VoiceOver reads its grid).
+#  Subsequent runs just launch (fast). Any arguments (e.g. --debug) are passed
+#  through to main.py.
 #
 #  Prerequisites (one-time):
 #    - uv   ->  curl -LsSf https://astral.sh/uv/install.sh | sh
