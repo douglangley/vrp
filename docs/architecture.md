@@ -117,6 +117,8 @@ main.py  (entry; launches the native UI)
 
 ## Packaging
 
-PyInstaller single-exe with CHIRP bundled (`build.py`); switched from Nuitka,
-which compiled all 552 CHIRP drivers to C and took 20–30 minutes per build
-(see PROGRESS_LOG.md "Phase 9"). See README "Packaging with PyInstaller".
+PyInstaller onedir build with CHIRP bundled (`build.py`), wrapped into a Windows
+installer with Inno Setup (`installer.iss`, via `build.py --installer`) — the way
+upstream CHIRP ships its own PyInstaller build. Switched from Nuitka, which
+compiled all 552 CHIRP drivers to C and took 20–30 minutes per build (see
+PROGRESS_LOG.md "Phase 9"). See README "Packaging with PyInstaller + Inno Setup".

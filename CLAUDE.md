@@ -255,16 +255,27 @@ double-click build wrapper (the old `build.bat` was removed because a tester
 ran it by mistake). To cut a release build:
 
 uv sync --extra build
-uv run python build.py
-Output: dist/<appname>.exe (Windows) or dist/<appname> (Linux)
+uv run python build.py --installer
+Output: dist/vrp/ (the app folder) + dist/vrp-<version>-setup.exe (the installer)
 
-Usually well under a minute (552 drivers bundled, not compiled — see "Notes"
-below).
+`build.py` defaults to **onedir** (a `dist/vrp/` folder), not onefile, because
+onefile re-extracts the whole interpreter + wxPython + 552 drivers to a temp dir
+on every launch (the slow cold start) and trips Defender/SmartScreen more often;
+onedir starts instantly. `--installer` then wraps that folder with **Inno Setup**
+(`installer.iss`) into a `dist/vrp-<version>-setup.exe` with a Start-menu shortcut
+and uninstaller — the way upstream CHIRP ships its own PyInstaller build. Use
+`python build.py --onefile` only for a quick throwaway single-exe test. The
+PyInstaller step is well under a minute (552 drivers bundled, not compiled — see
+"Notes" below). Inno Setup 6 is required for `--installer`
+(https://jrsoftware.org/isinfo.php); set `INNO_SETUP_ISCC` if `ISCC.exe` isn't
+found on PATH or in the default install dir.
 
 Notes:
 - Packager is **PyInstaller** (switched from Nuitka — compiling 552 CHIRP
   drivers to C took 20-30 min/build; PyInstaller just freezes bytecode).
-  See PROGRESS_LOG "Phase 9" for the original Nuitka debugging history.
+  Nuitka would compile the 552 dynamically-imported drivers with no size or
+  startup win for a wx GUI, so it stays retired. See PROGRESS_LOG "Phase 9" for
+  the original Nuitka debugging history.
 - `build.py` excludes `prism`/`win32more`/`numpy` (`--exclude-module`) —
   prism pulls in the entire win32more Windows-API surface; speech is opt-in
   and no-ops without it.

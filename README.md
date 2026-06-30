@@ -119,7 +119,7 @@ Windows (exposed to MSAA/UIA so **NVDA** reads it):
 - Radio settings editor, banks editor, and online query sources (AMSAT, SatNOGS;
   more sources are incremental)
 - High contrast and forced-colors (Windows High Contrast) support
-- Packages as a single self-contained .exe (Windows) via PyInstaller
+- Packages as a Windows installer (Inno Setup) wrapping a PyInstaller build
 
 ## Architecture
 
@@ -217,9 +217,9 @@ uv run python main.py
 # (optional) debug logging
 uv run python main.py --debug
 
-# Install build extras and compile to a single executable with PyInstaller
+# Install build extras and build the app folder + Windows installer
 uv sync --extra build
-uv run python build.py
+uv run python build.py --installer   # needs Inno Setup 6 for the installer
 ```
 
 When `--debug` is set, a download/upload to a radio writes a byte-level
@@ -232,10 +232,13 @@ radio that won't talk over the cable — attach it when reporting a
 download/upload problem. (It's gitignored.)
 
 The build bundles all 552 CHIRP drivers but, unlike the previous Nuitka-based
-build, doesn't compile them — it usually finishes in under a minute. (There is
-no double-click `build.bat` wrapper; building is a deliberate release step run
-with `uv run python build.py`. Testers and end users run from source via
-`run-win.bat` / `run-mac.sh`.)
+build, doesn't compile them — it usually finishes in under a minute. By default
+`build.py` produces a **onedir** `dist/vrp/` folder (instant startup — no
+per-launch self-extraction), and `--installer` then wraps it with **Inno Setup**
+into `dist/vrp-<version>-setup.exe` (Start-menu shortcut + uninstaller). Use
+`--onefile` only for a quick throwaway single-exe test. (There is no double-click
+`build.bat` wrapper; building is a deliberate release step. Testers and end users
+run from source via `run-win.bat` / `run-mac.sh`.)
 
 `build.py` excludes `prism`/`win32more`/`numpy` (prism pulls in the whole
 win32more Windows-API surface; speech is opt-in and no-ops without it), and
@@ -278,11 +281,27 @@ operations without any hardware. The test suite in `tests/` uses these.
 Run the suite with `uv sync --extra dev` then `uv run python -m pytest` (it's
 fast — about two seconds).
 
-## Packaging with PyInstaller
+## Packaging with PyInstaller + Inno Setup
 
 Target: Python 3.11, Windows x64 primary (Linux secondary).
 
-Build command is in `build.py`. Key flags required:
+The pipeline is two steps: PyInstaller freezes the app into a `dist/vrp/`
+**onedir** folder, then Inno Setup (`installer.iss`) wraps that folder into a
+`dist/vrp-<version>-setup.exe` installer. `build.py --installer` runs both. This
+mirrors how upstream CHIRP ships its own PyInstaller build (a real installer with
+a Start-menu shortcut and uninstaller, not a loose self-extracting `.exe`).
+
+Why onedir over onefile: onefile re-extracts the whole interpreter + wxPython +
+552 drivers to a temp dir on *every* launch (multi-second cold start) and is a
+frequent Defender/SmartScreen false-positive trigger; onedir launches instantly.
+UPX is deliberately not used — it barely shrinks a wx app and is itself an AV
+trigger. The installer (`--installer`) needs Inno Setup 6
+(https://jrsoftware.org/isinfo.php); `build.py` finds `ISCC.exe` on PATH or in
+the default install dir, or honors `INNO_SETUP_ISCC`. The installer's `AppId`
+GUID in `installer.iss` must stay stable across releases so upgrades replace the
+prior install instead of stacking side by side.
+
+Build command is in `build.py`. Key PyInstaller flags required:
 
 ```
 --windowed                       GUI app, no console window
@@ -303,7 +322,10 @@ no `static/`/`templates/` data dirs to bundle.
 Previously built with Nuitka (see PROGRESS_LOG.md "Phase 9"), which compiled
 all 552 CHIRP drivers to C and took 20–30 minutes per build. PyInstaller just
 freezes bytecode, so the same build finishes in well under a minute — switched
-for faster iteration.
+for faster iteration. Nuitka isn't worth revisiting: the 552 drivers are loaded
+by dynamic `__import__`, so it can't follow them without force-compiling all of
+them (back to the 20–30 min builds), and it yields no size or startup win for a
+wx GUI that idles on serial I/O.
 
 ## Attribution
 
