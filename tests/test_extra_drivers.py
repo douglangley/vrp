@@ -124,6 +124,32 @@ def test_kguv96m_set_memory_edit():
     assert r.get_memory(2).empty
 
 
+def test_kguv96m_tone_modes_roundtrip():
+    # CTCSS / TSQL / DTCS (incl. split polarity) must survive set->get. Uses the
+    # inherited KenwoodToneModel (dcs_base 0x4000, pol 0x2000) — same u16 field
+    # and scheme as the verified CTCSS decode.
+    r = _loaded_radio()
+
+    m = r.get_memory(1)
+    m.tmode = "Tone"; m.rtone = 88.5
+    r.set_memory(m)
+    g = r.get_memory(1)
+    assert g.tmode == "Tone" and g.rtone == 88.5
+
+    m = r.get_memory(1)
+    m.tmode = "TSQL"; m.ctone = 100.0
+    r.set_memory(m)
+    g = r.get_memory(1)
+    assert g.tmode == "TSQL" and g.ctone == 100.0
+
+    for dtcs, pol in [(23, "NN"), (754, "RR"), (23, "RN")]:
+        m = r.get_memory(1)
+        m.tmode = "DTCS"; m.dtcs = dtcs; m.dtcs_polarity = pol
+        r.set_memory(m)
+        g = r.get_memory(1)
+        assert g.tmode == "DTCS" and g.dtcs == dtcs and g.dtcs_polarity == pol
+
+
 def test_kguv96m_config_map_covers_channel_tables():
     # The write map must cover the channel, name and valid tables, or edits
     # would never reach the radio.
