@@ -45,3 +45,11 @@ logs/
 
 # Debug serial trace (written to CWD by main.py --debug during a clone)
 serial-trace.txt
+
+# Radio reverse-engineering artifacts: USB captures, CSV exports, and scratch
+# analysis files. These hold personal radio data (channels/call signs) and are
+# working files, not source — keep them local. (*.img already covered above.)
+*.pcap
+csv.txt
+_decoded.txt
+_usbpcap.pid

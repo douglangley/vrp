@@ -169,6 +169,11 @@ def build(onefile: bool) -> int:
         # ---- CHIRP library (drivers/sources loaded by dynamic import) ----
         "--collect-submodules=chirp.drivers",
         "--collect-submodules=chirp.sources",
+        # VRP's out-of-tree drivers are imported dynamically by
+        # chirp_backend.extra_drivers.register_all() (importlib.import_module),
+        # which PyInstaller's static analysis can't follow — collect explicitly
+        # so the packaged exe ships them (e.g. the Wouxun KG-UV96M driver).
+        "--collect-submodules=chirp_backend.extra_drivers",
         # NOTE: deliberately NOT --collect-data=chirp. CHIRP is an editable
         # install rooted at the repo, so --collect-data=chirp sweeps in the
         # whole working tree — .git/ (~3.8 MB), tests/ radio .img images

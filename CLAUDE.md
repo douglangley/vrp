@@ -98,6 +98,15 @@ obscure it. Any future help/docs page must carry it too.
                          (channel-edit undo/redo), bandplan (suggested repeater
                          offset + band defaults, by region), col_defs, bank_ops,
                          query, serial_trace
+  - extra_drivers/     — VRP-maintained out-of-tree CHIRP drivers for radios not
+                         yet supported upstream (can't live in ./chirp — it's
+                         vendored/re-cloned). `register_all()` (called by
+                         `radio._ensure_chirp` after `import_drivers()`) registers
+                         them, skipping any CHIRP already provides so an upstreamed
+                         driver wins and the local copy retires cleanly. Each
+                         module is a drop-in CHIRP driver (submit upstream as-is);
+                         PyInstaller needs `--collect-submodules` (in build.py).
+                         See extra_drivers/README.md. First one: Wouxun KG-UV96M.
 - tests/               — unit tests (no hardware needed)
 - tools/               — update_chirp.py (CHIRP version bump); throwaway spikes
 - build.py             — PyInstaller build script

@@ -46,6 +46,17 @@ def _ensure_chirp() -> None:
 
         from chirp import directory
         directory.import_drivers()
+
+        # Register VRP's own out-of-tree drivers for radios not (yet) supported
+        # upstream. These live in chirp_backend/extra_drivers/ (outside the
+        # vendored ./chirp tree, which is used unmodified). register_all()
+        # skips any driver CHIRP already provides, so an upstream-accepted
+        # driver wins and the local copy can be retired without a clash. Must
+        # run after import_drivers() so CHIRP's base classes are available.
+        from chirp_backend import extra_drivers
+        LOG.info("Registered VRP out-of-tree drivers: %s",
+                 extra_drivers.register_all() or "(none)")
+
         _chirp_loaded = True
         LOG.info("CHIRP drivers loaded successfully")
     except ImportError as e:

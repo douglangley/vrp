@@ -6,6 +6,56 @@ architecture, keyboard map, and CHIRP feature-coverage checklist.
 
 ---
 
+## 2026-07-02 — Wouxun KG-UV96M driver + out-of-tree driver framework
+
+Added support for the **Wouxun KG-UV96M** (sold by mtcradio.com), a radio CHIRP
+does not yet support, and built a reusable home for drivers like it that must
+outlive both CHIRP re-clones and eventual upstream acceptance.
+
+**Reverse-engineering.** Captured an RT Systems clone of the radio with USBPcap
+(`USBPcapCMD.exe -d \\.\USBPcap1 --devices 12`, no Wireshark/admin needed),
+decoded the FTDI USB-serial traffic, and reconstructed the radio image from the
+capture. Findings, all verified against a full read of the radio and an RT
+Systems CSV export (74 programmed channels):
+- The KG-UV96M speaks the **kg935g** clone protocol (`0x7c` framing, `0x57`
+  running-XOR, 8-bit checksum, `CMD_RD` 64-byte block reads) — but at **9600
+  baud** (kg935g is 19200), and it does **not** answer `CMD_ID` (identify by
+  reading the model block at `0x0480`). VRP's original timeout was purely the
+  baud mismatch: it sent kg935g's `CMD_ID` at 19200 into a radio listening at
+  9600.
+- Memory is **little-endian** (kg935g is big-endian), **400 channels**, with
+  channel records at `0x05f0` (16-byte stride), names at `0x1f0c` (12-byte
+  stride, 8-char), and a valid table at `0x3200 + N` (`0x9E` used / `0x00`
+  empty — `0x9E` is kg935g's `MEM_VALID`).
+
+**Driver.** `chirp_backend/extra_drivers/kguv96m.py` — `KGUV96MRadio`
+subclasses `kg935g.KG935GRadio` to reuse its transport and tone model, and
+overrides the memory format (LE), identify (model-block, retries the first
+transaction the radio sometimes drops), a clean per-block-retrying `_download`
+(exactly 32768 bytes), `get_features` (bounds 1–400), and `get_memory`.
+Read-only for now: `set_memory`/`sync_out` raise, since the writable-region map
+isn't reverse-engineered yet. Every channel field (freq/name/duplex/offset/mode/
+tone-mode/CTCSS/power) matches the CSV; a live download through the registered
+driver produced a clean image byte-identical to a raw read.
+
+**Out-of-tree driver framework.** `chirp_backend/extra_drivers/` is a staging
+area for CHIRP drivers not yet upstream (they can't live in `./chirp`, which is
+vendored and re-cloned to `CHIRP_COMMIT`). `register_all()` — called by
+`radio._ensure_chirp` right after `directory.import_drivers()` — registers each
+driver **unless CHIRP already provides its id**, so an upstream-accepted driver
+wins and the local copy retires with no "Duplicate radio driver id" crash and no
+code change. Each module keeps the standard `@directory.register`, so it's a
+drop-in upstream PR. `build.py` gains
+`--collect-submodules=chirp_backend.extra_drivers` (the dynamic import is
+invisible to PyInstaller, so the packaged exe would otherwise drop the driver).
+Process doc: `chirp_backend/extra_drivers/README.md`. Tests:
+`tests/test_extra_drivers.py` (registration, id-match guard, idempotent
+skip-if-upstream, synthetic-image decode, upload-blocked). Full suite: 182 pass.
+
+**Next:** try Radio ▸ Download in the app with NVDA; map radio-wide settings +
+DTCS; reverse-engineer the upload/write path; submit the driver upstream to
+CHIRP.
+
 ## 2026-06-29 — Build enforces the CHIRP pin before packaging
 
 `build.py` now runs `ensure_chirp_on_pin()` before every build. It verifies that
