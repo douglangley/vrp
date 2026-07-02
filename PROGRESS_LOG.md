@@ -6,6 +6,27 @@ architecture, keyboard map, and CHIRP feature-coverage checklist.
 
 ---
 
+## 2026-07-02 — KG-UV96M upload/write (channel memory), hardware-verified
+
+Added and verified channel **write** support to the KG-UV96M driver. Captured an
+RT Systems *upload* with USBPcap and decoded the `CMD_WR` (0x83) frames to get
+the exact write map — folded into a 15-region `_CONFIG_MAP` (channels `0x05e0`
+×100, names `0x1f00` ×75, valid `0x3200` region, + settings), matching the OEM
+tool's addresses/block-sizes/order verbatim so reserved regions are never
+touched. `set_memory` writes the LE record; offline it produces channel records
+**byte-identical** to RT's captured writes and round-trips (get→set on all 400
+channels) with **zero drift** (after matching the radio's "TX off" = `0x00000000`
+convention rather than kg935g's `0xFFFFFFFF`). `_do_upload` walks the config map
+with per-block ACK + retry; `sync_out` does identify → upload → `CMD_END`.
+
+Hardware verified on COM4: (1) no-op round-trip upload (write the radio its own
+image) → re-download 0 diffs; (2) reversible edit — program empty ch200 =
+146.520/"VRPTEST", upload, re-download → ch200 correct and **0 other-channel
+bytes changed**, then restored the original image → radio back to exactly its
+original state. Tests in `tests/test_extra_drivers.py` (set_memory round-trip
+no-drift, edit, config-map coverage). Radio-wide settings still unmapped
+(`has_settings=False`); channel memory only.
+
 ## 2026-07-02 — Wouxun KG-UV96M driver + out-of-tree driver framework
 
 Added support for the **Wouxun KG-UV96M** (sold by mtcradio.com), a radio CHIRP

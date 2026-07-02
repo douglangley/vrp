@@ -10,6 +10,7 @@ import pytest
 
 from chirp import directory
 from chirp_backend import extra_drivers
+from chirp_backend.extra_drivers import kguv96m
 from chirp_backend import radio as radio_backend
 
 
@@ -67,7 +68,8 @@ def _synthetic_image(freq_hz=146520000, name="TEST"):
     # name @ 0x1f0c
     nm = name.encode("ascii")[:8].ljust(12, b"\x00")
     img[0x1f0c:0x1f0c + 12] = nm
-    # valid flag @ 0x3200 + 1
+    # valid table @ 0x3200 + N: empty slots are 0x00 (radio convention), ch1 used
+    img[0x3200:0x3200 + 401] = b"\x00" * 401
     img[0x3200 + 1] = 0x9E  # MEM_VALID
     return bytes(img)
 
@@ -91,9 +93,44 @@ def test_kguv96m_decode_synthetic():
     assert r.get_memory(2).empty
 
 
-def test_kguv96m_upload_blocked():
-    from chirp import errors
+def _loaded_radio(freq_hz=146520000, name="TEST"):
+    from chirp import memmap
     cls = _get_kguv96m_class()
     r = cls(None)
-    with pytest.raises(errors.RadioError):
-        r.sync_out()
+    r._mmap = memmap.MemoryMapBytes(_synthetic_image(freq_hz, name))
+    r.process_mmap()
+    return r
+
+
+def test_kguv96m_set_memory_roundtrip_no_drift():
+    # Reading a channel and writing it straight back must not change any byte.
+    r = _loaded_radio()
+    before = bytes(r.get_mmap().get_packed())
+    for n in range(1, 401):
+        r.set_memory(r.get_memory(n))
+    assert bytes(r.get_mmap().get_packed()) == before
+
+
+def test_kguv96m_set_memory_edit():
+    r = _loaded_radio()
+    m = r.get_memory(1)
+    m.name = "HELLO"
+    m.freq = 145170000
+    r.set_memory(m)
+    m2 = r.get_memory(1)
+    assert m2.name == "HELLO"
+    assert m2.freq == 145170000
+    # channel 2 (empty) untouched
+    assert r.get_memory(2).empty
+
+
+def test_kguv96m_config_map_covers_channel_tables():
+    # The write map must cover the channel, name and valid tables, or edits
+    # would never reach the radio.
+    covered = set()
+    for start, blk, cnt in kguv96m._CONFIG_MAP:
+        covered.update(range(start, start + blk * cnt))
+    # channel array 0x05e0..0x1edf, names 0x1f00..0x31bf, valid 0x3200..0x3390
+    assert set(range(0x05e0, 0x1ee0)) <= covered
+    assert set(range(0x1f00, 0x31c0)) <= covered
+    assert set(range(0x3200, 0x3391)) <= covered

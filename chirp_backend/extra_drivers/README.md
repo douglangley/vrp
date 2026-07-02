@@ -38,7 +38,7 @@ then delete the local module at your leisure (see "Retiring").
 
 | Module | Radio | id | Status |
 |--------|-------|----|--------|
-| `kguv96m.py` | Wouxun KG-UV96M | `Wouxun_KG-UV96M` | read-only; upload not yet mapped |
+| `kguv96m.py` | Wouxun KG-UV96M | `Wouxun_KG-UV96M` | read + channel write (hardware-verified); radio-wide settings not yet mapped |
 
 ## Adding a driver
 

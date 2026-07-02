@@ -19,11 +19,14 @@ ways:
 
 This subclasses ``KG935GRadio`` for the transport (encrypt/decrypt/
 ``_read_record``/``_write_record``) and tone model, and overrides the memory
-format, identify, download, features and decode.
+format, identify, download, upload, features and decode.
 
-Upload is intentionally not yet enabled: the writable-region map has not been
-reverse-engineered, so ``set_memory``/``sync_out`` raise rather than risk
-writing bad data to the radio.
+Read and channel write/upload are both supported and verified against real
+hardware (no-op round-trip + a reversible single-channel edit). The upload
+``_CONFIG_MAP`` (which regions to write, and block sizes) was captured verbatim
+from an RT Systems upload, and ``set_memory`` produces byte-identical channel
+records to the OEM software. Radio-wide *settings* are not yet mapped
+(``has_settings = False``); only channel memory is editable.
 """
 import logging
 import struct
@@ -37,6 +40,29 @@ LOG = logging.getLogger(__name__)
 MEM_VALID = kg935g.MEM_VALID  # 0x9E
 _MEM_SIZE = 0x8000
 _BLOCK = 64
+
+# Which regions to write on upload, and in what block sizes -- captured
+# verbatim from an RT Systems upload (CMD_WR frames). Each tuple is
+# (start, blocksize, count); ragged tail blocks are their own single-count
+# region. We write EXACTLY the regions/sizes the OEM tool writes and nothing
+# else, so reserved/read-only areas the radio doesn't accept are never touched.
+_CONFIG_MAP = (
+    (0x0420, 64, 3),    # header / settings
+    (0x0540, 32, 1),
+    (0x05e0, 64, 100),  # channel memory (400 x 16 = 6400 bytes)
+    (0x1ee0, 16, 1),
+    (0x1f00, 64, 75),   # channel names (400 x 12 = 4800 bytes)
+    (0x31c0, 12, 1),
+    (0x3200, 64, 6),    # valid table (0x3200..0x337f)
+    (0x3380, 17, 1),    # valid table tail (..0x3390)
+    (0x3700, 40, 1),    # settings
+    (0x3400, 64, 1),
+    (0x3440, 62, 1),
+    (0x3500, 64, 3),
+    (0x35c0, 60, 1),
+    (0x04e0, 64, 1),    # header regions RT writes last
+    (0x0525, 32, 1),
+)
 
 # Little-endian version of kg935g's per-channel record, at KG-UV96M addresses.
 # Slot 0 is unused (1-based channels), matching kg935g.
@@ -226,11 +252,95 @@ class KGUV96MRadio(kg935g.KG935GRadio):
         # per-channel "extra" settings not yet mapped for this model
         return
 
-    # -- upload: not yet supported ------------------------------------------
+    # -- write / upload ------------------------------------------------------
+    def _set_power(self, mem):
+        try:
+            return self.POWER_LEVELS.index(mem.power)
+        except ValueError:
+            return len(self.POWER_LEVELS) - 1  # default High
+
     def set_memory(self, mem):
-        raise errors.RadioError(
-            "Upload to the KG-UV96M is not yet supported by this driver.")
+        """Write one channel back into the image.
+
+        Only the fields this driver understands are modified; every other byte
+        of the 16-byte record is left exactly as it was read from the radio, so
+        an unedited channel round-trips byte-for-byte and we never write a value
+        we haven't verified. A genuinely new (previously empty) slot is wiped to
+        zero first to avoid ghost/factory bytes.
+        """
+        number = mem.number
+        _mem = self._memobj.memory[number]
+        _nam = self._memobj.names[number]
+
+        if mem.empty:
+            self._memobj.valid[number] = 0x00
+            return
+
+        was_empty = int(self._memobj.valid[number]) != MEM_VALID
+        if was_empty:
+            _mem.fill_raw(b"\x00")
+            _nam.fill_raw(b"\x00")
+
+        _mem.rxfreq = mem.freq // 10
+        if mem.duplex == "off":
+            # The radio stores "TX off" as 0x00000000 (observed on the airband
+            # RX-only channel), not kg935g's 0xFFFFFFFF; match the radio.
+            _mem.txfreq = 0
+        elif mem.duplex == "split":
+            _mem.txfreq = mem.offset // 10
+        elif mem.duplex == "+":
+            _mem.txfreq = (mem.freq + mem.offset) // 10
+        elif mem.duplex == "-":
+            _mem.txfreq = (mem.freq - mem.offset) // 10
+        else:
+            _mem.txfreq = mem.freq // 10
+
+        self.tone_model.set_tone(mem, _mem)
+        _mem.iswide = 1 if mem.mode == "FM" else 0
+        _mem.scan_add = 0 if mem.skip == "S" else 1
+        if mem.power is not None:
+            _mem.power = self._set_power(mem)
+
+        for i in range(len(_nam.name)):
+            _nam.name[i] = ord(mem.name[i]) if i < len(mem.name) else 0x00
+
+        self._memobj.valid[number] = MEM_VALID
+
+    def _do_upload(self):
+        mmap = self.get_mmap()
+        total = sum(bs * cnt for _, bs, cnt in _CONFIG_MAP)
+        done = 0
+        for start, blocksize, count in _CONFIG_MAP:
+            for addr in range(start, start + blocksize * count, blocksize):
+                chunk = bytes(mmap[addr:addr + blocksize])
+                for attempt in range(4):
+                    self._write_record(
+                        kg935g.CMD_WR, struct.pack(">H", addr) + chunk)
+                    try:
+                        cserr, ack = self._read_record()
+                    except errors.RadioNoResponse:
+                        time.sleep(0.05)
+                        continue
+                    if not cserr and len(ack) >= 2 and \
+                            struct.unpack(">H", ack[0:2])[0] == addr:
+                        break
+                else:
+                    raise errors.RadioError(
+                        "Radio did not ack write block 0x%04x" % addr)
+                done += blocksize
+                if self.status_fn:
+                    status = chirp_common.Status()
+                    status.cur = done
+                    status.max = total
+                    status.msg = "Cloning to radio"
+                    self.status_fn(status)
+        self._finish()  # CMD_END (0x81)
 
     def sync_out(self):
-        raise errors.RadioError(
-            "Upload to the KG-UV96M is not yet supported by this driver.")
+        try:
+            self._identify()
+            self._do_upload()
+        except errors.RadioError:
+            raise
+        except Exception as e:  # noqa: BLE001
+            raise errors.RadioError("Failed to upload to radio: %s" % e)
