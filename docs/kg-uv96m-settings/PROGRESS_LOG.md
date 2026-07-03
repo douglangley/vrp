@@ -10,6 +10,92 @@ any combo you mapped.
 
 ---
 
+## 2026-07-02 — Clarifying encodings/option lists for the 8 mapped settings
+
+Confirmed encodings (address, type, meaning) from NVDA-read option lists:
+
+- **`0x0423` Time-Out Timer** — `u8`, value **1–60**, seconds = value × 15
+  (15 s … 900 s, 15 s steps; no "Off"). e.g. 60 s → `0x04`, 165 s → `0x0b`.
+
+- **`0x042b` Backlight Time** — `u8`, index over list **On, 1 s … 20 s, Off**:
+  `0` = On (always), `1`–`20` = seconds, `21` = Off. (10 s → `0x0a`, 4 s →
+  `0x04`; On=0 / Off=21 inferred from list order, confirm by capture if desired.)
+
+- **`0x042c` Brightness (Active)** — `u8`, **1–10** literal (min 1 … max 10).
+
+- **`0x042d` Brightness (Standby)** — `u8`, **`0` = Off**, `1`–`10` = level
+  (list: Off, 1 … 10). Differs from Active (no Off there).
+
+- **`0x047b` Squelch** — `u8`, **0–9** literal.
+
+- **`0x0474` Work Channel B** — `ul16` LE, value = **channel number 1–400**
+  (CH-001 … CH-400). (Work Channel A is the sibling at `0x0476`, same encoding —
+  verify in a settings pass.)
+
+- **`0x049b` Startup Message** — **16-char ASCII**, space-padded
+  (`0x049b`–`0x04aa`). Max length 16 confirmed in RT.
+
+- **`0x04af` Area Message** — **8-char ASCII**, space-padded
+  (`0x04af`–`0x04b6`). Max length 8 confirmed in RT.
+
+All 8 originally-mapped settings are now fully specified (address + type + option
+list/range).
+
+**+3 more mapped** by matching option-list index deltas against the base↔changed
+diff (unique matches):
+- **`0x0431` PTT-ID Delay** — `u8`, `ms = value × 100` (100 … 3000 ms).
+- **`0x0437` Auto Lock** — `u8`, index over `[Off, 10, 20, 30, 40, 50, 60 s]`.
+- **`0x0479` Step** — `u8`, index over
+  `[2.5, 5, 6.25, 8.33, 10, 12.5, 25, 50, 100, 1000 K]`.
+- **`0x0476` Work Channel A** — `ul16` LE, channel 1–400 (sibling of `0x0474`).
+
+**12 settings now have addresses** (the 8 above + these 4). Ready to implement.
+
+### Encodings known, ADDRESS still TBD (need targeted single-setting diffs)
+
+The one 39-setting pass moved these to non-unique byte values, so their address
+is one of a candidate cluster. Change ONE at a time (or a few to distinct values),
+`read_image.py` + `diff_images.py`, to pin each. Option lists / encodings:
+
+- Checkboxes (`1`=checked/`0`): **Beep, Battery Save, LED (Standby), Voice
+  Guide, Menu Enable** — candidate addrs `0x0420, 0x0421, 0x0428, 0x0429,
+  0x042e` (all went 1→0; assignment unknown).
+- Checkboxes (`0`→`1` in the pass): **Wx Mode, Wx Alert, Scan Detect, RPT Tone**.
+- Enums (0-based index into their list):
+  - **Battery Indicator** `[Icon, Voltage, Percent]`
+  - **Lock Mode** `[Key, Key+PTT, Key+ENC]`
+  - **Priority Scan** `[Off, RX Off, Always On]`
+  - **PTT-ID** `[Off, BOT, EOT]`
+  - **Roger** `[Off, BOT, EOT, Both]`
+  - **Scan Mode** `[TO, CO, SE]`
+  - **Startup Display** `[MSG, Batt-V]`
+  - **Tone Burst** `[1750, 2100, 1000, 1450 Hz]`
+  - **Tone Save** `[RX, TX, RX & TX]` (verify — the `0→2` cluster is over-subscribed,
+    so one of these enums has an unexpected encoding/base)
+  - **VOX** `[Off, 1 Level … 10 Level]`
+  - **VOX Delay** `[Off, 1 … 5 s]`
+  - **Ring Time** `[Off, 1 … 10 s]`  (candidate `0x0424` / `0x0435`)
+  - **TOT Pre-Alert** `[Off, 1 … 10 s]`  (candidate `0x0424` / `0x0435`)
+  - **Work Mode A / B** (options not captured — VFO / CH Num / CH Name …)
+  - **Wx Notification** (options not captured)
+- **Priority Channel** — `ul16` 1–400 (candidate `0x0426` / `0x0439` / `0x0472`).
+- **Wx Frequency** — weather channel (option list not captured).
+
+### IMPLEMENTED — the 12 mapped settings are now editable in VRP
+
+Added a `settings` region to `_MEM_FORMAT_96M` and `get_settings`/`set_settings`
+to `kguv96m.py`, `has_settings = True`. Groups: Basic (squelch, time-out timer,
+PTT-ID delay, auto-lock, step, work channel A/B), Display (backlight, brightness
+active/standby), Messages (startup 16-char, area 8-char). Encodings per the map
+above; `_set_str` space-pads to match RT; strings use `autopad=False`. Verified:
+`get_settings` reads the baseline image to the exact NVDA-captured values;
+`set_settings` writes only the mapped bytes; VRP backend reports `has_settings`
++ 12 settings in 3 groups. Tests: `test_kguv96m_settings_roundtrip`,
+`test_kguv96m_settings_addresses`. Full suite 187 pass.
+
+Next: targeted single-setting diff passes to map + add the remaining ~24
+(candidate clusters + encodings listed above).
+
 ## 2026-07-02 — Project set up; settings struct located; 8 settings mapped
 
 Kicked off as a sub-project so others can help add settings. The channel driver

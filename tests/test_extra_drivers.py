@@ -71,6 +71,19 @@ def _synthetic_image(freq_hz=146520000, name="TEST"):
     # valid table @ 0x3200 + N: empty slots are 0x00 (radio convention), ch1 used
     img[0x3200:0x3200 + 401] = b"\x00" * 401
     img[0x3200 + 1] = 0x9E  # MEM_VALID
+    # radio-wide settings region with sane defaults
+    img[0x0423] = 4          # time_out_timer -> 60 s
+    img[0x042b] = 10         # backlight_time -> 10 s
+    img[0x042c] = 8          # brightness active
+    img[0x042d] = 1          # brightness standby
+    img[0x0431] = 3          # ptt_id_delay -> 300 ms
+    img[0x0437] = 0          # auto_lock -> Off
+    struct.pack_into("<H", img, 0x0474, 2)   # work channel B
+    struct.pack_into("<H", img, 0x0476, 1)   # work channel A
+    img[0x0479] = 6          # step -> 25K
+    img[0x047b] = 5          # squelch
+    img[0x049b:0x049b + 16] = b"TEST".ljust(16, b" ")
+    img[0x04af:0x04af + 8] = b"AREA".ljust(8, b" ")
     return bytes(img)
 
 
@@ -148,6 +161,61 @@ def test_kguv96m_tone_modes_roundtrip():
         r.set_memory(m)
         g = r.get_memory(1)
         assert g.tmode == "DTCS" and g.dtcs == dtcs and g.dtcs_polarity == pol
+
+
+def test_kguv96m_settings_roundtrip():
+    from chirp.settings import RadioSetting
+    r = _loaded_radio()
+    r.get_features().has_settings  # ensure enabled path
+
+    # edit a representative spread of settings
+    settings = r.get_settings()
+    edits = {"squelch": "3", "time_out_timer": "300 seconds",
+             "step": "12.5K", "auto_lock": "30 seconds",
+             "backlight_time": "Off", "brightness_active": 7,
+             "work_channel_b": 250, "startup_message": "HELLO"}
+    for group in settings:
+        for s in group:
+            if isinstance(s, RadioSetting) and s.get_name() in edits:
+                s.value = edits[s.get_name()]
+    r.set_settings(settings)
+
+    # read back and confirm the values stuck
+    got = {}
+    for group in r.get_settings():
+        for s in group:
+            if isinstance(s, RadioSetting):
+                got[s.get_name()] = str(s.value)
+    assert got["squelch"] == "3"
+    assert got["time_out_timer"] == "300 seconds"
+    assert got["step"] == "12.5K"
+    assert got["auto_lock"] == "30 seconds"
+    assert got["backlight_time"] == "Off"
+    assert got["brightness_active"] == "7"
+    assert got["work_channel_b"] == "250"
+    assert got["startup_message"] == "HELLO"
+
+    # a setting we did NOT touch must survive unchanged
+    assert got["brightness_standby"] == "1"  # synthetic image default
+
+
+def test_kguv96m_settings_addresses():
+    # get_settings must read the exact mapped bytes.
+    import struct
+    r = _loaded_radio()
+    img = bytearray(r.get_mmap().get_packed())
+    img[0x047b] = 7          # squelch
+    img[0x0423] = 3          # TOT: 3 -> 45 seconds
+    struct.pack_into("<H", img, 0x0474, 321)   # work channel B
+    from chirp import memmap
+    r._mmap = memmap.MemoryMapBytes(bytes(img))
+    r.process_mmap()
+    got = {s.get_name(): str(s.value)
+           for g in r.get_settings() for s in g
+           if hasattr(s, "get_name")}
+    assert got["squelch"] == "7"
+    assert got["time_out_timer"] == "45 seconds"
+    assert got["work_channel_b"] == "321"
 
 
 def test_kguv96m_config_map_covers_channel_tables():

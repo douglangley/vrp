@@ -36,10 +36,26 @@ import time
 
 from chirp import bitwise, chirp_common, directory, errors, memmap
 from chirp.drivers import kg935g
+from chirp.settings import (RadioSettings, RadioSettingGroup, RadioSetting,
+                            RadioSettingValueInteger, RadioSettingValueList,
+                            RadioSettingValueString)
 
 LOG = logging.getLogger(__name__)
 
 MEM_VALID = kg935g.MEM_VALID  # 0x9E
+
+# --- radio-wide settings option lists (see docs/kg-uv96m-settings/) ----------
+# For _TOT / _PTT_DELAY the stored byte is (index + 1); for the others it is the
+# list index directly.
+_TOT_OPTS = ["%d seconds" % (v * 15) for v in range(1, 61)]        # 15..900 s
+_PTT_DELAY_OPTS = ["%d ms" % (v * 100) for v in range(1, 31)]      # 100..3000
+_BACKLIGHT_OPTS = (["On"] + ["%d seconds" % v for v in range(1, 21)]
+                   + ["Off"])                                       # idx: On=0..Off=21
+_AUTOLOCK_OPTS = ["Off", "10 seconds", "20 seconds", "30 seconds",
+                  "40 seconds", "50 seconds", "60 seconds"]
+_STEP_OPTS = ["2.5K", "5K", "6.25K", "8.33K", "10K", "12.5K",
+              "25K", "50K", "100K", "1000K"]
+_BRT_STANDBY_OPTS = ["Off"] + [str(v) for v in range(1, 11)]       # Off=0, 1..10
 _MEM_SIZE = 0x8000
 _BLOCK = 64
 
@@ -95,6 +111,29 @@ struct {
 
 #seekto 0x3200;
 u8 valid[401];
+
+// --- radio-wide settings (mapped so far; addresses verified by diff) ---
+#seekto 0x0423;
+u8 time_out_timer;      // value x 15 seconds (1..60)
+#seekto 0x042b;
+u8 backlight_time;      // 0=On, 1..20=seconds, 21=Off
+u8 brightness_active;   // 1..10
+u8 brightness_standby;  // 0=Off, 1..10
+#seekto 0x0431;
+u8 ptt_id_delay;        // value x 100 ms (1..30)
+#seekto 0x0437;
+u8 auto_lock;           // index into _AUTOLOCK_OPTS
+#seekto 0x0474;
+ul16 work_channel_b;    // channel 1..400
+ul16 work_channel_a;    // channel 1..400
+#seekto 0x0479;
+u8 step;                // index into _STEP_OPTS
+#seekto 0x047b;
+u8 squelch;             // 0..9
+#seekto 0x049b;
+u8 startup_message[16]; // ASCII, space-padded
+#seekto 0x04af;
+u8 area_message[8];     // ASCII, space-padded
 """
 
 
@@ -194,7 +233,7 @@ class KGUV96MRadio(kg935g.KG935GRadio):
     # -- features / decode ---------------------------------------------------
     def get_features(self):
         rf = chirp_common.RadioFeatures()
-        rf.has_settings = False   # radio-wide settings not yet mapped
+        rf.has_settings = True    # 12 settings mapped (see get_settings)
         rf.has_ctone = True
         rf.has_rx_dtcs = True
         rf.has_cross = True
@@ -355,3 +394,105 @@ class KGUV96MRadio(kg935g.KG935GRadio):
             raise
         except Exception as e:  # noqa: BLE001
             raise errors.RadioError("Failed to upload to radio: %s" % e)
+
+    # -- radio-wide settings (the 12 mapped so far) --------------------------
+    @staticmethod
+    def _get_str(field):
+        s = ""
+        for b in field:
+            b = int(b)
+            if b in (0x00, 0xFF):   # NUL or uninitialized -> end of string
+                break
+            s += chr(b) if 32 <= b < 127 else ""
+        return s.rstrip()
+
+    @staticmethod
+    def _set_str(field, value, length):
+        for i in range(length):
+            field[i] = ord(value[i]) if i < len(value) else 0x20  # space-pad
+
+    @staticmethod
+    def _clamp(v, lo, hi):
+        return max(lo, min(hi, v))
+
+    def get_settings(self):
+        m = self._memobj
+
+        def add_list(group, name, label, opts, idx):
+            idx = idx if 0 <= idx < len(opts) else 0
+            group.append(RadioSetting(
+                name, label, RadioSettingValueList(opts, current_index=idx)))
+
+        basic = RadioSettingGroup("basic", "Basic")
+        add_list(basic, "squelch", "Squelch",
+                 [str(i) for i in range(10)], self._clamp(int(m.squelch), 0, 9))
+        add_list(basic, "time_out_timer", "Time-Out Timer",
+                 _TOT_OPTS, int(m.time_out_timer) - 1)
+        add_list(basic, "ptt_id_delay", "PTT-ID Delay",
+                 _PTT_DELAY_OPTS, int(m.ptt_id_delay) - 1)
+        add_list(basic, "auto_lock", "Auto Keypad Lock",
+                 _AUTOLOCK_OPTS, int(m.auto_lock))
+        add_list(basic, "step", "Tuning Step", _STEP_OPTS, int(m.step))
+        basic.append(RadioSetting(
+            "work_channel_a", "Work Channel A",
+            RadioSettingValueInteger(
+                1, 400, self._clamp(int(m.work_channel_a), 1, 400))))
+        basic.append(RadioSetting(
+            "work_channel_b", "Work Channel B",
+            RadioSettingValueInteger(
+                1, 400, self._clamp(int(m.work_channel_b), 1, 400))))
+
+        display = RadioSettingGroup("display", "Display")
+        add_list(display, "backlight_time", "Backlight Time",
+                 _BACKLIGHT_OPTS, int(m.backlight_time))
+        display.append(RadioSetting(
+            "brightness_active", "Brightness (Active)",
+            RadioSettingValueInteger(
+                1, 10, self._clamp(int(m.brightness_active), 1, 10))))
+        add_list(display, "brightness_standby", "Brightness (Standby)",
+                 _BRT_STANDBY_OPTS, int(m.brightness_standby))
+
+        messages = RadioSettingGroup("messages", "Messages")
+        messages.append(RadioSetting(
+            "startup_message", "Startup Message (max 16)",
+            RadioSettingValueString(0, 16, self._get_str(m.startup_message),
+                                    autopad=False)))
+        messages.append(RadioSetting(
+            "area_message", "Area Message (max 8)",
+            RadioSettingValueString(0, 8, self._get_str(m.area_message),
+                                    autopad=False)))
+
+        return RadioSettings(basic, display, messages)
+
+    def set_settings(self, settings):
+        m = self._memobj
+        for element in settings:
+            if not isinstance(element, RadioSetting):
+                self.set_settings(element)
+                continue
+            name = element.get_name()
+            val = element.value
+            if name == "squelch":
+                m.squelch = int(str(val))
+            elif name == "time_out_timer":
+                m.time_out_timer = _TOT_OPTS.index(str(val)) + 1
+            elif name == "ptt_id_delay":
+                m.ptt_id_delay = _PTT_DELAY_OPTS.index(str(val)) + 1
+            elif name == "auto_lock":
+                m.auto_lock = _AUTOLOCK_OPTS.index(str(val))
+            elif name == "step":
+                m.step = _STEP_OPTS.index(str(val))
+            elif name == "work_channel_a":
+                m.work_channel_a = int(val)
+            elif name == "work_channel_b":
+                m.work_channel_b = int(val)
+            elif name == "backlight_time":
+                m.backlight_time = _BACKLIGHT_OPTS.index(str(val))
+            elif name == "brightness_active":
+                m.brightness_active = int(val)
+            elif name == "brightness_standby":
+                m.brightness_standby = _BRT_STANDBY_OPTS.index(str(val))
+            elif name == "startup_message":
+                self._set_str(m.startup_message, str(val), 16)
+            elif name == "area_message":
+                self._set_str(m.area_message, str(val), 8)
