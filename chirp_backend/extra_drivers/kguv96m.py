@@ -9,8 +9,10 @@ The KG-UV96M uses the same clone protocol as the Wouxun KG-935G family
 ways:
 
   1. Serial baud is 9600 (kg935g is 19200).
-  2. It does NOT answer ``CMD_ID`` (``0x80``) -- identify by reading the model
-     block at ``0x0480`` instead of the handshake.
+  2. It does NOT answer ``CMD_ID`` (``0x80``) -- identify by reading the
+     immutable factory info block at ``0x0340`` (``WOUXUN``) instead of the
+     handshake. (Not the model name at ``0x049b`` -- that is the user-editable
+     Startup Message.)
   3. Multi-byte integers are little-endian (kg935g is big-endian).
   4. 400 channels, with channel/name/valid tables at KG-UV96M-specific
      addresses (channels ``0x05e0 + N*16``, names ``0x1f00 + N*12``, valid
@@ -111,36 +113,45 @@ class KGUV96MRadio(kg935g.KG935GRadio):
 
     @classmethod
     def match_model(cls, filedata, filename):
-        # The model block at 0x049b holds the ASCII model name.
-        return len(filedata) >= 0x04a3 and \
-            filedata[0x049b:0x04a3] == b"KG-UV96M"
+        # Identify by the IMMUTABLE factory info block at 0x0340 (WOUXUN /
+        # QuanZhou), which lives below the write map (0x0420) so nothing ever
+        # overwrites it. The model name at 0x049b is the user-editable Startup
+        # Message and must NOT be relied on (a user can rename it).
+        return (len(filedata) >= 0x0360
+                and filedata[0x0340:0x0346] == b"WOUXUN"
+                and filedata[0x0358:0x0360] == b"QuanZhou")
 
     def process_mmap(self):
         self._memobj = bitwise.parse(_MEM_FORMAT_96M, self._mmap)
 
     # -- transport -----------------------------------------------------------
     def _identify(self):
-        """KG-UV96M has no CMD_ID handshake; identify by reading the model
-        block at 0x0480 (contains the ASCII 'KG-UV96M').
+        """KG-UV96M has no CMD_ID handshake; identify by reading the immutable
+        factory info block at 0x0340 (contains 'WOUXUN').
 
-        The radio occasionally drops the first transaction after the port is
-        opened, so retry a few times before giving up.
+        We deliberately do NOT key on the model name at 0x049b: that is the
+        user-editable Startup Message, so a renamed radio would fail to
+        identify. 0x0340 lives below the write map (0x0420) and is never
+        overwritten. The radio occasionally drops the first transaction after
+        the port is opened, so retry a few times before giving up.
         """
         last = None
         for attempt in range(5):
             try:
                 self._write_record(kg935g.CMD_RD,
-                                    struct.pack(">HB", 0x0480, _BLOCK))
+                                    struct.pack(">HB", 0x0340, _BLOCK))
                 _err, resp = self._read_record()
             except errors.RadioNoResponse as e:
                 last = e
                 time.sleep(0.1)
                 continue
-            if b"KG-UV96M" in bytes(resp):
-                LOG.info("Identified KG-UV96M (attempt %d)", attempt + 1)
+            if b"WOUXUN" in bytes(resp):
+                LOG.info("Identified Wouxun clone radio (attempt %d)",
+                         attempt + 1)
                 return
             last = errors.RadioError(
-                "Radio is not a KG-UV96M (model block=%r)" % bytes(resp[:24]))
+                "Not a recognized Wouxun radio (info block=%r)"
+                % bytes(resp[:24]))
             break
         raise last or errors.RadioNoResponse()
 

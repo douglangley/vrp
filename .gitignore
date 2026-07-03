@@ -53,3 +53,5 @@ serial-trace.txt
 csv.txt
 _decoded.txt
 _usbpcap.pid
+RadioSettings.png
+*.png
