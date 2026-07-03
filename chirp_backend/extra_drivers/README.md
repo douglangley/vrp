@@ -40,6 +40,11 @@ then delete the local module at your leisure (see "Retiring").
 |--------|-------|----|--------|
 | `kguv96m.py` | Wouxun KG-UV96M | `Wouxun_KG-UV96M` | read + channel write (hardware-verified); radio-wide settings not yet mapped |
 
+> Adding **radio-wide settings** to the KG-UV96M is tracked as its own
+> sub-project: see [`docs/kg-uv96m-settings/PLAN.md`](../../docs/kg-uv96m-settings/PLAN.md)
+> for setup (incl. USBPcap) and the mapping method, and its own
+> `PROGRESS_LOG.md` alongside it. Helper tools live in `tools/kg-uv96m/`.
+
 ## Adding a driver
 
 1. Write `chirp_backend/extra_drivers/<name>.py` as a standard CHIRP driver
