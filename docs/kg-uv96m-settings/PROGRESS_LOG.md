@@ -10,6 +10,58 @@ any combo you mapped.
 
 ---
 
+## ▶ RESUME HERE (state as of 2026-07-02, branch `kg-uv96m-driver`, 6 commits)
+
+**Done:** 12 settings mapped AND implemented in `kguv96m.py`
+(`get_settings`/`set_settings`, `has_settings=True`, tests passing, editable in
+VRP's Settings dialog). Channel read/write + CTCSS/TSQL/DTCS all
+hardware-verified. Radio was restored to original (`uv96m-live.img`).
+
+**Goal:** map + implement the remaining ~24 settings. They're documented below
+(encodings + candidate address clusters) but their exact addresses aren't pinned
+— one 39-setting change-pass was too ambiguous (small option ranges → identical
+byte deltas). Finish via **targeted passes**.
+
+**Method for each pass** (no USBPcap needed):
+1. Baseline is `uv96m-live.img` (original) — the radio is currently in that state.
+   If unsure, `read_image.py COM4 baseline.img` first.
+2. In RT Systems change a **batch chosen so every setting's (old→new) BYTE delta
+   is unique** (see Pass-2 example below — that's the whole trick; small enums
+   compete for the few low values, so only a handful of same-range settings per
+   pass).
+3. Upload from RT. Then:
+   `read_image.py COM4 passN.img` and
+   `diff_images.py uv96m-live.img passN.img`.
+4. Match each changed address to a setting by its (old→new) value, using the
+   option lists below. Add mapped fields to `_MEM_FORMAT_96M` + `get_settings`/
+   `set_settings` (copy the existing 12 as the pattern) + a test. Log it here.
+5. Repeat. The **9 checkboxes are slowest** (only 0/1): at most ~2 per pass (one
+   `1→0` + one `0→1` are distinguishable); or map them by struct-order guess and
+   verify. Their 5 `1→0` candidate addresses are `0x0420,0421,0428,0429,042e`.
+
+**NEXT — Pass 2 (ready-to-run; maps 9, all deltas unique).** From the original
+state, change in RT then upload:
+| Setting | Change to | expected byte delta |
+|---|---|---|
+| VOX | 9 Level | 0→9 |
+| Ring Time | 10 seconds | 5→10 |
+| TOT Pre-Alert | 2 seconds | 5→2 |
+| VOX Delay | 5 seconds | 1→5 |
+| Priority Channel | CH-055 | low byte 1→55 |
+| Startup Display | Batt-V | 0→1 |
+| Battery Indicator | Percent | 0→2 |
+| Roger | Both | 0→3 |
+| Beep | uncheck | 1→0 |
+(Startup Display is very likely `0x049a` already — 0→1 right before the startup
+message; Pass 2 will confirm.)
+
+Baselines/tools: `uv96m-live.img` (original), `uv96m-set-base2.img` /
+`uv96m-set-changed.img` (the big ambiguous pass, kept for reference),
+`tools/kg-uv96m/{read_image,diff_images,decode_capture}.py`. Settings struct is
+`0x0420`–`0x04bf` (+`0x4000` mirror the radio self-maintains — never write it).
+
+---
+
 ## 2026-07-02 — Clarifying encodings/option lists for the 8 mapped settings
 
 Confirmed encodings (address, type, meaning) from NVDA-read option lists:
