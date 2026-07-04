@@ -270,10 +270,10 @@ def test_focused_cell_maps_cursor_to_channel_and_column(app):
         grid.focus_channel(2)
         n, col = grid.focused_cell()
         assert (n, col) == (2, "number")  # cursor starts on the row-header column
-        for _ in range(2):  # Right, Right -> column index 2
+        for _ in range(2):  # Right, Right -> column index 2 (library owns arrows)
             ev = wx.KeyEvent(wx.wxEVT_KEY_DOWN)
             ev.SetKeyCode(wx.WXK_RIGHT)
-            grid._on_grid_key(ev)
+            grid._grid._on_key_down(ev)
         n2, col2 = grid.focused_cell()
         assert n2 == 2
         assert col2 == grid._model.columns()[2].name
@@ -283,9 +283,11 @@ def test_focused_cell_maps_cursor_to_channel_and_column(app):
 
 
 def _press(grid, keycode):
+    # The four arrows are owned by the library's cell cursor (grid._grid),
+    # which VRP binds after — so drive the library handler directly.
     ev = wx.KeyEvent(wx.wxEVT_KEY_DOWN)
     ev.SetKeyCode(keycode)
-    grid._on_grid_key(ev)
+    grid._grid._on_key_down(ev)
 
 
 def test_down_arrow_is_column_locked(app):
