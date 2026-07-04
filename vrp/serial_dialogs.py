@@ -195,22 +195,23 @@ class PortPicker(wx.Panel):
             self._on_change()
 
 
-class RadioListView(dv.DataViewListCtrl):
-    """A single-column list built on ``wx.dataview.DataViewListCtrl`` so it reads
-    on every screen reader — the same control (and reasoning) as the channel
-    grid. On macOS it wraps ``NSTableView``, which VoiceOver reads and lets the
-    user arrow through; on Windows/GTK wx exposes its generic DataViewCtrl to
-    MSAA/UIA so NVDA/Orca read the rows. (The previous ``wx.ListCtrl`` version was
-    the native list-view on Windows but fell back to wx's generic custom-drawn
-    control on macOS, which exposed nothing to VoiceOver — so the Download and
-    Favorites result lists could not be navigated there.)
+# A single-column, screen-reader-first list. There is no one wx control that
+# reads well on every platform, so ``RadioListView`` (the factory below) picks the
+# native control per OS, both behind one small ``wx.ListBox``-style API
+# (Set / GetCount / GetString / GetSelection / SetSelection / SetStringSelection;
+# ``on_select`` fires on selection):
+#   - Windows: ``wx.ListCtrl`` report mode = native SysListView32, which NVDA
+#     reads flawlessly. The generic ``wxDataViewCtrl`` there exposes only its
+#     inner "wxDataViewCtrlMainWindow" to NVDA (unreadable), so it is NOT used.
+#   - macOS/Linux: ``wx.dataview.DataViewListCtrl`` = native NSTableView
+#     (VoiceOver) / GtkTreeView (Orca). wx's ``wx.ListCtrl`` is generic and silent
+#     under VoiceOver on macOS, so it is NOT used there.
+# Type-ahead is native to each control; the dialogs' filter box is the primary
+# search path regardless.
 
-    Exposes a small ``wx.ListBox``-compatible API (Set / GetCount / GetString /
-    GetSelection / SetSelection / SetStringSelection) so the dialogs and their
-    tests stay unchanged; ``on_select`` is called when the selection changes.
-    Incremental type-ahead is native to the control on each platform; the
-    dialogs' filter box remains the primary search path regardless.
-    """
+
+class _DataViewRadioList(dv.DataViewListCtrl):
+    """macOS/Linux backend of :func:`RadioListView` — native NSTableView/GtkTreeView."""
 
     def __init__(self, parent, *, name: str, on_select=None,
                  size=(280, 200)) -> None:
@@ -270,6 +271,79 @@ class RadioListView(dv.DataViewListCtrl):
                 self.SetSelection(i)
                 return True
         return False
+
+
+class _ListCtrlRadioList(wx.ListCtrl):
+    """Windows backend of :func:`RadioListView` — native SysListView32, NVDA-perfect."""
+
+    def __init__(self, parent, *, name: str, on_select=None,
+                 size=(280, 200)) -> None:
+        super().__init__(
+            parent, style=wx.LC_REPORT | wx.LC_SINGLE_SEL | wx.LC_NO_HEADER, size=size
+        )
+        self.SetName(name)
+        self.InsertColumn(0, "")
+        self._on_select = on_select
+        self.Bind(wx.EVT_LIST_ITEM_SELECTED, self._fire_select)
+        self.Bind(wx.EVT_SIZE, self._on_size)
+
+    def _on_size(self, event) -> None:
+        event.Skip()
+        w = self.GetClientSize().width
+        if w > 0:
+            self.SetColumnWidth(0, w)  # single column fills the width
+
+    def _fire_select(self, event) -> None:
+        event.Skip()
+        if self._on_select:
+            self._on_select()
+
+    # -- wx.ListBox-compatible surface -------------------------------------
+    def Set(self, labels) -> None:
+        self.Freeze()
+        try:
+            self.DeleteAllItems()  # rows only; the column persists
+            for label in labels:
+                self.InsertItem(self.GetItemCount(), label)
+            w = self.GetClientSize().width
+            self.SetColumnWidth(0, w if w > 0 else wx.LIST_AUTOSIZE)
+            if labels:
+                self.Select(0)
+                self.Focus(0)  # NVDA reads the FOCUSED item, not just the selected
+        finally:
+            self.Thaw()
+
+    def GetCount(self) -> int:
+        return self.GetItemCount()
+
+    def GetString(self, i: int) -> str:
+        return self.GetItemText(i, 0) if 0 <= i < self.GetItemCount() else ""
+
+    def GetSelection(self) -> int:
+        return self.GetFirstSelected()  # wx.NOT_FOUND when none
+
+    def SetSelection(self, i: int) -> None:
+        if 0 <= i < self.GetItemCount():
+            self.Select(i)
+            self.Focus(i)  # focus, not just select, or NVDA stays silent
+            self.EnsureVisible(i)
+
+    def SetStringSelection(self, s: str) -> bool:
+        for i in range(self.GetItemCount()):
+            if self.GetItemText(i, 0) == s:
+                self.SetSelection(i)
+                return True
+        return False
+
+
+def RadioListView(parent, *, name: str, on_select=None, size=(280, 200)):
+    """Native single-column list, picked per platform so every screen reader gets
+    a control it reads well: ``wx.ListCtrl`` (SysListView32) on Windows for NVDA,
+    ``DataViewListCtrl`` (NSTableView/GtkTreeView) on macOS/Linux for VoiceOver/
+    Orca. Both expose the same ``wx.ListBox``-style API, so callers and tests are
+    identical either way."""
+    backend = _ListCtrlRadioList if wx.Platform == "__WXMSW__" else _DataViewRadioList
+    return backend(parent, name=name, on_select=on_select, size=size)
 
 
 class ModelPicker:
