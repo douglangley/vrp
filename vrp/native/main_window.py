@@ -468,10 +468,11 @@ class MainWindow(wx.Frame):
                 self.grid.select_channels([number])
                 self.grid.focus_channel(number)
                 return
-            # set_channel_field also turns on the matching Tone Mode when a lone
-            # tone/DCS edit wouldn't otherwise persist (CHIRP drops it), so the
-            # edit actually sticks; tone_mode_set names the mode it switched on.
-            ok, message, _affected, tone_mode_set = memory_ops.set_channel_field(
+            # set_channel_field also sets the governing field when a lone edit
+            # wouldn't otherwise persist (a tone whose Tone Mode is off, or a
+            # Duplex direction with no offset), so the edit actually sticks; note
+            # describes any such coupled change to announce.
+            ok, message, _affected, note = memory_ops.set_channel_field(
                 number, col.name, dlg.get_value()
             )
         self.grid.refresh_numbers([number])
@@ -485,8 +486,8 @@ class MainWindow(wx.Frame):
             # the row rather than clipping it.
             shown = self.grid.cell_display(number, col.name)
             msg = f"{shown if shown else 'blank'}, {col.label}"
-            if tone_mode_set:
-                msg += f". Tone Mode set to {tone_mode_set} so the {col.label} takes effect"
+            if note:
+                msg += f". {note}"
             self.announce.announce(msg)
         else:
             self.announce.announce(message, assertive=True)

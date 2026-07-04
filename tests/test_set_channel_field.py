@@ -39,9 +39,9 @@ def _first_populated_no_tone():
 
 def test_ctone_alone_sets_tsql_and_persists(loaded):
     n = _first_populated_no_tone()
-    ok, _msg, affected, tone_mode_set = memory_ops.set_channel_field(n, "ctone", "110.9")
+    ok, _msg, affected, note = memory_ops.set_channel_field(n, "ctone", "110.9")
     assert ok and affected == [n]
-    assert tone_mode_set == "TSQL"          # switched the mode on
+    assert note and "TSQL" in note          # switched the mode on, and says so
     m = radio_backend.get_memory(n)
     assert m.tmode == "TSQL"
     assert abs(m.ctone - 110.9) < 0.05       # and the tone actually stuck
@@ -49,19 +49,19 @@ def test_ctone_alone_sets_tsql_and_persists(loaded):
 
 def test_rtone_alone_sets_tone_mode(loaded):
     n = _first_populated_no_tone()
-    _ok, _msg, _aff, tone_mode_set = memory_ops.set_channel_field(n, "rtone", "123.0")
-    assert tone_mode_set == "Tone"
+    _ok, _msg, _aff, note = memory_ops.set_channel_field(n, "rtone", "123.0")
+    assert note and "Tone" in note
     m = radio_backend.get_memory(n)
     assert m.tmode == "Tone" and abs(m.rtone - 123.0) < 0.05
 
 
-def test_non_tone_field_does_not_touch_tone_mode(loaded):
-    """A Mode edit persists on its own; no Tone Mode change."""
+def test_non_tone_field_does_not_couple(loaded):
+    """A Mode edit persists on its own; no coupled change."""
     n = _first_populated_no_tone()
     before = radio_backend.get_memory(n)
     new_mode = "NFM" if before.mode != "NFM" else "FM"
-    _ok, _msg, _aff, tone_mode_set = memory_ops.set_channel_field(n, "mode", new_mode)
-    assert tone_mode_set is None
+    _ok, _msg, _aff, note = memory_ops.set_channel_field(n, "mode", new_mode)
+    assert note is None
     assert radio_backend.get_memory(n).mode == new_mode
 
 
@@ -69,7 +69,36 @@ def test_ctone_when_already_tsql_is_left_alone(loaded):
     """If the Tone Mode already keeps the value, don't re-set it (no clobber)."""
     n = _first_populated_no_tone()
     memory_ops.update_channel(n, {"tmode": "TSQL", "ctone": "88.5"})
-    _ok, _msg, _aff, tone_mode_set = memory_ops.set_channel_field(n, "ctone", "100.0")
-    assert tone_mode_set is None             # already effective, no switch
+    _ok, _msg, _aff, note = memory_ops.set_channel_field(n, "ctone", "100.0")
+    assert note is None                      # already effective, no switch
     m = radio_backend.get_memory(n)
     assert m.tmode == "TSQL" and abs(m.ctone - 100.0) < 0.05
+
+
+def _first_simplex_channel():
+    """A populated channel with no Duplex offset (the case the fix targets)."""
+    lo, hi = radio_backend.get_state().memory_bounds
+    for n in range(lo, hi + 1):
+        m = radio_backend.get_memory(n)
+        if m and not getattr(m, "empty", True) and m.duplex == "" and m.freq:
+            return n
+    pytest.skip("no simplex channel in the image")
+
+
+def test_duplex_minus_alone_adds_offset_so_it_persists(loaded):
+    """Setting Duplex to minus on a simplex channel would revert (zero offset);
+    the fix fills the band's standard offset so the direction sticks."""
+    n = _first_simplex_channel()
+    _ok, _msg, _aff, note = memory_ops.set_channel_field(n, "duplex", "-")
+    assert note and "offset" in note.lower()
+    m = radio_backend.get_memory(n)
+    assert m.duplex == "-" and m.offset > 0   # direction kept, offset filled
+
+
+def test_duplex_with_existing_offset_is_left_alone(loaded):
+    """When an offset is already present, the direction persists on its own."""
+    n = _first_simplex_channel()
+    memory_ops.update_channel(n, {"duplex": "-", "offset": "0.600000"})
+    _ok, _msg, _aff, note = memory_ops.set_channel_field(n, "duplex", "+")
+    assert note is None                       # already had an offset, no fill
+    assert radio_backend.get_memory(n).duplex == "+"
