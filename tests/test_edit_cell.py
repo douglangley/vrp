@@ -264,20 +264,57 @@ def test_focused_cell_maps_cursor_to_channel_and_column(app):
     radio_backend.load_image(IMAGE)
     try:
         frame = wx.Frame(None)
-        # cell_announce (even a no-op) makes the library bind the Left/Right cursor.
+        # cell_announce (even a no-op) enables VRP's column-locked cursor.
         grid = ChannelGrid(frame, cell_announce=lambda t: None)
         grid.set_state(radio_backend.get_state())
         grid.focus_channel(2)
         n, col = grid.focused_cell()
         assert (n, col) == (2, "number")  # cursor starts on the row-header column
-        ag = grid._grid
-        for _ in range(2):  # Right, Right -> column index 2
+        for _ in range(2):  # Right, Right -> column index 2 (library owns arrows)
             ev = wx.KeyEvent(wx.wxEVT_KEY_DOWN)
             ev.SetKeyCode(wx.WXK_RIGHT)
-            ag._on_key_down(ev)
+            grid._grid._on_key_down(ev)
         n2, col2 = grid.focused_cell()
         assert n2 == 2
         assert col2 == grid._model.columns()[2].name
+        frame.Destroy()
+    finally:
+        radio_backend.unload()
+
+
+def _press(grid, keycode):
+    # The four arrows are owned by the library's cell cursor (grid._grid),
+    # which VRP binds after — so drive the library handler directly.
+    ev = wx.KeyEvent(wx.wxEVT_KEY_DOWN)
+    ev.SetKeyCode(keycode)
+    grid._grid._on_key_down(ev)
+
+
+def test_down_arrow_is_column_locked(app):
+    """Arrowing DOWN moves to the next row but stays in the same column (the
+    column-locked cursor), and speaks concise "Channel N, <cell>" text — not the
+    whole row."""
+    from vrp.native.channel_grid import ChannelGrid
+
+    radio_backend.load_image(IMAGE)
+    try:
+        frame = wx.Frame(None)
+        spoken = []
+        grid = ChannelGrid(frame, cell_announce=spoken.append)
+        grid.set_state(radio_backend.get_state())
+        grid.focus_channel(1)
+
+        _press(grid, wx.WXK_RIGHT)
+        _press(grid, wx.WXK_RIGHT)          # into column index 2
+        col_after_right = grid.focused_cell()[1]
+        _press(grid, wx.WXK_DOWN)           # next row, SAME column
+
+        n, col = grid.focused_cell()
+        assert n == 2                        # moved to the next channel
+        assert col == col_after_right        # column unchanged (locked)
+        # The down-arrow announcement leads with the row header, not the column
+        # name, and doesn't enumerate the whole row.
+        assert spoken[-1].startswith("Channel 2")
         frame.Destroy()
     finally:
         radio_backend.unload()

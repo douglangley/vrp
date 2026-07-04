@@ -442,7 +442,7 @@ requires-dist = [
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.0.0" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=4.0.0" },
     { name = "requests", specifier = ">=2.28.0" },
-    { name = "wx-accessible-grid", git = "https://github.com/Community-Access/wx-accessible-grid.git?rev=e2087ed6b14d7879db942790e3fc653f7a7e33b4" },
+    { name = "wx-accessible-grid", git = "https://github.com/payown/wx-accessible-grid.git?rev=494103f8d7c82f79bc40221d823a7991d8984cf6" },
     { name = "wxpython", specifier = ">=4.2.0" },
 ]
 provides-extras = ["dev", "build"]
@@ -568,8 +568,8 @@ wheels = [
 
 [[package]]
 name = "wx-accessible-grid"
-version = "0.8.0"
-source = { git = "https://github.com/Community-Access/wx-accessible-grid.git?rev=e2087ed6b14d7879db942790e3fc653f7a7e33b4#e2087ed6b14d7879db942790e3fc653f7a7e33b4" }
+version = "0.9.0"
+source = { git = "https://github.com/payown/wx-accessible-grid.git?rev=494103f8d7c82f79bc40221d823a7991d8984cf6#494103f8d7c82f79bc40221d823a7991d8984cf6" }
 dependencies = [
     { name = "wxpython" },
 ]

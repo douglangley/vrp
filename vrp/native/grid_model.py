@@ -14,6 +14,15 @@ from chirp_backend.radio import RadioState
 
 _EMPTY_MARKER_COLS = {"name", "freq"}
 
+# Fields that only matter when a governing field turns them on: Offset needs a
+# Duplex direction; the tone/code fields need a Tone Mode that uses them. Sighted
+# users get a greyed-out cell as the cue; a screen reader gets nothing (Offset
+# reads "blank", and the tone cells read a stale value like "88.5" as if active).
+# So mark an inactive cell "off" — keeping any stored value ("88.5 (off)") so the
+# user can still hear it, but knows it is not in use. Detected via ``hidden_for``.
+_INACTIVE_SUFFIX = " (off)"
+_INACTIVE_BLANK = "off"
+
 
 def column_meta(state: RadioState) -> list[dict]:
     """Ordered column metadata for the loaded radio (first column = Ch #)."""
@@ -35,8 +44,9 @@ def build_row(number: int, cols=None) -> dict | None:
     Row shape: {"number": int, "empty": bool, "immutable": list,
                 "cells": {col_name: display_str}}.
     """
+    features = radio_backend.get_state().features
     if cols is None:
-        cols = build_column_defs(radio_backend.get_state().features)
+        cols = build_column_defs(features)
     mem = radio_backend.get_memory(number)
     if mem is None:
         return None
@@ -45,14 +55,31 @@ def build_row(number: int, cols=None) -> dict | None:
     for col in cols:
         if col.name == "number":
             cells["number"] = str(number)
+        elif empty:
+            cells[col.name] = ""
         else:
-            cells[col.name] = "" if empty else col.format_value(mem)
+            value = col.format_value(mem)
+            # A column hidden for this memory is inactive (its governing field is
+            # off). Mark it so it doesn't read as blank (Offset) or as an active
+            # value (the tone cells' stale "88.5"): "<value> (off)", or "off".
+            if _is_inactive(col, mem, features):
+                value = f"{value}{_INACTIVE_SUFFIX}" if value else _INACTIVE_BLANK
+            cells[col.name] = value
     return {
         "number": number,
         "empty": empty,
         "immutable": list(getattr(mem, "immutable", []) or []),
         "cells": cells,
     }
+
+
+def _is_inactive(col, mem, features) -> bool:
+    """Whether ``col`` is currently hidden/inactive for this memory (its governing
+    field is off), so a blank value means 'not in use' rather than 'unset'."""
+    try:
+        return bool(col.hidden_for(mem, features))
+    except Exception:  # noqa: BLE001 — a column without the check is just visible
+        return False
 
 
 def build_rows(state: RadioState) -> list[dict]:

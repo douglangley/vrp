@@ -82,10 +82,14 @@ def test_favorites_dialog_picker_controls_are_direct_children_and_search_works(
         assert dlg.picker.filter.GetParent() is dlg
         assert dlg.picker.list.GetParent() is dlg
         assert dlg.add_btn.GetParent() is dlg
-        # The lists are list-views (wx.ListCtrl) for native multi-char type-ahead,
-        # not wx.ListBox (single-letter only on Windows).
-        assert isinstance(dlg.picker.list, wx.ListCtrl)
-        assert isinstance(dlg.fav_list, wx.ListCtrl)
+        # The lists are the platform's native control: wx.ListCtrl (SysListView32)
+        # on Windows for NVDA, DataViewListCtrl (NSTableView/GtkTreeView) elsewhere
+        # for VoiceOver/Orca — never a wx.ListBox (single-letter type-ahead, and
+        # silent under VoiceOver).
+        import wx.dataview as dv
+        native = wx.ListCtrl if wx.Platform == "__WXMSW__" else dv.DataViewListCtrl
+        assert isinstance(dlg.picker.list, native)
+        assert isinstance(dlg.fav_list, native)
         # Search narrows the list (the filter's EVT_TEXT handler).
         dlg.picker.filter.SetValue("mini")
         dlg.picker._apply_filter()

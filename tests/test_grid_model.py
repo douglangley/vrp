@@ -71,3 +71,46 @@ def test_selection_after_move_to_lands_at_destination():
     sel, focus = grid_model.selection_after_move_to(3, 10)
     assert sel == [10, 11, 12]
     assert focus == 10
+
+
+# -- inactive coupled-field marker (UV-5R has tone/offset columns) -------------
+_UV5R = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "..", "chirp", "tests", "images",
+                 "Baofeng_UV-5R.img")
+)
+
+
+@pytest.fixture
+def uv5r():
+    ok, message = radio_backend.load_image(_UV5R)
+    assert ok, message
+    yield radio_backend.get_state()
+    radio_backend.unload()
+
+
+def _tone_off_channel():
+    lo, hi = radio_backend.get_state().memory_bounds
+    for n in range(lo, hi + 1):
+        m = radio_backend.get_memory(n)
+        if m and not getattr(m, "empty", True) and m.tmode == "":
+            return n
+    pytest.skip("no tone-off channel in image")
+
+
+def test_inactive_tone_cell_is_marked_off(uv5r):
+    from chirp_backend.col_defs import build_column_defs
+    cols = build_column_defs(uv5r.features)
+    n = _tone_off_channel()
+    row = grid_model.build_row(n, cols)
+    # A tone the mode doesn't use reads "<value> (off)", not a bare active value.
+    assert grid_model.cell_text(row, "ctone").endswith("(off)")
+
+
+def test_marker_clears_when_field_activated(uv5r):
+    from chirp_backend import memory_ops
+    from chirp_backend.col_defs import build_column_defs
+    cols = build_column_defs(uv5r.features)
+    n = _tone_off_channel()
+    memory_ops.set_channel_field(n, "ctone", "110.9")  # turns on TSQL
+    row = grid_model.build_row(n, cols)
+    assert grid_model.cell_text(row, "ctone") == "110.9"  # active, no "(off)"

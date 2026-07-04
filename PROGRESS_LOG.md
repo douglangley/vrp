@@ -6,6 +6,47 @@ architecture, keyboard map, and CHIRP feature-coverage checklist.
 
 ---
 
+## 2026-07-04 — macOS single-cell editing, column-locked grid navigation, coupled-field fixes
+
+Verified on real macOS (VoiceOver) and Windows (NVDA) hardware. Branch
+`feat/mac-f2-cell-edit`.
+
+- **F2 single-cell edit on macOS.** F2 edits the cell the cursor is on (was a
+  full-row dialog on Mac). Where a platform has no cell cursor (GTK), a
+  `ColumnPickerDialog` fallback asks which field, then edits it.
+- **Cell cursor now on macOS too.** Verified plain Left/Right/Up/Down reach the
+  `DataViewListCtrl` (NSTableView) on Mac and prism speaks the cell — the earlier
+  assumption that it couldn't was wrong.
+- **Column-locked navigation, moved upstream.** The grid owns all four arrows and
+  keeps a `(row, col)` cursor: Up/Down read "Channel N, <cell>" (row header + the
+  one column, not the whole row) without moving the native selection, so the
+  screen reader doesn't re-read the row. This lives in `wx-accessible-grid` 0.9.0
+  (`cell_cursor=True`; PR Community-Access/wx-accessible-grid#4, pinned to the
+  payown fork until it merges).
+- **Download/Favorites lists readable on both.** `RadioListView` is split per
+  platform — `wx.ListCtrl` (SysListView32) on Windows for NVDA, `DataViewListCtrl`
+  on macOS/Linux for VoiceOver/Orca — after DataViewCtrl read as
+  "wxDataViewCtrlMainWindow" under NVDA.
+- **Coupled-field edits.** `memory_ops.set_channel_field` repairs edits CHIRP
+  would silently drop: a lone tone/DCS edit turns on the matching Tone Mode
+  (ctone→TSQL, rtone→Tone, DCS→DTCS); a lone Duplex +/- fills the band-plan
+  offset so the direction sticks. One undo step, announced, and empirical so it
+  never clobbers an existing TSQL/DTCS/Cross or already-offset setup.
+- **Inactive cells read "(off)".** Offset (simplex) and the tone/code fields (no
+  Tone Mode) now read "off" / "88.5 (off)" instead of blank or a misleading
+  active value — the accessible equivalent of CHIRP greying them.
+
+**Verified:** `uv run python -m pytest` → 194 passed (2 pre-existing macOS
+GUI-quirk failures in `test_channel_grid`, unrelated). Driven end-to-end on Mac
+and Windows with a real radio.
+
+**Open / next:** bump the `wx-accessible-grid` pin to the Community-Access rev
+once PR #4 merges; the release `.exe` excludes prism, so verify the channel grid
+reads under NVDA in a built Windows binary (source runs narrate via prism);
+multi-select (Shift/Ctrl+arrow) verbal output.
+
+---
+
 ## 2026-06-29 — Build enforces the CHIRP pin before packaging
 
 `build.py` now runs `ensure_chirp_on_pin()` before every build. It verifies that
