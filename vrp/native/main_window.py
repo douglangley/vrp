@@ -468,8 +468,11 @@ class MainWindow(wx.Frame):
                 self.grid.select_channels([number])
                 self.grid.focus_channel(number)
                 return
-            ok, message, _affected = memory_ops.update_channel(
-                number, {col.name: dlg.get_value()}
+            # set_channel_field also turns on the matching Tone Mode when a lone
+            # tone/DCS edit wouldn't otherwise persist (CHIRP drops it), so the
+            # edit actually sticks; tone_mode_set names the mode it switched on.
+            ok, message, _affected, tone_mode_set = memory_ops.set_channel_field(
+                number, col.name, dlg.get_value()
             )
         self.grid.refresh_numbers([number])
         self.grid.select_channels([number])
@@ -481,7 +484,10 @@ class MainWindow(wx.Frame):
             # Non-assertive so it queues behind the screen reader's focus read of
             # the row rather than clipping it.
             shown = self.grid.cell_display(number, col.name)
-            self.announce.announce(f"{shown if shown else 'blank'}, {col.label}")
+            msg = f"{shown if shown else 'blank'}, {col.label}"
+            if tone_mode_set:
+                msg += f". Tone Mode set to {tone_mode_set} so the {col.label} takes effect"
+            self.announce.announce(msg)
         else:
             self.announce.announce(message, assertive=True)
 

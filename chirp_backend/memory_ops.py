@@ -205,6 +205,80 @@ def update_channel(number: int, values: dict) -> OpResult:
     return True, f"Channel {number} updated.", [number]
 
 
+# Tone/DCS value fields -> the Tone Mode that makes CHIRP persist them. A tone or
+# code is discarded unless the Tone Mode uses it, so a lone single-cell edit would
+# silently revert (e.g. CTCSS back to the 88.5 default). set_channel_field repairs
+# that by turning on the matching mode.
+_TONE_MODE_FOR = {"ctone": "TSQL", "rtone": "Tone", "dtcs": "DTCS", "rx_dtcs": "DTCS"}
+
+
+def _field_persisted(radio, number: int, field: str, value) -> bool:
+    """Whether ``field`` now reads back as ``value`` (i.e. the edit stuck). Reads
+    the radio fresh and compares via the column's own display formatting."""
+    from chirp_backend.col_defs import build_column_defs
+
+    try:
+        mem = _get_mem(radio, number)
+    except Exception:  # noqa: BLE001
+        return True  # can't tell; assume it stuck rather than double-writing
+    col = next(
+        (c for c in build_column_defs(radio.get_features()) if c.name == field), None
+    )
+    if col is None:
+        return True
+    return col.format_value(mem).strip() == str(value).strip()
+
+
+@undo.records
+def set_channel_field(number: int, field: str, value):
+    """Apply one field edit; for a tone/DCS field the channel's Tone Mode doesn't
+    use (so CHIRP would drop it), also set the matching Tone Mode and re-apply so
+    the value persists. One undo step. Returns
+    ``(ok, message, [number], tone_mode_set)`` where ``tone_mode_set`` is the Tone
+    Mode we switched on, or ``None``.
+
+    The tone check is empirical — re-read and compare — so an existing TSQL / DTCS
+    / Cross setup that already keeps the value is left untouched."""
+    try:
+        radio = _get_radio()
+    except RuntimeError as e:
+        return False, str(e), [], None
+    try:
+        mem = _get_mem(radio, number)
+    except Exception as e:  # noqa: BLE001
+        return False, f"Could not read channel {number}: {e}", [], None
+
+    parsed, err = _parse_all(radio, mem, {field: value})
+    if err:
+        return False, err[1], [], None
+    try:
+        setattr(mem, field, parsed[field])
+        if field == "freq":
+            mem.empty = parsed[field] == 0
+        _set_mem(radio, mem)
+    except Exception as e:  # noqa: BLE001
+        return False, f"Failed to update channel {number}: {e}", [], None
+
+    tone_mode_set = None
+    mode = _TONE_MODE_FOR.get(field)
+    if mode is not None and not _field_persisted(radio, number, field, value):
+        try:  # best-effort: the primary edit already succeeded
+            mem2 = _get_mem(radio, number)
+            parsed2, err2 = _parse_all(radio, mem2, {"tmode": mode, field: value})
+            if not err2:
+                for f, v in parsed2.items():
+                    setattr(mem2, f, v)
+                _set_mem(radio, mem2)
+                tone_mode_set = mode
+        except Exception:  # noqa: BLE001
+            pass
+
+    from chirp_backend.radio import invalidate_cache
+
+    invalidate_cache([number])
+    return True, f"Channel {number} updated.", [number], tone_mode_set
+
+
 @undo.records
 def import_memories(src_radio, destination: int, overwrite: bool = True) -> OpResult:
     """Import a query/source radio's memories into the loaded radio.
