@@ -88,9 +88,9 @@ class ChannelGrid(wx.Panel):
         self._model = _ChannelGridModel()
         # ``cell_announce`` enables the library's opt-in Left/Right cell cursor:
         # a ``callable(str)`` the grid calls with "<value>, <column>" as the
-        # cursor moves across a row. Wired on Windows/NVDA (where the generic
-        # DataViewCtrl announces no per-cell cursor) and left None on macOS, where
-        # VoiceOver reads cells natively with VO+Left/Right — see main_window.
+        # cursor moves across a row. Wired on Windows AND macOS (main_window
+        # verified plain Left/Right reach the DataViewListCtrl on both, and prism
+        # speaks the cell); left None on GTK/other, where it's untested.
         #
         # When it's None the library never binds its Left/Right handler, so the
         # cell cursor never leaves column 0 and ``focused_cell()`` can't report
@@ -194,17 +194,16 @@ class ChannelGrid(wx.Panel):
     def has_cell_cursor(self) -> bool:
         """Whether this grid has a working Left/Right cell cursor (so
         ``focused_cell()`` reports the real column). True where ``cell_announce``
-        was wired (Windows/NVDA), False on macOS/VoiceOver — where F2 can't know
-        the column from the cursor and takes the column-picker path instead."""
+        was wired (Windows and macOS); False on GTK/other, where F2 can't know the
+        column from the cursor and takes the column-picker path instead."""
         return self._has_cell_cursor
 
     def focused_cell(self) -> tuple[int, str] | None:
         """(channel number, column name) at the Left/Right cell cursor, or None.
 
-        The column tracks the grid's cell cursor, which is currently Windows-only
-        (on macOS it stays column 0 until upstream cursor tracking lands —
-        wx-accessible-grid#3 — so callers use ``has_cell_cursor`` to take the
-        column-picker path there instead of trusting this column)."""
+        The column tracks the grid's cell cursor, wired on Windows and macOS. On
+        platforms where it isn't (``has_cell_cursor`` is False) it stays at column
+        0, so callers take the column-picker path instead of trusting this."""
         cell = self._grid.current_cell()
         if cell is None:
             return None

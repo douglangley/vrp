@@ -1,5 +1,6 @@
-"""Tests for ColumnPickerDialog — F2's macOS "which field?" chooser. Skips
-without a GUI/display (it builds real wx controls)."""
+"""Tests for ColumnPickerDialog — F2's "which field?" chooser, used where the
+grid has no Left/Right cell cursor (GTK/other). Skips without a GUI/display (it
+builds real wx controls)."""
 
 import pytest
 
@@ -83,8 +84,8 @@ class _FakeKey:
 
 
 def test_enter_on_list_accepts(app):
-    """Return on the focused list ends the dialog with OK (the macOS Cocoa
-    fix — a focused ListBox doesn't forward Return to the default button)."""
+    """Return on the focused list ends the dialog with OK (a focused ListBox
+    doesn't reliably forward Return to the default button)."""
     from vrp.edit_dialog import ColumnPickerDialog
 
     frame = wx.Frame(None)

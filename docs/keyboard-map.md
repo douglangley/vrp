@@ -46,7 +46,7 @@ arrow keys move across top-level menus; NVDA reads it like any native app menu.
 | Radio | Query Source ▸ … | — | needs a loaded radio; one item per registered source |
 | Radio | Settings… | `Ctrl+Shift+P` | needs a loaded radio |
 | Channels | Edit channel… | `Ctrl+E` | needs a loaded radio; all fields (also `Enter` / double-click on the grid) |
-| Channels | Edit cell… | `F2` | needs a loaded radio; edits one field (Windows: the focused cell's column; macOS: choose the field, then edit it) |
+| Channels | Edit cell… | `F2` | needs a loaded radio; edits the focused cell (the column at the Left/Right cursor) |
 | Channels | Delete channel(s) | `Del` | needs a loaded radio; clears the selected channel(s) |
 | Channels | Go to channel… | `Ctrl+G` | needs a loaded radio; prompt for a number, then select + focus it |
 | Channels | Channel banks… | `Ctrl+B` | needs a loaded radio |
@@ -94,7 +94,7 @@ speaks `"<value>, <column>"` through its supplemental (prism) speech.
 | `Ctrl+C` / `Ctrl+X` / `Ctrl+V` | Copy / Cut (deferred — moves on paste) / Paste the selected channel(s) at the focused channel |
 | `Ctrl+Z` / `Ctrl+Y` | Undo / Redo the last channel operation |
 | `Ctrl+E` / `Enter` | Edit the focused channel — **all** fields (full dialog) |
-| `F2` | Edit **one field** of the focused channel in a single-field dialog. Windows: the cursor's column directly (the row-header or a read-only column falls back to the full dialog). macOS: no cell cursor is exposed (wx-accessible-grid#3), so F2 first asks which field via a picker, then edits it |
+| `F2` | Edit the **focused cell** in a single-field dialog — the column at the Left/Right cursor (Windows and macOS). The row-header or a read-only column falls back to the full dialog. On platforms without the cell cursor (GTK), F2 first asks which field via a picker, then edits it |
 | `Del` | Delete the selected channel(s) (Channels-menu accelerator) |
 | `Applications` key / `Shift+F10` | Open the row context menu (Edit channel / Edit cell / Delete / Copy / Cut / Paste / Move up/down / Move to / Bulk operations / Go to / Banks). The generic Windows DataViewCtrl raises this for the Applications key and a right-click natively; VRP wires `Shift+F10` itself (`ChannelGrid._on_grid_key`) since the control doesn't |
 

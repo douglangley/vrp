@@ -1,4 +1,4 @@
-"""Unit tests for ``col_defs.editable_columns`` — the field set F2's macOS
+"""Unit tests for ``col_defs.editable_columns`` — the field set F2's
 column-picker offers (editable AND not the "number" row header AND not immutable
 for the memory). Pure, no wx, no GUI."""
 

@@ -57,8 +57,7 @@ APP_SHORTCUTS = [
     ("Ctrl+Shift+U", "Upload to radio"),
     ("Ctrl+Shift+P", "Edit radio settings"),
     ("Ctrl+E / Enter", "Edit the focused channel (all fields)"),
-    ("F2", "Edit one field of the focused channel (Windows: the focused cell; "
-           "macOS: choose the field, then edit it)"),
+    ("F2", "Edit the focused cell (the column at the Left/Right cursor)"),
     ("Del", "Delete the selected channel(s)"),
     ("Ctrl+Z", "Undo the last change"),
     ("Ctrl+Y / Ctrl+Shift+Z", "Redo the last undone change"),
@@ -123,8 +122,15 @@ class MainWindow(wx.Frame):
         # (assertive, so quick arrowing speaks the latest cell). On macOS we leave
         # it None — VoiceOver reads cells natively with VO+Left/Right, so a second
         # synthesized voice would just double up.
+        # Wire the library's opt-in Left/Right cell cursor on Windows AND macOS.
+        # On macOS this was verified on real hardware: a focused DataViewListCtrl
+        # (NSTableView) *does* deliver plain Left/Right as EVT_KEY_DOWN (they're
+        # not VoiceOver's VO+arrow commands and are native no-ops on a flat table,
+        # so nothing eats them), and prism speaks the moved-to cell. So F2 edits
+        # the cell you arrowed to, identical to Windows. Left None on GTK/other,
+        # where the cursor is untested — on_edit_cell falls back to the picker.
         cell_announce = None
-        if sys.platform == "win32":
+        if sys.platform in ("win32", "darwin"):
             cell_announce = lambda text: self.announce.announce(text, assertive=True)  # noqa: E731
         self.grid = ChannelGrid(
             self,
@@ -386,13 +392,12 @@ class MainWindow(wx.Frame):
     def on_edit_cell(self, _evt=None) -> None:
         """Edit a single field of the focused channel (F2).
 
-        On Windows the grid's Left/Right cell cursor names the column, so F2 edits
-        that cell directly; the row-header ("number") and immutable columns have
-        nothing single-cell to edit there, so they open the whole-channel dialog.
-        macOS has no observable cell cursor (VoiceOver's VO+arrow cursor isn't
-        exposed to the app — wx-accessible-grid#3), so F2 asks which field to edit
-        via ``ColumnPickerDialog``, then edits it — so F2 does single-cell editing
-        on both platforms."""
+        Where the grid has a Left/Right cell cursor (Windows and macOS — see
+        ``has_cell_cursor``), F2 edits the cell you arrowed to; the row-header
+        ("number") and immutable columns have nothing single-cell to edit, so they
+        open the whole-channel dialog. Where there's no cursor (GTK/other), F2 asks
+        which field to edit via ``ColumnPickerDialog``, then edits it — so F2 does
+        single-cell editing everywhere."""
         number = self.grid.focused_channel()
         if number is None:
             self.announce.announce("No channel selected.")
@@ -514,9 +519,10 @@ class MainWindow(wx.Frame):
         menu.AppendSeparator()
 
         add(f"&Edit channel {number}\tCtrl+E", self.on_edit_channel)
-        # Single-cell edit. On Windows, name the exact column the cursor is on
-        # ("Edit cell — Frequency"); on macOS there is no cell cursor, so offer a
-        # generic entry that opens F2's field-picker (on_edit_cell handles both).
+        # Single-cell edit. With a cell cursor (Windows/macOS), name the exact
+        # column the cursor is on ("Edit cell — Frequency"); without one (GTK),
+        # offer a generic entry that opens F2's field-picker (on_edit_cell
+        # handles both).
         if self.grid.has_cell_cursor:
             cell = self.grid.focused_cell()
             if cell is not None:

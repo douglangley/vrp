@@ -365,13 +365,14 @@ class EditCellDialog(wx.Dialog):
 
 
 class ColumnPickerDialog(wx.Dialog):
-    """Pick which field of a channel to edit — the macOS/VoiceOver path for F2.
+    """Pick which field of a channel to edit — F2's fallback where the grid has
+    no Left/Right cell cursor.
 
-    On Windows the grid's Left/Right cell cursor tells F2 which column the user
-    is on, so it edits that cell directly. macOS has no observable cell cursor
-    (VoiceOver's VO+arrow cursor isn't exposed to the app — wx-accessible-grid#3),
-    so rather than guess, F2 asks: this dialog lists the channel's editable fields
-    and the chosen one then opens in :class:`EditCellDialog`.
+    Windows and macOS have the cursor, so F2 edits the cell you arrowed to
+    directly. On platforms where the cursor isn't wired (GTK/other), F2 can't tell
+    which column you're on, so rather than guess it asks: this dialog lists the
+    channel's editable fields and the chosen one then opens in
+    :class:`EditCellDialog`.
 
     Standard accessible modal: a labelled single-select list (focus lands there),
     OK/Cancel, Escape cancels, Enter or double-click accepts. Returning focus to
@@ -402,9 +403,9 @@ class ColumnPickerDialog(wx.Dialog):
 
         # Double-click, or Enter on the default OK button, accepts the highlight.
         self._listbox.Bind(wx.EVT_LISTBOX_DCLICK, self._on_accept)
-        # A focused wx.ListBox on Cocoa doesn't reliably forward Return to the
-        # dialog's default button, so handle Enter on the list directly (this
-        # dialog only exists on macOS). Other keys pass through (type-ahead, etc.).
+        # A focused wx.ListBox doesn't reliably forward Return to the dialog's
+        # default button on every platform, so handle Enter on the list directly.
+        # Other keys pass through (type-ahead, etc.).
         self._listbox.Bind(wx.EVT_KEY_DOWN, self._on_list_key)
         self.Bind(wx.EVT_BUTTON, self._on_accept, id=wx.ID_OK)
         # Land focus on the list (not the default OK button) so the user is on the
