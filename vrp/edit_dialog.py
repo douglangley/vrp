@@ -362,3 +362,71 @@ class EditCellDialog(wx.Dialog):
         self._status.SetLabel(message)
         wx.MessageBox(message, "Invalid value", wx.OK | wx.ICON_ERROR, self)
         self._ctrl.SetFocus()
+
+
+class ColumnPickerDialog(wx.Dialog):
+    """Pick which field of a channel to edit — the macOS/VoiceOver path for F2.
+
+    On Windows the grid's Left/Right cell cursor tells F2 which column the user
+    is on, so it edits that cell directly. macOS has no observable cell cursor
+    (VoiceOver's VO+arrow cursor isn't exposed to the app — wx-accessible-grid#3),
+    so rather than guess, F2 asks: this dialog lists the channel's editable fields
+    and the chosen one then opens in :class:`EditCellDialog`.
+
+    Standard accessible modal: a labelled single-select list (focus lands there),
+    OK/Cancel, Escape cancels, Enter or double-click accepts. Returning focus to
+    the grid row is the caller's job (it re-focuses the channel afterwards)."""
+
+    def __init__(self, parent, number: int, columns: list) -> None:
+        super().__init__(parent, title=f"Edit which field? (channel {number})")
+        self._columns = list(columns)
+
+        outer = wx.BoxSizer(wx.VERTICAL)
+        # A real StaticText names the list for screen readers (SetName alone is
+        # unreliable) and states the choice being made.
+        outer.Add(
+            wx.StaticText(self, label=f"Field to edit on channel {number}:"),
+            0, wx.LEFT | wx.RIGHT | wx.TOP, 12,
+        )
+        self._listbox = wx.ListBox(
+            self, choices=[c.label for c in self._columns], style=wx.LB_SINGLE
+        )
+        self._listbox.SetName("Field to edit")
+        if self._columns:
+            self._listbox.SetSelection(0)  # a field is always chosen / announced
+        outer.Add(self._listbox, 1, wx.EXPAND | wx.ALL, 12)
+
+        outer.Add(self.CreateStdDialogButtonSizer(wx.OK | wx.CANCEL), 0,
+                  wx.EXPAND | wx.ALL, 8)
+        self.SetSizerAndFit(outer)
+
+        # Double-click, or Enter on the default OK button, accepts the highlight.
+        self._listbox.Bind(wx.EVT_LISTBOX_DCLICK, self._on_accept)
+        # A focused wx.ListBox on Cocoa doesn't reliably forward Return to the
+        # dialog's default button, so handle Enter on the list directly (this
+        # dialog only exists on macOS). Other keys pass through (type-ahead, etc.).
+        self._listbox.Bind(wx.EVT_KEY_DOWN, self._on_list_key)
+        self.Bind(wx.EVT_BUTTON, self._on_accept, id=wx.ID_OK)
+        # Land focus on the list (not the default OK button) so the user is on the
+        # choices immediately; wx's default focus runs first, then this overrides.
+        self.Bind(wx.EVT_INIT_DIALOG, self._on_init_dialog)
+
+    def _on_init_dialog(self, event) -> None:
+        event.Skip()
+        wx.CallAfter(self._listbox.SetFocus)
+
+    def _on_list_key(self, event: wx.KeyEvent) -> None:
+        if event.GetKeyCode() in (wx.WXK_RETURN, wx.WXK_NUMPAD_ENTER):
+            self._on_accept(event)
+            return
+        event.Skip()
+
+    def _on_accept(self, _event) -> None:
+        if self.get_column() is None:
+            return  # nothing selected — keep the dialog open
+        self.EndModal(wx.ID_OK)
+
+    def get_column(self):
+        """The selected :class:`~chirp_backend.col_defs.ColumnDef`, or ``None``."""
+        i = self._listbox.GetSelection()
+        return self._columns[i] if 0 <= i < len(self._columns) else None

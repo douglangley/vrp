@@ -57,7 +57,8 @@ APP_SHORTCUTS = [
     ("Ctrl+Shift+U", "Upload to radio"),
     ("Ctrl+Shift+P", "Edit radio settings"),
     ("Ctrl+E / Enter", "Edit the focused channel (all fields)"),
-    ("F2", "Edit the focused cell (one column)"),
+    ("F2", "Edit one field of the focused channel (Windows: the focused cell; "
+           "macOS: choose the field, then edit it)"),
     ("Del", "Delete the selected channel(s)"),
     ("Ctrl+Z", "Undo the last change"),
     ("Ctrl+Y / Ctrl+Shift+Z", "Redo the last undone change"),
@@ -383,42 +384,85 @@ class MainWindow(wx.Frame):
         self.announce.announce(message, assertive=not ok)
 
     def on_edit_cell(self, _evt=None) -> None:
-        """Edit just the focused cell's column in a single-field dialog (F2).
+        """Edit a single field of the focused channel (F2).
 
-        The column comes from the grid's Left/Right cell cursor. On the channel-
-        number column (the row header), a read-only column, or when the cursor
-        column isn't known (macOS until wx-accessible-grid#3 lands), fall back to
-        the full-channel edit dialog so F2 always does something useful."""
-        cell = self.grid.focused_cell()
-        if cell is None:
+        On Windows the grid's Left/Right cell cursor names the column, so F2 edits
+        that cell directly; the row-header ("number") and immutable columns have
+        nothing single-cell to edit there, so they open the whole-channel dialog.
+        macOS has no observable cell cursor (VoiceOver's VO+arrow cursor isn't
+        exposed to the app — wx-accessible-grid#3), so F2 asks which field to edit
+        via ``ColumnPickerDialog``, then edits it — so F2 does single-cell editing
+        on both platforms."""
+        number = self.grid.focused_channel()
+        if number is None:
             self.announce.announce("No channel selected.")
             return
-        number, col_name = cell
         mem = radio_backend.get_memory(number)
         if mem is None:
             return
-        if col_name == "number" or col_name in (mem.immutable or []):
-            self.on_edit_channel()  # whole-channel edit (also the macOS fallback)
-            return
-        from chirp_backend.col_defs import build_column_defs
-        from chirp_backend import memory_ops
-        from vrp.edit_dialog import EditCellDialog
 
-        col = next(
+        if self.grid.has_cell_cursor:
+            # Windows: edit exactly the cell the Left/Right cursor is on.
+            cell = self.grid.focused_cell()
+            col_name = cell[1] if cell else "number"
+            if col_name == "number" or col_name in (mem.immutable or []):
+                self.on_edit_channel()  # nothing single-cell here -> whole channel
+                return
+            col = self._column_by_name(col_name)
+            if col is None:
+                self.on_edit_channel()
+                return
+            self._edit_cell_column(number, mem, col)
+            return
+
+        # macOS: no cell cursor — ask which field, then edit it.
+        columns = self._editable_columns(mem)
+        if not columns:
+            self.on_edit_channel()  # nothing single-cell editable (all immutable)
+            return
+        from vrp.edit_dialog import ColumnPickerDialog
+
+        with ColumnPickerDialog(self, number, columns) as picker:
+            chosen = picker.get_column() if picker.ShowModal() == wx.ID_OK else None
+        if chosen is None:  # cancelled — restore focus to the row
+            self.grid.select_channels([number])
+            self.grid.focus_channel(number)
+            return
+        self._edit_cell_column(number, mem, chosen)
+
+    def _column_by_name(self, col_name: str):
+        """The current radio's ``ColumnDef`` for ``col_name``, or ``None``."""
+        from chirp_backend.col_defs import build_column_defs
+
+        return next(
             (c for c in build_column_defs(radio_backend.get_state().features)
              if c.name == col_name),
             None,
         )
-        if col is None:
-            self.on_edit_channel()
-            return
+
+    def _editable_columns(self, mem) -> list:
+        """The channel's single-cell-editable columns — the fields F2's
+        column-picker offers on macOS. Delegates the (headless, tested) predicate
+        to ``col_defs.editable_columns``."""
+        from chirp_backend.col_defs import build_column_defs, editable_columns
+
+        return editable_columns(
+            build_column_defs(radio_backend.get_state().features), mem.immutable
+        )
+
+    def _edit_cell_column(self, number: int, mem, col) -> None:
+        """Open ``EditCellDialog`` for one column, then apply + refresh +
+        announce. Shared by the Windows cursor path and the macOS picker path."""
+        from chirp_backend import memory_ops
+        from vrp.edit_dialog import EditCellDialog
+
         with EditCellDialog(self, number, mem, col) as dlg:
             if dlg.ShowModal() != wx.ID_OK:
                 self.grid.select_channels([number])
                 self.grid.focus_channel(number)
                 return
             ok, message, _affected = memory_ops.update_channel(
-                number, {col_name: dlg.get_value()}
+                number, {col.name: dlg.get_value()}
             )
         self.grid.refresh_numbers([number])
         self.grid.select_channels([number])
@@ -429,7 +473,7 @@ class MainWindow(wx.Frame):
             # hears the result of their edit (not just "channel updated").
             # Non-assertive so it queues behind the screen reader's focus read of
             # the row rather than clipping it.
-            shown = self.grid.cell_display(number, col_name)
+            shown = self.grid.cell_display(number, col.name)
             self.announce.announce(f"{shown if shown else 'blank'}, {col.label}")
         else:
             self.announce.announce(message, assertive=True)
@@ -470,22 +514,20 @@ class MainWindow(wx.Frame):
         menu.AppendSeparator()
 
         add(f"&Edit channel {number}\tCtrl+E", self.on_edit_channel)
-        # Contextual single-cell edit, when the cursor is on an editable column
-        # whose name we know (Windows today; macOS once cursor tracking lands).
-        cell = self.grid.focused_cell()
-        if cell is not None:
-            _cn, col_name = cell
-            cmem = radio_backend.get_memory(number)
-            if col_name != "number" and cmem is not None and col_name not in (cmem.immutable or []):
-                from chirp_backend.col_defs import build_column_defs
-
-                col = next(
-                    (c for c in build_column_defs(radio_backend.get_state().features)
-                     if c.name == col_name),
-                    None,
-                )
-                if col is not None:
-                    add(f"Edit ce&ll — {col.label}\tF2", self.on_edit_cell)
+        # Single-cell edit. On Windows, name the exact column the cursor is on
+        # ("Edit cell — Frequency"); on macOS there is no cell cursor, so offer a
+        # generic entry that opens F2's field-picker (on_edit_cell handles both).
+        if self.grid.has_cell_cursor:
+            cell = self.grid.focused_cell()
+            if cell is not None:
+                _cn, col_name = cell
+                cmem = radio_backend.get_memory(number)
+                if col_name != "number" and cmem is not None and col_name not in (cmem.immutable or []):
+                    col = self._column_by_name(col_name)
+                    if col is not None:
+                        add(f"Edit ce&ll — {col.label}\tF2", self.on_edit_cell)
+        else:
+            add("Edit a &field…\tF2", self.on_edit_cell)
         add(
             "&Delete selected channels\tDel" if sel > 1 else f"&Delete channel {number}\tDel",
             self.on_delete_channels,

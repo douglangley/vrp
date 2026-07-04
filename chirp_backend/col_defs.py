@@ -269,6 +269,23 @@ def build_column_defs(features) -> list[ColumnDef]:
     return valid
 
 
+def editable_columns(
+    columns: list[ColumnDef], immutable: list[str] | None = None
+) -> list[ColumnDef]:
+    """The single-cell-editable columns from ``columns``: ``editable`` is True,
+    the column is not the ``number`` row header, and its name is not in
+    ``immutable`` (the fields that can't be changed for a given memory).
+
+    This is the field set F2's macOS column-picker offers (``on_edit_cell`` /
+    ``MainWindow._editable_columns``). Pure and wx-free so it's unit-testable
+    headless."""
+    blocked = set(immutable or [])
+    return [
+        c for c in columns
+        if c.editable and c.name != "number" and c.name not in blocked
+    ]
+
+
 def memory_to_dict(mem, col_defs: list[ColumnDef]) -> dict:
     """
     Serialize a Memory object to a dict for JSON response.

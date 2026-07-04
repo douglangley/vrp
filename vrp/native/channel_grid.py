@@ -91,6 +91,12 @@ class ChannelGrid(wx.Panel):
         # cursor moves across a row. Wired on Windows/NVDA (where the generic
         # DataViewCtrl announces no per-cell cursor) and left None on macOS, where
         # VoiceOver reads cells natively with VO+Left/Right — see main_window.
+        #
+        # When it's None the library never binds its Left/Right handler, so the
+        # cell cursor never leaves column 0 and ``focused_cell()`` can't report
+        # which column the user is on. ``has_cell_cursor`` lets callers (F2 /
+        # on_edit_cell) branch on that without re-checking the platform.
+        self._has_cell_cursor = cell_announce is not None
         self._grid = AccessibleGrid(
             self, self._model, label=_LABEL, announce=cell_announce
         )
@@ -184,12 +190,21 @@ class ChannelGrid(wx.Panel):
             return None
         return grid_model.index_to_number(self._model.rows, row)
 
+    @property
+    def has_cell_cursor(self) -> bool:
+        """Whether this grid has a working Left/Right cell cursor (so
+        ``focused_cell()`` reports the real column). True where ``cell_announce``
+        was wired (Windows/NVDA), False on macOS/VoiceOver — where F2 can't know
+        the column from the cursor and takes the column-picker path instead."""
+        return self._has_cell_cursor
+
     def focused_cell(self) -> tuple[int, str] | None:
         """(channel number, column name) at the Left/Right cell cursor, or None.
 
         The column tracks the grid's cell cursor, which is currently Windows-only
         (on macOS it stays column 0 until upstream cursor tracking lands —
-        wx-accessible-grid#3 — so callers fall back to a full-channel edit there)."""
+        wx-accessible-grid#3 — so callers use ``has_cell_cursor`` to take the
+        column-picker path there instead of trusting this column)."""
         cell = self._grid.current_cell()
         if cell is None:
             return None
