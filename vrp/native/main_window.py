@@ -131,7 +131,9 @@ class MainWindow(wx.Frame):
         # where the cursor is untested — on_edit_cell falls back to the picker.
         cell_announce = None
         if sys.platform in ("win32", "darwin"):
-            cell_announce = lambda text: self.announce.announce(text, assertive=True)  # noqa: E731
+            def cell_announce(text):
+                LOG.debug("cell-cursor announce: %r", text)  # visible with --debug
+                self.announce.announce(text, assertive=True)
         self.grid = ChannelGrid(
             self,
             on_activate=self.on_edit_channel,
