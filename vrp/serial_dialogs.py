@@ -21,6 +21,7 @@ import re
 import threading
 
 import wx
+import wx.dataview as dv
 
 from vrp.config import get_config
 from vrp.speech import Speaker
@@ -194,40 +195,37 @@ class PortPicker(wx.Panel):
             self._on_change()
 
 
-class RadioListView(wx.ListCtrl):
-    """A single-column list with **native incremental type-ahead** — typing
-    several letters jumps to the first item starting with them. ``wx.ListBox``
-    only does single-letter cycling on Windows; ``wx.ListCtrl`` is the native
-    SysListView32 there, which does true type-ahead and is read by NVDA.
+class RadioListView(dv.DataViewListCtrl):
+    """A single-column list built on ``wx.dataview.DataViewListCtrl`` so it reads
+    on every screen reader — the same control (and reasoning) as the channel
+    grid. On macOS it wraps ``NSTableView``, which VoiceOver reads and lets the
+    user arrow through; on Windows/GTK wx exposes its generic DataViewCtrl to
+    MSAA/UIA so NVDA/Orca read the rows. (The previous ``wx.ListCtrl`` version was
+    the native list-view on Windows but fell back to wx's generic custom-drawn
+    control on macOS, which exposed nothing to VoiceOver — so the Download and
+    Favorites result lists could not be navigated there.)
 
     Exposes a small ``wx.ListBox``-compatible API (Set / GetCount / GetString /
     GetSelection / SetSelection / SetStringSelection) so the dialogs and their
-    tests stay simple; ``on_select`` is called when the selection changes.
-
-    Platform note: on Windows this is the native list-view (type-ahead + NVDA).
-    On macOS ``wx.ListCtrl`` is wx's generic control and may read poorly under
-    VoiceOver — these serial dialogs are NVDA/Windows-verified; revisit the
-    control choice if/when the macOS VoiceOver pass covers them.
+    tests stay unchanged; ``on_select`` is called when the selection changes.
+    Incremental type-ahead is native to the control on each platform; the
+    dialogs' filter box remains the primary search path regardless.
     """
 
     def __init__(self, parent, *, name: str, on_select=None,
                  size=(280, 200)) -> None:
-        super().__init__(
-            parent,
-            style=wx.LC_REPORT | wx.LC_SINGLE_SEL | wx.LC_NO_HEADER,
-            size=size,
-        )
+        super().__init__(parent, style=dv.DV_SINGLE | dv.DV_NO_HEADER, size=size)
         self.SetName(name)
-        self.InsertColumn(0, "")
+        self.AppendTextColumn("")  # single, header-less column
         self._on_select = on_select
-        self.Bind(wx.EVT_LIST_ITEM_SELECTED, self._fire_select)
+        self.Bind(dv.EVT_DATAVIEW_SELECTION_CHANGED, self._fire_select)
         self.Bind(wx.EVT_SIZE, self._on_size)
 
     def _on_size(self, event) -> None:
         event.Skip()
         w = self.GetClientSize().width
-        if w > 0:
-            self.SetColumnWidth(0, w)  # single column fills the width
+        if w > 0 and self.GetColumnCount():
+            self.GetColumn(0).SetWidth(w)  # single column fills the width
 
     def _fire_select(self, event) -> None:
         event.Skip()
@@ -237,17 +235,15 @@ class RadioListView(wx.ListCtrl):
     # -- wx.ListBox-compatible surface -------------------------------------
     def Set(self, labels) -> None:
         # Freeze around the rebuild: suppresses flicker and the burst of
-        # accessibility events NVDA would announce per item at ~552 rows.
+        # accessibility events a screen reader would announce per item at ~552 rows.
         self.Freeze()
         try:
-            self.DeleteAllItems()
+            self.DeleteAllItems()  # rows only; the column persists
             for label in labels:
-                self.InsertItem(self.GetItemCount(), label)
-            w = self.GetClientSize().width
-            self.SetColumnWidth(0, w if w > 0 else wx.LIST_AUTOSIZE)
+                self.AppendItem([label])
             if labels:
-                self.Select(0)
-                self.Focus(0)
+                self.SelectRow(0)
+                self.SetCurrentItem(self.RowToItem(0))
         finally:
             self.Thaw()
 
@@ -255,20 +251,22 @@ class RadioListView(wx.ListCtrl):
         return self.GetItemCount()
 
     def GetString(self, i: int) -> str:
-        return self.GetItemText(i)
+        return self.GetTextValue(i, 0) if 0 <= i < self.GetItemCount() else ""
 
     def GetSelection(self) -> int:
-        return self.GetFirstSelected()  # -1 (wx.NOT_FOUND) when none
+        row = self.GetSelectedRow()  # wx.NOT_FOUND when none
+        return row if row != wx.NOT_FOUND else wx.NOT_FOUND
 
     def SetSelection(self, i: int) -> None:
         if 0 <= i < self.GetItemCount():
-            self.Select(i)
-            self.Focus(i)
-            self.EnsureVisible(i)
+            item = self.RowToItem(i)
+            self.SelectRow(i)
+            self.SetCurrentItem(item)
+            self.EnsureVisible(item)
 
     def SetStringSelection(self, s: str) -> bool:
         for i in range(self.GetItemCount()):
-            if self.GetItemText(i) == s:
+            if self.GetTextValue(i, 0) == s:
                 self.SetSelection(i)
                 return True
         return False
@@ -376,6 +374,11 @@ class DownloadDialog(wx.Dialog):
                      wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 6)
         self.show_all = wx.RadioButton(self, label="All radios", style=wx.RB_GROUP)
         self.show_favs = wx.RadioButton(self, label="Favorites")
+        # RB_GROUP auto-selects the first button on Windows/GTK but not on macOS,
+        # where the group would otherwise read as "nothing selected" under
+        # VoiceOver. Set it explicitly so "All radios" is the definite default
+        # everywhere.
+        self.show_all.SetValue(True)
         show_row.Add(self.show_all, 0, wx.RIGHT, 12)
         show_row.Add(self.show_favs, 0)
         box.Add(show_row, 0, wx.ALL, 4)
