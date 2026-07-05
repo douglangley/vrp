@@ -73,3 +73,18 @@ class Speaker:
             backend.stop()
         except Exception as exc:  # pragma: no cover - environment dependent
             LOG.warning("prism: stop failed (%s)", exc)
+
+
+_shared: "Speaker | None" = None
+
+
+def get_speaker() -> "Speaker":
+    """Return the process-wide shared ``Speaker``.
+
+    Every UI surface that speaks (the main window, dialogs) uses this one
+    instance so the prism backend is acquired once, not once per window.
+    """
+    global _shared
+    if _shared is None:
+        _shared = Speaker()
+    return _shared

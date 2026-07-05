@@ -24,12 +24,12 @@ import wx
 import wx.dataview as dv
 
 from vrp.config import get_config
-from vrp.speech import Speaker
+from vrp.speech import get_speaker
 
 # Supplemental speech for transient confirmations that don't move focus (e.g.
-# adding/removing a favorite). Module-level so the prism backend is acquired
-# once; a no-op when speech is unavailable.
-_speaker = Speaker()
+# adding/removing a favorite). The shared process-wide Speaker, so the prism
+# backend is acquired once; a no-op when speech is unavailable.
+_speaker = get_speaker()
 
 
 def _normalize_for_search(text: str) -> str:

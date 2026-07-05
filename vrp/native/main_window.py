@@ -29,7 +29,7 @@ from chirp_backend import radio as radio_backend
 from vrp import __version__
 from vrp.native.announce import Announcer
 from vrp.native.channel_grid import ChannelGrid
-from vrp.speech import Speaker
+from vrp.speech import get_speaker
 
 LOG = logging.getLogger(__name__)
 
@@ -95,10 +95,10 @@ class MainWindow(wx.Frame):
         self.SetStatusWidths([-3, -2])
         self.SetStatusText(_CHIRP_ATTRIBUTION, 1)
 
-        # Build speech: Speaker is a class, not a bare function. Create an
-        # instance and pass its .speak method; if prism is unavailable the
-        # method is a no-op, so Announcer degrades gracefully.
-        self._speaker = Speaker()
+        # Build speech: get_speaker() returns the shared process-wide Speaker.
+        # Pass its .speak method; if prism is unavailable the method is a no-op,
+        # so Announcer degrades gracefully.
+        self._speaker = get_speaker()
         # Announcer calls set_status(message) with ONE argument, which maps to
         # SetStatusText(message) — the no-index form writes field 0 only, so
         # the attribution in field 1 is never touched.

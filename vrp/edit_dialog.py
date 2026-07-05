@@ -20,12 +20,12 @@ from __future__ import annotations
 import wx
 
 from chirp_backend.col_defs import build_column_defs
-from vrp.speech import Speaker
+from vrp.speech import get_speaker
 
 # Supplemental speech for transient dialog confirmations that don't move focus
-# (e.g. the auto-filled offset suggestion). Module-level so the prism backend is
-# acquired once, not per dialog; a no-op when speech is unavailable.
-_speaker = Speaker()
+# (e.g. the auto-filled offset suggestion). The shared process-wide Speaker, so
+# the prism backend is acquired once; a no-op when speech is unavailable.
+_speaker = get_speaker()
 
 # Several choice columns store terse tokens — a blank ("no value") entry, single
 # letters, "+"/"-" — that a screen reader reads poorly or as nothing. We show a
