@@ -3,6 +3,11 @@
 ImportDestinationDialog chooses the destination channel for a block of imported
 memories and how to treat occupied channels; the import itself goes through
 memory_ops.import_memories. Shared by the "Import from File" flow.
+
+The plural module name is deliberate: the online query-source dialogs were
+removed (see PROGRESS_LOG 2026-07-05), leaving only this one destination dialog,
+but the filename is kept for RepeaterBook/RadioReference's eventual return.
+Don't "tidy" it to import_dialog.py.
 """
 
 from __future__ import annotations

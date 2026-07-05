@@ -6,8 +6,8 @@ object directly) plus parameters, perform the operation, and return
 (success, message, affected_channel_numbers).
 
 This mirrors the operations available in CHIRP's memedit.py but decoupled
-from any GUI. The affected_channel_numbers list tells the Flask route which
-channels to re-read and return to the frontend for refresh.
+from any GUI. The affected_channel_numbers list tells the UI which channels to
+re-read and refresh in the grid.
 
 Reference: chirp/chirp/wxui/memedit.py methods:
   _delete_memories_at, _mem_insert, cb_move, _do_sort_memories,

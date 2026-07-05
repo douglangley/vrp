@@ -1,8 +1,9 @@
 """
-Radio backend — wraps the CHIRP library for use by Flask routes.
+Radio backend — wraps the CHIRP library for the wx UI.
 
 Manages a single "active radio" (loaded image + optional live serial
-connection). All state lives here so routes stay stateless.
+connection). All radio state lives here, framework-agnostic, so the UI layer
+holds no CHIRP objects of its own.
 
 CHIRP library notes:
   - directory.import_drivers() must be called once before any radio ops.

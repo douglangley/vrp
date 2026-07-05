@@ -9,8 +9,8 @@ decoupled from wx. Each column knows how to:
   - Format a value for display
   - Parse a user-entered string back to the internal value
 
-This is used both by the Flask routes (to know what columns to include
-in JSON) and by the frontend (column headers, input types, valid values).
+This drives the channel grid (column headers, input types, valid values) and
+the edit dialog, which builds its fields from the same column defs.
 """
 
 from __future__ import annotations

@@ -1,11 +1,11 @@
 """Native wx dialog for editing one memory channel.
 
-Why a native dialog instead of editing in the HTML grid: with large radios
+Why a dedicated dialog instead of editing inline in the grid: with large radios
 (thousands of channels) putting controls in the grid forces the screen reader
 to re-read the whole table on every interaction. A native ``wx.Dialog`` is a
 separate top-level window with first-class keyboard/screen-reader support, so
-the big channel table stays a fast, read-only HTML table and only the edited
-row is refreshed afterward. (Accessibility-lead approved model.)
+the channel grid stays a fast, navigable table and only the edited row is
+refreshed afterward. (Accessibility-lead approved model.)
 
 Fields are built from the same ``build_column_defs`` the table uses, so the
 dialog never shows a field the radio doesn't support. Immutable fields are

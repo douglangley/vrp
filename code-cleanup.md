@@ -137,7 +137,15 @@ ambiguity.
 **Verify:** unit test for the chosen behavior (non-contiguous input → clean
 error, or correct compaction).
 
-### 1.5 Settings dialog writes back *unchanged* values on OK
+### 1.5 Settings dialog writes back *unchanged* values on OK — FIXED 2026-07-05
+
+**DONE.** `RadioSettingsDialog` records each control's build-time value
+(`self._initial`) and `_on_ok` skips any control whose read-back is unchanged,
+so `set_value` runs only for genuine edits. Test:
+`tests/test_settings_dialog.py` (no-edit OK → `changed()` False, count 0; a real
+edit still writes and counts). 215 tests pass.
+
+<details><summary>Original finding</summary>
 
 **What:** `RadioSettingsDialog._on_ok` calls `value.set_value(...)` for every
 enabled control (`vrp/settings_dialog.py:147-162`), not just changed ones — and
@@ -152,6 +160,8 @@ for display only.
 
 **Verify:** unit test with a stub RadioSettingValueString carrying trailing
 spaces: OK with no edits → `changed()` False everywhere, count 0.
+
+</details>
 
 ### 1.6 Minor robustness — PARTIAL 2026-07-05
 
