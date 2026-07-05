@@ -338,23 +338,6 @@ class TestFind:
 
 
 # ---------------------------------------------------------------------------
-# Tests: goto
-# ---------------------------------------------------------------------------
-
-class TestGoto:
-    def test_goto_valid(self, stub_radio):
-        from chirp_backend.memory_ops import goto
-        ok, msg, affected = goto(10)
-        assert ok
-        assert affected == [10]
-
-    def test_goto_out_of_range(self, stub_radio):
-        from chirp_backend.memory_ops import goto
-        ok, msg, affected = goto(99)
-        assert not ok
-
-
-# ---------------------------------------------------------------------------
 # Tests: paste_block (cut / copy / paste of whole rows)
 # ---------------------------------------------------------------------------
 

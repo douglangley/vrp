@@ -84,51 +84,6 @@ def _parse_field_value(radio, mem, field: str, value: str):
     return value
 
 
-@undo.records
-def set_field(number: int, field: str, value: str) -> OpResult:
-    """Set one field on one memory channel and write it back to the image.
-
-    Returns (success, message, [number]). Rejects immutable fields and turns
-    parse/validation errors into a friendly message instead of raising.
-    """
-    try:
-        radio = _get_radio()
-    except RuntimeError as e:
-        return False, str(e), []
-
-    if field == "number":
-        return False, "Channel number is not editable.", []
-
-    try:
-        mem = _get_mem(radio, number)
-    except Exception as e:  # noqa: BLE001
-        return False, f"Could not read channel {number}: {e}", []
-
-    if field in (mem.immutable or []):
-        return False, (
-            f"Channel {number}: {field} cannot be changed on this radio."
-        ), []
-
-    try:
-        parsed = _parse_field_value(radio, mem, field, value)
-    except (ValueError, TypeError) as e:
-        return False, f"Invalid value for {field}: {value!r} ({e})", []
-
-    try:
-        setattr(mem, field, parsed)
-        # Entering a frequency populates a slot; a zero frequency empties it.
-        if field == "freq":
-            mem.empty = parsed == 0
-        _set_mem(radio, mem)
-    except Exception as e:  # noqa: BLE001
-        return False, f"Failed to set {field} on channel {number}: {e}", []
-
-    from chirp_backend.radio import invalidate_cache
-
-    invalidate_cache([number])
-    return True, f"Channel {number} {field} updated.", [number]
-
-
 def _parse_all(radio, mem, values: dict):
     """Parse every field in ``values`` for ``mem``.
 
@@ -991,25 +946,4 @@ def find(
 
     except Exception as e:
         LOG.exception("find")
-        return False, str(e), []
-
-
-def goto(number: int) -> OpResult:
-    """
-    Validate that a channel number exists and return it.
-    The frontend uses the returned number to scroll/focus the table row.
-    """
-    try:
-        radio = _get_radio()
-        first_bound, last_bound = _mem_bounds()
-        if number < first_bound or number > last_bound:
-            return (
-                False,
-                f"Channel {number} is out of range ({first_bound}–{last_bound})",
-                [],
-            )
-        return True, f"Jumped to channel {number}", [number]
-
-    except Exception as e:
-        LOG.exception("goto(%d)", number)
         return False, str(e), []

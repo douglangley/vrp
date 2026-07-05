@@ -44,17 +44,6 @@ class ColumnDef:
         """Return True if this column should be hidden for this memory/radio."""
         return False
 
-    def to_dict(self) -> dict:
-        """Serialize column definition for the frontend."""
-        return {
-            "name": self.name,
-            "label": self.label,
-            "editable": self.editable,
-            "input_type": self.input_type,
-            "choices": self.choices,
-            "width_hint": self.width_hint,
-        }
-
 
 @dataclass
 class FrequencyColumn(ColumnDef):
@@ -284,21 +273,3 @@ def editable_columns(
         c for c in columns
         if c.editable and c.name != "number" and c.name not in blocked
     ]
-
-
-def memory_to_dict(mem, col_defs: list[ColumnDef]) -> dict:
-    """
-    Serialize a Memory object to a dict for JSON response.
-    Includes all column values plus metadata the frontend needs.
-    """
-    result = {
-        "number": mem.number,
-        "empty": mem.empty,
-        "immutable": mem.immutable,
-        "extd_number": getattr(mem, "extd_number", ""),
-    }
-    for col in col_defs:
-        if col.name == "number":
-            continue
-        result[col.name] = col.format_value(mem)
-    return result

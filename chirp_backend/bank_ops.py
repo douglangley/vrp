@@ -52,16 +52,6 @@ def _bank_label(bank) -> str:
     return f"Bank {idx}: {name}" if name else f"Bank {idx}"
 
 
-def has_bank() -> bool:
-    """True if the loaded radio has a usable bank model."""
-    radio = _radio()
-    if radio is None:
-        return False
-    if not getattr(radio.get_features(), "has_bank", False):
-        return False
-    return _bank_model() is not None
-
-
 def get_bank_state(number: int) -> dict:
     """Describe a channel's bank options + current membership for the dialog.
 

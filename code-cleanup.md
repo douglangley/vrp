@@ -176,39 +176,31 @@ an NVDA smoke of the grid. (Already tracked in PROGRESS_LOG "Open / next".)
 
 ---
 
-## Phase 2 — Dead code removal
+## Phase 2 — Dead code removal — MOSTLY DONE 2026-07-05
 
 All confirmed by grep to have **zero callers** in `vrp/`, `chirp_backend/`,
-`main.py`, `build.py` (some have test-only callers, noted). Remove code + its
-tests together; one commit per bullet or one sweep commit.
+`main.py`, `build.py` (some had test-only callers, removed with them).
 
-- [ ] **2.1 `radio.describe_radio_html`** (`chirp_backend/radio.py:343-395`) —
-  webview-era HTML builder, no callers. ~50 lines.
-- [ ] **2.2 `memory_ops.set_field`** (`chirp_backend/memory_ops.py:87-129`) —
-  superseded by `set_channel_field` (coupled-field repair) and
-  `update_channel`; no callers.
-- [ ] **2.3 `memory_ops.goto`** (`chirp_backend/memory_ops.py:997-1015`) — the
-  native `on_goto` does its own bounds/select/focus; only
-  `tests/test_memory_ops.py:330-336` calls it. Remove both.
-- [ ] **2.4 `bank_ops.has_bank`** (`chirp_backend/bank_ops.py:55-62`) — no
-  callers (`on_banks` uses `get_bank_state`).
-- [ ] **2.5 `col_defs.memory_to_dict` + `ColumnDef.to_dict`**
-  (`chirp_backend/col_defs.py:47-56,289-304`) — Flask/webview-era JSON
-  serialization, no callers.
-- [ ] **2.6 `RadioState.serial_port`** (`chirp_backend/radio.py:64`) — written
-  on download/unload, **never read** (the Download dialog uses
-  `config.last_serial_port` instead). Remove the field, or start showing it in
-  Radio Info ("Downloaded via COM4") — decide, don't leave write-only state.
-- [ ] **2.7 `tools/` spikes** — `spike_native_voiceover.py`,
-  `spike_native_preloaded.py`, `speak_test.py` are documented throwaways.
-  Delete them (git history keeps them) or move to `tools/spikes/` with a
-  one-line README. Keep `tools/update_chirp.py`.
-- [ ] **2.8 Module-level `radio.set_memory`/`erase_memory`** — only
-  `tests/test_undo.py` uses them; the app writes via `memory_ops`. Fold into
-  5.1 (single write path) rather than deleting blind.
+- [x] **2.1 `radio.describe_radio_html`** — webview-era HTML builder, removed.
+- [x] **2.2 `memory_ops.set_field`** — superseded by `set_channel_field` /
+  `update_channel`, removed.
+- [x] **2.3 `memory_ops.goto`** + its two tests — `on_goto` does its own
+  bounds/select/focus; removed.
+- [x] **2.4 `bank_ops.has_bank`** — removed (`on_banks` uses `get_bank_state`).
+- [x] **2.5 `col_defs.memory_to_dict` + `ColumnDef.to_dict`** — Flask/webview-era
+  JSON serialization, removed.
+- [x] **2.6 `RadioState.serial_port`** — removed the write-only field and its
+  two assignments (unload/download). If "Downloaded via COMx" is ever wanted in
+  Radio Info, add it back as a *read* path deliberately.
+- [ ] **2.7 `tools/` spikes** — **DEFERRED (user's call).** They're referenced
+  by `docs/research/2026-06-24-native-grid-voiceover-feasibility.md` and relate
+  to ongoing macOS VoiceOver work, so not deleting exploratory tooling
+  unilaterally. Delete or move to `tools/spikes/` when you decide.
+- [ ] **2.8 Module-level `radio.set_memory`/`erase_memory`** — deferred to
+  Phase 5.1 (single write path) rather than deleting blind (tests use them).
 
-**Verify after the sweep:** full suite; `python -c "import vrp.native.main_window"`;
-grep shows no dangling references.
+**Verified:** 205 tests pass; `import chirp_backend.*` clean; grep shows no
+dangling references to any removed symbol.
 
 ---
 

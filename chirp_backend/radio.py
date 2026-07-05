@@ -61,7 +61,6 @@ class RadioState:
     radio: object = None            # chirp CloneModeRadio instance
     image_path: Optional[str] = None
     is_modified: bool = False
-    serial_port: Optional[str] = None
     # Cache of memory objects keyed by channel number, populated on load
     _mem_cache: dict = field(default_factory=dict)
 
@@ -98,7 +97,6 @@ def unload() -> None:
         _state.radio = None
         _state.image_path = None
         _state.is_modified = False
-        _state.serial_port = None
         _state._mem_cache = {}
     _undo = None  # drop the undo history with the radio
 
@@ -355,61 +353,6 @@ def export_to_csv(path: str) -> tuple:
     except Exception as e:  # noqa: BLE001
         LOG.exception("export_to_csv failed: %s", path)
         return False, f"Export failed: {e}", 0
-
-
-def describe_radio_html(state) -> str:
-    """Build an accessible label/value HTML summary of the loaded radio."""
-    from html import escape
-
-    radio = state.radio
-    f = radio.get_features()
-    lo, hi = f.memory_bounds
-
-    def yn(b):
-        return "Yes" if b else "No"
-
-    bands = "; ".join(
-        f"{a / 1_000_000:.3f}–{b / 1_000_000:.3f} MHz"
-        for a, b in (getattr(f, "valid_bands", None) or [])
-    )
-    modes = ", ".join(getattr(f, "valid_modes", None) or [])
-    variant = getattr(radio, "VARIANT", "") or ""
-    source = os.path.basename(state.image_path) if state.image_path else "Downloaded, not yet saved"
-
-    identity = [("Vendor", radio.VENDOR), ("Model", radio.MODEL)]
-    if variant:
-        identity.append(("Variant", variant))
-    identity += [("Source", source), ("Unsaved changes", yn(state.is_modified))]
-
-    capacity = [("Channels", f"{hi - lo + 1} (numbered {lo} to {hi})")]
-
-    has_name = getattr(f, "has_name", False)
-    name_detail = yn(has_name)
-    if has_name and getattr(f, "valid_name_length", 0):
-        name_detail += f", up to {f.valid_name_length} characters"
-    capabilities = [
-        ("Channel names", name_detail),
-        ("Banks", yn(getattr(f, "has_bank", False))),
-        ("Settings", yn(getattr(f, "has_settings", False))),
-        ("Comments", yn(getattr(f, "has_comment", False))),
-        ("DTCS", yn(getattr(f, "has_dtcs", False))),
-        ("Bands", bands or "—"),
-        ("Modes", modes or "—"),
-    ]
-
-    def table(title, rows):
-        cells = "".join(
-            f'<tr><th scope="row">{escape(str(k))}</th><td>{escape(str(v))}</td></tr>'
-            for k, v in rows
-        )
-        return f"<h3>{escape(title)}</h3><table>{cells}</table>"
-
-    return (
-        f"<h2>{escape(radio.VENDOR)} {escape(radio.MODEL)}</h2>"
-        + table("Identity", identity)
-        + table("Capacity", capacity)
-        + table("Capabilities", capabilities)
-    )
 
 
 def has_settings() -> bool:
@@ -783,7 +726,6 @@ def download_from_radio(
 
         with _state_lock:
             _state.radio = radio
-            _state.serial_port = port
             _state.image_path = None   # downloaded, not yet saved to disk
             _state.is_modified = True
             _state._mem_cache = {}
