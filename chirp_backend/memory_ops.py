@@ -216,20 +216,24 @@ _DUPLEX_NEEDS_OFFSET = {"+": "plus", "-": "minus"}
 
 
 def _field_persisted(radio, number: int, field: str, value) -> bool:
-    """Whether ``field`` now reads back as ``value`` (i.e. the edit stuck). Reads
-    the radio fresh and compares via the column's own display formatting."""
-    from chirp_backend.col_defs import build_column_defs
-
+    """Whether the edit stuck: re-read the radio and compare the **parsed**
+    intended value to the value now stored. Parsing first avoids type/formatting
+    false-negatives — e.g. DTCS input "023" parses to the int 23 that's actually
+    stored, where a display-string compare ("023" vs "23") would wrongly report a
+    failure and force an unwanted coupling change. On any doubt, assume it stuck,
+    so we never force a coupling change we're unsure about."""
     try:
         mem = _get_mem(radio, number)
+        want = _parse_field_value(radio, mem, field, str(value))
     except Exception:  # noqa: BLE001
-        return True  # can't tell; assume it stuck rather than double-writing
-    col = next(
-        (c for c in build_column_defs(radio.get_features()) if c.name == field), None
-    )
-    if col is None:
         return True
-    return col.format_value(mem).strip() == str(value).strip()
+    got = getattr(mem, field, None)
+    if isinstance(want, float) or isinstance(got, float):
+        try:
+            return abs(float(got) - float(want)) < 0.05
+        except (TypeError, ValueError):
+            return got == want
+    return got == want
 
 
 def _apply(radio, number: int, values: dict) -> bool:

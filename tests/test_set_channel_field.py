@@ -75,6 +75,28 @@ def test_ctone_when_already_tsql_is_left_alone(loaded):
     assert m.tmode == "TSQL" and abs(m.ctone - 100.0) < 0.05
 
 
+def test_dtcs_code_alone_sets_dtcs_mode(loaded):
+    """A zero-padded DCS code ("023") on a tone-off channel turns on DTCS and
+    persists. Guards the parsed-vs-formatted comparison ("023" -> int 23)."""
+    n = _first_populated_no_tone()
+    _ok, _msg, _aff, note = memory_ops.set_channel_field(n, "dtcs", "025")
+    assert note and "DTCS" in note
+    m = radio_backend.get_memory(n)
+    assert m.tmode == "DTCS" and m.dtcs == 25
+
+
+def test_dtcs_when_already_dtcs_is_not_reannounced(loaded):
+    """Editing the code on a channel already in DTCS must not report a coupling
+    change (the "023" vs 23 mismatch used to make every DTCS edit re-set the mode
+    and risk clobbering a Cross setup)."""
+    n = _first_populated_no_tone()
+    memory_ops.update_channel(n, {"tmode": "DTCS", "dtcs": "023"})
+    _ok, _msg, _aff, note = memory_ops.set_channel_field(n, "dtcs", "026")
+    assert note is None                      # already effective, no re-set
+    m = radio_backend.get_memory(n)
+    assert m.tmode == "DTCS" and m.dtcs == 26
+
+
 def _first_simplex_channel():
     """A populated channel with no Duplex offset (the case the fix targets)."""
     lo, hi = radio_backend.get_state().memory_bounds
