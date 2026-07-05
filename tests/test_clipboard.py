@@ -206,6 +206,61 @@ def test_paste_conflict_cancel_makes_no_change(win, monkeypatch):
     assert radio_backend.get_memory(dest).name == dest_name  # unchanged
 
 
+def test_copy_skips_unreadable_channel(win, monkeypatch):
+    """A channel whose get_memory returns None is skipped, not crashed on."""
+    orig = radio_backend.get_memory
+    monkeypatch.setattr(
+        radio_backend, "get_memory", lambda n: None if n == 2 else orig(n)
+    )
+    win.grid.select_channels([2, 3])
+    win.on_copy()  # would AttributeError on None.dupe() before the fix
+    assert win._clipboard is not None
+    assert win._clipboard.source_numbers == [3]  # unreadable 2 dropped
+    assert len(win._clipboard.mems) == 1
+
+
+def test_copy_all_unreadable_returns_none(win, monkeypatch):
+    """When nothing selected can be read, copy announces and leaves the
+    clipboard empty rather than crashing."""
+    monkeypatch.setattr(radio_backend, "get_memory", lambda n: None)
+    win.grid.select_channels([2, 3])
+    win.on_copy()
+    assert win._clipboard is None
+
+
+def test_paste_over_unreadable_destination_no_crash(win, monkeypatch):
+    """An unreadable destination slot is treated as empty in the occupancy
+    check (no crash on .empty, no spurious conflict dialog)."""
+    from chirp_backend import memory_ops
+
+    low, high = radio_backend.get_state().memory_bounds
+    src = _first_nonempty(low, high)
+    dest = _first_empty(low, high)
+    assert src is not None and dest is not None
+    win.grid.select_channels([src])
+    win.on_copy()  # snapshot taken while get_memory is still real
+
+    orig = radio_backend.get_memory
+    monkeypatch.setattr(
+        radio_backend, "get_memory", lambda n: None if n == dest else orig(n)
+    )
+    monkeypatch.setattr(
+        win, "_ask_paste_conflict",
+        lambda *a: pytest.fail("conflict dialog shown for unreadable (empty) dest"),
+    )
+    called = {}
+    real = memory_ops.paste_block
+
+    def spy(*a, **k):
+        called["yes"] = True
+        return real(*a, **k)
+
+    monkeypatch.setattr(memory_ops, "paste_block", spy)
+    win.grid.focus_channel(dest)
+    win.on_paste()  # must not raise
+    assert called.get("yes")  # paste proceeded, treating None dest as empty
+
+
 def test_ask_paste_conflict_maps_buttons(win, monkeypatch):
     """The dialog's Yes/No/Cancel map to overwrite/move/None."""
     results = iter([wx.ID_YES, wx.ID_NO, wx.ID_CANCEL])

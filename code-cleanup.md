@@ -94,7 +94,16 @@ and `on_download` (download replaces the loaded image) never check
 **Verify:** headless test for the helper's decision logic; manual NVDA pass on
 the dialog (title + buttons read, Escape cancels).
 
-### 1.3 `get_memory()` can return `None` → crash paths in clipboard/paste
+### 1.3 `get_memory()` can return `None` → crash paths in clipboard/paste — FIXED 2026-07-05
+
+**DONE.** `_snapshot_selection` now skips unreadable channels (and announces if
+none remain); `on_paste`'s occupancy check treats a None slot as empty
+(consistent with `_destination_occupied`/`_first_empty_channel`). Tests:
+`test_clipboard.py::test_copy_skips_unreadable_channel`,
+`test_copy_all_unreadable_returns_none`,
+`test_paste_over_unreadable_destination_no_crash`. 205 tests pass.
+
+<details><summary>Original finding</summary>
 
 **What:** `radio_backend.get_memory` returns `None` on a read failure
 (`chirp_backend/radio.py:163-177`), but:
@@ -108,6 +117,8 @@ treat as empty (paste occupancy check). Keep it small.
 
 **Verify:** unit test with a stub radio whose `get_memory` raises for one
 channel.
+
+</details>
 
 ### 1.4 `delete_and_shift` with a non-contiguous selection — verify semantics
 

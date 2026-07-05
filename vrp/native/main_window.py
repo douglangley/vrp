@@ -693,7 +693,11 @@ class MainWindow(wx.Frame):
 
     def _snapshot_selection(self) -> tuple[list[int], list] | None:
         """The selected channel numbers and deep-copied Memory snapshots, or None
-        (with an announcement) when nothing is available to act on."""
+        (with an announcement) when nothing is available to act on.
+
+        A channel that can't be read (``get_memory`` returns None) is skipped
+        rather than crashing on ``.dupe()``; the returned numbers match the
+        snapshots actually captured, so a later cut erases only what was copied."""
         if not radio_backend.get_state().loaded:
             self.announce.announce("No radio image is open.", assertive=True)
             return None
@@ -701,8 +705,20 @@ class MainWindow(wx.Frame):
         if not numbers:
             self.announce.announce("No channel selected.")
             return None
-        mems = [radio_backend.get_memory(n).dupe() for n in numbers]
-        return numbers, mems
+        readable: list[int] = []
+        mems = []
+        for n in numbers:
+            mem = radio_backend.get_memory(n)
+            if mem is None:
+                continue
+            readable.append(n)
+            mems.append(mem.dupe())
+        if not mems:
+            self.announce.announce(
+                "Could not read the selected channel(s).", assertive=True
+            )
+            return None
+        return readable, mems
 
     def on_copy(self, _evt=None) -> None:
         """Copy the selected channel(s) to the in-app clipboard (source kept)."""
@@ -753,11 +769,17 @@ class MainWindow(wx.Frame):
 
         cut_from = clip.source_numbers if clip.mode == "cut" else None
         cut_set = set(cut_from or [])
-        # Occupied destination slots that aren't sources being moved out.
-        occupied = [
-            k for k in range(dest, dest + n)
-            if k not in cut_set and not radio_backend.get_memory(k).empty
-        ]
+        # Occupied destination slots that aren't sources being moved out. An
+        # unreadable slot (get_memory None) is treated as empty here — consistent
+        # with _destination_occupied / _first_empty_channel — so it never crashes
+        # on `.empty`; paste_block does the real write regardless.
+        occupied = []
+        for k in range(dest, dest + n):
+            if k in cut_set:
+                continue
+            mem = radio_backend.get_memory(k)
+            if mem is not None and not mem.empty:
+                occupied.append(k)
         make_room = False
         if occupied:
             choice = self._ask_paste_conflict(dest, dest + n - 1, len(occupied))
