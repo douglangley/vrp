@@ -187,6 +187,29 @@ class TestDeleteAndShift:
         assert stub_radio.get_memory(2).name == "D"
         assert stub_radio.get_memory(3).empty
 
+    def test_noncontiguous_selection_rejected(self, stub_radio):
+        # A gappy selection (1-3, 5) has no well-defined shift; reject cleanly
+        # and leave the radio untouched rather than corrupting the layout.
+        _fill(stub_radio, (1, "B"), (2, "C"), (3, "D"), (4, "E"), (5, "F"),
+              (6, "G"))
+        from chirp_backend.memory_ops import delete_and_shift
+        ok, msg, affected = delete_and_shift([1, 2, 3, 5], mode="all")
+        assert not ok
+        assert "contiguous" in msg.lower()
+        assert affected == []
+        # Nothing moved or erased.
+        assert stub_radio.get_memory(4).name == "E"
+        assert stub_radio.get_memory(6).name == "G"
+
+    def test_contiguous_out_of_order_still_shifts(self, stub_radio):
+        # Same channels, given unsorted and with a duplicate, are contiguous.
+        _fill(stub_radio, (1, "B"), (2, "C"), (3, "D"), (4, "E"))
+        from chirp_backend.memory_ops import delete_and_shift
+        ok, _msg, _affected = delete_and_shift([3, 1, 2, 2], mode="all")
+        assert ok
+        assert stub_radio.get_memory(1).name == "E"  # 4 shifted up to 1
+        assert stub_radio.get_memory(2).empty
+
     def test_shift_block(self, stub_radio):
         # Fill channels 0-2 (block), 3 empty, 4-5 another block
         _fill(stub_radio, (0, "A"), (1, "B"), (2, "C"), (4, "X"), (5, "Y"))

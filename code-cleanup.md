@@ -306,13 +306,11 @@ plausible hotspots are UI-side and in a few uncached scan loops:
   stalls (>~300ms), check whether wx-accessible-grid Freezes around populate;
   if not, file/patch upstream (same channel as the cell-cursor work). Measure
   before touching anything.
-- [ ] **4.2 `on_delete_channels` rebuilds the whole grid needlessly.** Plain
-  Delete (`delete_range`) erases slots **in place** — no rows shift — yet the
-  handler calls `self.grid.rebuild()` (`vrp/native/main_window.py:575`), which
-  rebuilds every row dict and repaints the whole control.
-  `refresh_numbers(affected)` is sufficient and keeps screen-reader focus
-  steadier. (Keep `rebuild()` for the genuinely structural ops.) Cheap win,
-  do this one.
+- [x] **4.2 `on_delete_channels` rebuilds the whole grid needlessly** — DONE
+  2026-07-05 (commit 9cd8ffa). Plain Delete now calls
+  `self.grid.refresh_numbers(numbers)` (in-place repaint); `rebuild()` kept for
+  the structural ops in `on_organize`. Test asserts the non-rebuild path + focus
+  on the cleared slot. **Owed:** NVDA confirmation that focus reads steadily.
 - [x] **4.3 `paste_block` make-room scan reads every channel uncached** — DONE
   2026-07-05 (commit 0a3fcc9). Now scans `[destination, last_bound]` from the
   tail down and breaks at the first occupied slot (only the highest matters).
@@ -376,8 +374,8 @@ pass on 4.2 (focus must stay on the deleted row's slot).
 - [ ] `delete_and_shift` non-contiguous behavior (whichever fix is chosen). (1.4)
 - [ ] Settings OK-with-no-edits → zero `set_value` calls / `changed()` count 0. (1.5)
 - [ ] Grid guard: `chirp.wxui` never imported (0.2).
-- [ ] Post-delete focus lands on the erased slot without a full rebuild (4.2 —
-  assert `refresh_numbers` path, not `rebuild`).
+- [x] Post-delete focus lands on the erased slot without a full rebuild (4.2 —
+  assert `refresh_numbers` path, not `rebuild`). DONE (commit 9cd8ffa).
 
 ---
 

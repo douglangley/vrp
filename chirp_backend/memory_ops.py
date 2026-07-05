@@ -469,10 +469,25 @@ def delete_and_shift(numbers: list[int], mode: str = "all") -> OpResult:
     if not numbers:
         return False, "No channels specified", []
 
+    numbers_sorted = sorted(set(numbers))
+    # Delete-and-shift only has one honest meaning for a *contiguous* run: the
+    # gap it opens is `len(numbers)` wide, and everything past the run slides up
+    # by that. For a gappy selection (e.g. 1-3,5) the channels *between* the
+    # deleted ones would be left behind while the tail jumps up by the full
+    # count — collapsing different-sized gaps and colliding rows. Reject it with
+    # a clear message rather than silently corrupting the layout (plain Delete,
+    # or one contiguous run at a time, is the accessible alternative).
+    if numbers_sorted != list(range(numbers_sorted[0], numbers_sorted[-1] + 1)):
+        return (
+            False,
+            "Delete and shift needs a contiguous range of channels (no gaps). "
+            "Select a solid run, or use plain Delete to clear channels in place.",
+            [],
+        )
+
     try:
         radio = _get_radio()
         first, last_bound = _mem_bounds()
-        numbers_sorted = sorted(numbers)
         delta = len(numbers_sorted)
         next_after = numbers_sorted[-1] + 1
 
