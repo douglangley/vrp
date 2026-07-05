@@ -45,3 +45,11 @@ logs/
 
 # Debug serial trace (written to CWD by main.py --debug during a clone)
 serial-trace.txt
+
+# Reverse-engineering / scratch working files kept in the repo root (e.g. the
+# KG-UV96M effort): USB/serial packet captures, process-id artifacts, and one-off
+# screenshots/exports. Personal working data — not part of the app.
+*.pcap
+*.pid
+RadioSettings.png
+csv.txt
