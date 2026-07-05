@@ -167,6 +167,24 @@ spaces: OK with no edits → `changed()` False everywhere, count 0.
 - [ ] macOS `test_channel_grid` xfail — **deferred**: can't reproduce or verify
   on Windows. Do it during a macOS pass so the xfail condition is real.
 
+### 1.9 Frequency display truncated trailing zeros ("146") — FIXED 2026-07-05 (user-reported)
+
+**What:** `FrequencyColumn.format_value` did `f"{mhz:.6f}".rstrip("0").rstrip(".")`,
+so a whole-MHz channel (146_000_000 Hz) displayed as **"146"** — hiding that it's
+a real frequency and dropping the meaningful trailing digits.
+
+**Fix:** New `col_defs.format_freq_mhz(freq_hz)` formats from the **integer Hz**
+(no float rounding) with **at least 3 decimals** ("146" → "146.000") while never
+truncating finer data (146.0125, 145.9875, 146.00625 kept). Used by
+`FrequencyColumn`, and — for consistency so search/announcements match what's
+shown — by `memory_ops.find`'s freq normalization and
+`MainWindow._describe_match`. Offset formatting left unchanged (not reported).
+
+**Verified:** `tests/test_freq_format.py` (whole-MHz → 3 decimals, kHz kept,
+finer-than-kHz not truncated, no float error, empty/zero blank) + a real-image
+runtime drive through the grid path: whole-MHz cell reads "146.000", 12.5 kHz
+reads "146.0125". 213 tests pass.
+
 ### 1.8 Load-failure error not read by the screen reader — FIXED 2026-07-05 (user-reported)
 
 **What:** Opening an unsupported/corrupt file showed nothing readable — the error

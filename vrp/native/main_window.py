@@ -1125,12 +1125,13 @@ class MainWindow(wx.Frame):
 
     def _describe_match(self, number: int, prefix: str = "") -> str:
         """Human-readable description of a find match."""
+        from chirp_backend.col_defs import format_freq_mhz
+
         mem = radio_backend.get_memory(number)
         detail = ""
         if mem is not None and not getattr(mem, "empty", True):
             name = (getattr(mem, "name", "") or "").strip()
-            mhz = f"{mem.freq / 1_000_000:.6f}".rstrip("0").rstrip(".")
-            detail = f": {name or mhz}"
+            detail = f": {name or format_freq_mhz(mem.freq)}"
         return f"{prefix}'{self._find_query}' at channel {number}{detail}."
 
     # -- helpers shared by handlers -----------------------------------

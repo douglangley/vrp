@@ -19,6 +19,24 @@ from dataclasses import dataclass, field
 from typing import Any
 
 
+def format_freq_mhz(freq_hz: int) -> str:
+    """Format a frequency (integer Hz) as an MHz display string.
+
+    Keeps the exact stored precision but always shows **at least 3 decimals**, so
+    a whole-MHz channel reads "146.000" rather than "146" (the reported bug — a
+    lone "146" hides that it's a real frequency, and trailing zeros are
+    meaningful to the operator). Digits finer than kHz are preserved, never
+    truncated: 146_012_500 Hz -> "146.0125", 145_987_500 -> "145.9875",
+    146_006_250 -> "146.00625". Computed from the integer Hz (not float MHz) so
+    there is no binary-float rounding error in the displayed value.
+    """
+    whole, frac = divmod(int(freq_hz), 1_000_000)
+    frac_str = f"{frac:06d}".rstrip("0")
+    if len(frac_str) < 3:
+        frac_str = frac_str.ljust(3, "0")  # pad up to kHz so "146" -> "146.000"
+    return f"{whole}.{frac_str}"
+
+
 @dataclass
 class ColumnDef:
     """Base column definition."""
@@ -59,9 +77,7 @@ class FrequencyColumn(ColumnDef):
         freq = mem.freq
         if freq == 0:
             return ""
-        mhz = freq / 1_000_000
-        # Show up to 6 decimal places, strip trailing zeros
-        return f"{mhz:.6f}".rstrip("0").rstrip(".")
+        return format_freq_mhz(freq)
 
     def hidden_for(self, mem, features) -> bool:
         return False

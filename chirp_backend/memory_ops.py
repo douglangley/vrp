@@ -932,9 +932,12 @@ def find(
                     val = getattr(mem, field_name, None)
                     if val is None:
                         continue
-                    # Format freq as MHz string for search
+                    # Format freq as MHz string for search — the same form the
+                    # grid shows (min 3 decimals), so a search for what the user
+                    # sees ("146.000") matches, and a partial "146" still does.
                     if field_name == "freq":
-                        val = f"{val / 1_000_000:.6f}".rstrip("0").rstrip(".")
+                        from chirp_backend.col_defs import format_freq_mhz
+                        val = format_freq_mhz(val)
                     else:
                         val = str(val)
                     if text_lower in val.lower():
