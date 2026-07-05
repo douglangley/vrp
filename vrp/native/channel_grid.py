@@ -72,6 +72,13 @@ class _ChannelGridModel(GridModel):
             return grid_model.cell_text(self.rows[row], column)
         return ""
 
+    def row_label(self, row: int) -> str:
+        """What the column-locked cursor speaks first on Up/Down: "Channel N"
+        (the library defaults to the bare row-header value, "N")."""
+        if 0 <= row < len(self.rows):
+            return f"Channel {grid_model.cell_text(self.rows[row], 'number')}"
+        return str(row + 1)
+
 
 class ChannelGrid(wx.Panel):
     def __init__(
@@ -86,13 +93,19 @@ class ChannelGrid(wx.Panel):
     ) -> None:
         super().__init__(parent)
         self._model = _ChannelGridModel()
-        # ``cell_announce`` enables the library's opt-in Left/Right cell cursor:
-        # a ``callable(str)`` the grid calls with "<value>, <column>" as the
-        # cursor moves across a row. Wired on Windows/NVDA (where the generic
-        # DataViewCtrl announces no per-cell cursor) and left None on macOS, where
-        # VoiceOver reads cells natively with VO+Left/Right — see main_window.
+        # ``cell_announce`` (a ``callable(str)``) enables the library's
+        # column-locked cell cursor: the grid owns all four arrows, speaks
+        # "<value>, <column>" on Left/Right and "Channel N, <value>" on Up/Down
+        # (column-locked — no full-row read), and does NOT move the native
+        # selection while arrowing (synced at action time via
+        # ``sync_selection_to_cursor``). Wired on Windows AND macOS (main_window
+        # verified plain Left/Right/Up/Down reach the DataViewListCtrl on both,
+        # and prism speaks the cell); left None on GTK/other, where F2 then uses
+        # the column picker. ``has_cell_cursor`` lets callers branch on this.
+        self._has_cell_cursor = cell_announce is not None
         self._grid = AccessibleGrid(
-            self, self._model, label=_LABEL, announce=cell_announce
+            self, self._model, label=_LABEL,
+            announce=cell_announce, cell_cursor=self._has_cell_cursor,
         )
         self._list: dv.DataViewListCtrl = self._grid.control
 
@@ -110,30 +123,31 @@ class ChannelGrid(wx.Panel):
         # ``on_select_toggle(number, now_selected, total)`` — called when
         # Space/Ctrl+Space toggles the focused row, so the host can announce it.
         self._on_select_toggle = on_select_toggle
-        if on_context_menu is not None or on_select_toggle is not None:
-            # One EVT_KEY_DOWN handler for the keys the generic DataViewCtrl
-            # doesn't give us: Shift+F10 (it raises the context-menu event only
-            # for the Applications key / right-click) and Space/Ctrl+Space (native
-            # no-ops here — see the Step 0 spike). Bound after AccessibleGrid's own
-            # EVT_KEY_DOWN (the Left/Right cell cursor), so ours runs first; it
-            # Skips everything else, leaving the cursor + native Up/Down/Shift/
-            # Ctrl-arrow selection behavior intact.
+        if on_context_menu is not None or on_select_toggle is not None or self._has_cell_cursor:
+            # One EVT_KEY_DOWN handler for Shift+F10 (the generic control raises
+            # the context-menu event only for the Applications key / right-click)
+            # and Space/Ctrl+Space (native no-ops here). The four arrows are the
+            # library's column-locked cursor, not ours — we Skip them. Everything
+            # else is Skipped too.
             self._list.Bind(wx.EVT_KEY_DOWN, self._on_grid_key)
         if on_selection_changed is not None:
             self._list.Bind(dv.EVT_DATAVIEW_SELECTION_CHANGED, on_selection_changed)
 
     def _on_grid_key(self, event: wx.KeyEvent) -> None:
-        """Handle the keys the native control doesn't: Shift+F10 (row context
-        menu) and Space/Ctrl+Space (toggle the focused row's selection). Both are
-        consumed; everything else is skipped so the cell cursor and native
-        arrow-selection keep working."""
+        """Handle the keys the library's cell cursor doesn't: Shift+F10 (row
+        context menu) and Space/Ctrl+Space (toggle selection). Everything else,
+        including the four arrows (the library's cell cursor), is Skipped. Before
+        acting, sync the native selection to the library's cursor so the action
+        targets the row the user last arrowed to."""
         code = event.GetKeyCode()
         if code == wx.WXK_F10 and event.ShiftDown() and self._context_menu_cb is not None:
+            self._grid.sync_selection_to_cursor()  # act on the cursor row
             self._context_menu_cb(event)
             return
         # Space or Ctrl+Space toggles selection of the focused row. (Plain Space
         # is a native no-op on this control, so consuming it costs nothing.)
         if code == wx.WXK_SPACE and not event.AltDown() and self._on_select_toggle is not None:
+            self._grid.sync_selection_to_cursor()  # toggle the cursor row, not row 0
             result = self.toggle_focused_selection()
             if result is not None:
                 self._on_select_toggle(*result)
@@ -151,7 +165,7 @@ class ChannelGrid(wx.Panel):
         ``set_columns`` rebuilds the column shape in place on the existing
         control (a different radio can have a different feature/column set)."""
         self._model.set_data(grid_model.column_meta(state), grid_model.build_rows(state))
-        self._grid.set_columns()
+        self._grid.set_columns()  # also resets the library's (row, col) cursor
         # Establish a current (focused) row on the freshly populated control.
         # A just-populated DataViewListCtrl has *no* current item, so a later
         # SetFocus() lands on the control but on no row: the screen reader
@@ -168,8 +182,9 @@ class ChannelGrid(wx.Panel):
 
     # -- selection / focus --------------------------------------------
     def selected_channel_numbers(self) -> list[int]:
-        """Selected channels; falls back to the focused row when none selected
-        (the library's ``selected_rows`` already applies that fallback)."""
+        """Selected channels; the library's ``selected_rows`` falls back to the
+        cursor row when nothing is explicitly multi-selected, so a single-row
+        action targets the row the user arrowed to."""
         rows = self._model.rows
         nums = [
             grid_model.index_to_number(rows, r)
@@ -179,25 +194,29 @@ class ChannelGrid(wx.Panel):
         return sorted(nums)
 
     def focused_channel(self) -> int | None:
-        row = self._grid.focused_row()
+        row = self._grid.focused_row()  # the cursor row in cell_cursor mode
         if row is None or not (0 <= row < len(self._model.rows)):
             return None
         return grid_model.index_to_number(self._model.rows, row)
 
-    def focused_cell(self) -> tuple[int, str] | None:
-        """(channel number, column name) at the Left/Right cell cursor, or None.
+    @property
+    def has_cell_cursor(self) -> bool:
+        """Whether this grid has a working Left/Right cell cursor (so
+        ``focused_cell()`` reports the real column). True where ``cell_announce``
+        was wired (Windows and macOS); False on GTK/other, where F2 can't know the
+        column from the cursor and takes the column-picker path instead."""
+        return self._has_cell_cursor
 
-        The column tracks the grid's cell cursor, which is currently Windows-only
-        (on macOS it stays column 0 until upstream cursor tracking lands —
-        wx-accessible-grid#3 — so callers fall back to a full-channel edit there)."""
+    def focused_cell(self) -> tuple[int, str] | None:
+        """(channel number, column name) at the library's cell cursor, or None.
+        Meaningful where ``has_cell_cursor`` is True (Windows and macOS); on
+        GTK/other callers take the column-picker path instead."""
         cell = self._grid.current_cell()
         if cell is None:
             return None
         row_idx, col_idx = cell
-        if not (0 <= row_idx < len(self._model.rows)):
-            return None
         cols = self._model.columns()
-        if not (0 <= col_idx < len(cols)):
+        if not (0 <= row_idx < len(self._model.rows)) or not (0 <= col_idx < len(cols)):
             return None
         return grid_model.index_to_number(self._model.rows, row_idx), cols[col_idx].name
 
@@ -253,7 +272,9 @@ class ChannelGrid(wx.Panel):
     def focus_channel(self, number: int) -> None:
         """Move focus to ``number`` so the screen reader reads it (takes keyboard
         focus to the grid if needed). Pair with ``select_channels`` when a row
-        should be both selected AND read (Go to / Find / post-edit / post-move)."""
+        should be both selected AND read (Go to / Find / post-edit / post-move).
+        The library's ``focus_row`` also moves its cursor to that row, so
+        column-locked arrowing continues from where the action left off."""
         idx = grid_model.number_to_index(self._model.rows, number)
         if idx is not None:
             self._grid.focus_row(idx)

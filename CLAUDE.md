@@ -19,10 +19,13 @@ webview, and no browser** anywhere in the app.
 a real native `wx.MenuBar`. On macOS `DataViewListCtrl` is a real native control
 (NSTableView), so **VoiceOver** reads it directly; on Windows it is wx's
 **generic, custom-drawn** control — not a native common control like
-SysListView32 — but wx exposes it to MSAA/UIA so **NVDA** reads its rows. (This
-is also why VRP adds its own Left/Right cell cursor and Shift+F10 handler: the
-generic Windows control doesn't provide a per-cell cursor or raise the
-context-menu event for Shift+F10.) The previous virtual `wx.ListCtrl` *did* wrap
+SysListView32 — but wx exposes it to MSAA/UIA so **NVDA** reads its rows. (VRP
+adds its own Left/Right cell cursor — announced via prism — and a Shift+F10
+handler: the generic Windows control provides neither a per-cell cursor nor the
+context-menu event. The cursor is wired on **macOS** too: plain Left/Right reach
+the NSTableView there and prism speaks each cell, which is what lets F2 edit the
+focused cell rather than fall back to a field picker.) The previous virtual
+`wx.ListCtrl` *did* wrap
 the native SysListView32 on Windows, but fell back to wx's generic control on
 macOS, which exposed nothing to NSAccessibility and was silent under VoiceOver —
 see `docs/research/2026-06-24-native-grid-voiceover-feasibility.md`.

@@ -205,6 +205,127 @@ def update_channel(number: int, values: dict) -> OpResult:
     return True, f"Channel {number} updated.", [number]
 
 
+# Tone/DCS value fields -> the Tone Mode that makes CHIRP persist them. A tone or
+# code is discarded unless the Tone Mode uses it, so a lone single-cell edit would
+# silently revert (e.g. CTCSS back to the 88.5 default). set_channel_field repairs
+# that by turning on the matching mode.
+_TONE_MODE_FOR = {"ctone": "TSQL", "rtone": "Tone", "dtcs": "DTCS", "rx_dtcs": "DTCS"}
+# A repeater Duplex direction with a zero Offset is meaningless, so CHIRP drops
+# the direction. These directions therefore need a nonzero offset alongside them.
+_DUPLEX_NEEDS_OFFSET = {"+": "plus", "-": "minus"}
+
+
+def _field_persisted(radio, number: int, field: str, value) -> bool:
+    """Whether the edit stuck: re-read the radio and compare the **parsed**
+    intended value to the value now stored. Parsing first avoids type/formatting
+    false-negatives — e.g. DTCS input "023" parses to the int 23 that's actually
+    stored, where a display-string compare ("023" vs "23") would wrongly report a
+    failure and force an unwanted coupling change. On any doubt, assume it stuck,
+    so we never force a coupling change we're unsure about."""
+    try:
+        mem = _get_mem(radio, number)
+        want = _parse_field_value(radio, mem, field, str(value))
+    except Exception:  # noqa: BLE001
+        return True
+    got = getattr(mem, field, None)
+    if isinstance(want, float) or isinstance(got, float):
+        try:
+            return abs(float(got) - float(want)) < 0.05
+        except (TypeError, ValueError):
+            return got == want
+    return got == want
+
+
+def _apply(radio, number: int, values: dict) -> bool:
+    """Parse + set + write ``values`` on a fresh read of channel ``number``.
+    Best-effort helper for coupling repairs; returns whether it applied."""
+    try:
+        mem = _get_mem(radio, number)
+        parsed, err = _parse_all(radio, mem, values)
+        if err:
+            return False
+        for f, v in parsed.items():
+            setattr(mem, f, v)
+            if f == "freq":
+                mem.empty = v == 0
+        _set_mem(radio, mem)
+        return True
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _repair_coupling(radio, number: int, field: str, value) -> str | None:
+    """After a single-field edit that CHIRP silently dropped (because a governing
+    field wasn't set), set the governing field too and re-apply so the edit
+    sticks. Returns a short note describing what else was set, or ``None`` when
+    nothing was needed. Empirical: only acts when the value truly didn't persist,
+    so existing valid setups are left untouched."""
+    mode = _TONE_MODE_FOR.get(field)
+    if mode is not None:
+        if _field_persisted(radio, number, field, value):
+            return None
+        if _apply(radio, number, {"tmode": mode, field: value}):
+            return f"Tone Mode set to {mode} so it takes effect"
+        return None
+
+    if field == "duplex" and value in _DUPLEX_NEEDS_OFFSET:
+        if _field_persisted(radio, number, field, value):
+            return None  # already has an offset — the direction stuck
+        from chirp_backend import bandplan
+
+        try:
+            mem = _get_mem(radio, number)
+            hz = bandplan.suggest_offset_hz(getattr(mem, "freq", 0))
+        except Exception:  # noqa: BLE001
+            hz = 0
+        if not hz:
+            return None  # no standard offset for this band; can't auto-fill
+        mhz = bandplan.offset_hz_to_mhz_str(hz)
+        if _apply(radio, number, {"duplex": value, "offset": mhz}):
+            return f"offset {mhz} MHz added so the {_DUPLEX_NEEDS_OFFSET[value]} shift takes effect"
+        return None
+
+    return None
+
+
+@undo.records
+def set_channel_field(number: int, field: str, value):
+    """Apply one field edit; if a governing field would otherwise make CHIRP drop
+    it (a tone/DCS field whose Tone Mode is off, or a Duplex direction with no
+    Offset), set that governing field too and re-apply so the value persists. One
+    undo step. Returns ``(ok, message, [number], note)`` where ``note`` is a short
+    sentence about the coupled change we made, or ``None``.
+
+    The check is empirical — re-read and compare — so an existing valid setup
+    (TSQL / DTCS / Cross, or a direction that already has an offset) is untouched."""
+    try:
+        radio = _get_radio()
+    except RuntimeError as e:
+        return False, str(e), [], None
+    try:
+        mem = _get_mem(radio, number)
+    except Exception as e:  # noqa: BLE001
+        return False, f"Could not read channel {number}: {e}", [], None
+
+    parsed, err = _parse_all(radio, mem, {field: value})
+    if err:
+        return False, err[1], [], None
+    try:
+        setattr(mem, field, parsed[field])
+        if field == "freq":
+            mem.empty = parsed[field] == 0
+        _set_mem(radio, mem)
+    except Exception as e:  # noqa: BLE001
+        return False, f"Failed to update channel {number}: {e}", [], None
+
+    note = _repair_coupling(radio, number, field, value)
+
+    from chirp_backend.radio import invalidate_cache
+
+    invalidate_cache([number])
+    return True, f"Channel {number} updated.", [number], note
+
+
 @undo.records
 def import_memories(src_radio, destination: int, overwrite: bool = True) -> OpResult:
     """Import a query/source radio's memories into the loaded radio.

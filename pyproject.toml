@@ -20,7 +20,7 @@ dependencies = [
     # not announce a per-cell cursor itself. Not on PyPI yet (PyPI's latest is
     # 0.4.1, the retired WebView grid), so it resolves from the GitHub repo via
     # [tool.uv.sources] below, pinned to a commit SHA for reproducible builds.
-    "wx-accessible-grid>=0.8.0",
+    "wx-accessible-grid>=0.9.0",
     # Unified TTS / screen-reader speech (prism). Used to speak things that
     # ARIA alone can't convey. The Python bindings ship as `prismatoid`.
     "prismatoid>=0.16.0",
@@ -61,11 +61,12 @@ versatile-radio-programmer = "main:main"
 # directory must exist (git clone it) before running `uv sync`.
 chirp = { path = "./chirp", editable = true }
 # wx-accessible-menubar resolves from PyPI via the version constraint above.
-# wx-accessible-grid 0.8.0 (native DataViewListCtrl + opt-in Left/Right cell
-# cursor) is NOT on PyPI yet — PyPI's latest is 0.4.1, the retired WebView grid.
-# Pull it from GitHub, pinned to a commit SHA for reproducible builds (same idea
-# as CHIRP's pin). Bump the rev when adopting a newer upstream commit.
-wx-accessible-grid = { git = "https://github.com/Community-Access/wx-accessible-grid.git", rev = "e2087ed6b14d7879db942790e3fc653f7a7e33b4" }
+# wx-accessible-grid 0.9.0 (native DataViewListCtrl + column-locked cell cursor)
+# is NOT on PyPI yet — PyPI's latest is 0.4.1, the retired WebView grid. Pull it
+# from GitHub, pinned to a commit SHA for reproducible builds (same idea as
+# CHIRP's pin). Currently the payown fork (PR upstream: Community-Access/
+# wx-accessible-grid#4); bump the rev to Community-Access once the PR merges.
+wx-accessible-grid = { git = "https://github.com/payown/wx-accessible-grid.git", rev = "494103f8d7c82f79bc40221d823a7991d8984cf6" }  # 0.9.0 + column-locked nav; PR: Community-Access/wx-accessible-grid#4 (bump to the merged Community-Access rev once it lands)
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
