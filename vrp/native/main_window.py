@@ -872,6 +872,17 @@ class MainWindow(wx.Frame):
         self.grid.select_channels([number])
         self.grid.focus_channel(number)
 
+    @staticmethod
+    def _now_at_phrase(block: list[int]) -> str:
+        """Screen-reader phrase for where focus landed after a move/copy.
+
+        Callers prepend their own separator (e.g. ``f"{message}. {phrase}"``).
+        """
+        first, last = block[0], block[-1]
+        if first == last:
+            return f"Now on channel {first}."
+        return f"Now at channels {first} to {last}, on channel {first}."
+
     def _do_move(self, direction: int) -> None:
         """Shared implementation for move-up / move-down."""
         from chirp_backend import memory_ops
@@ -886,12 +897,7 @@ class MainWindow(wx.Frame):
             new_sel, focus = grid_model.selection_after_move(numbers, direction)
             self.grid.select_channels(new_sel)
             self.grid.focus_channel(focus)
-            first, last = new_sel[0], new_sel[-1]
-            if first == last:
-                where = f". Now on channel {first}."
-            else:
-                where = f". Now at channels {first} to {last}, on channel {first}."
-            self.announce.announce(message + where)
+            self.announce.announce(f"{message}. {self._now_at_phrase(new_sel)}")
         else:
             self.announce.announce(message, assertive=True)
 
@@ -922,12 +928,7 @@ class MainWindow(wx.Frame):
             new_sel, focus = grid_model.selection_after_move_to(len(numbers), dest)
             self.grid.select_channels(new_sel)
             self.grid.focus_channel(focus)
-            first, last = new_sel[0], new_sel[-1]
-            if first == last:
-                where = f". Now on channel {first}."
-            else:
-                where = f". Now at channels {first} to {last}, on channel {first}."
-            self.announce.announce(message + where)
+            self.announce.announce(f"{message}. {self._now_at_phrase(new_sel)}")
         else:
             self.announce.announce(message, assertive=True)
 
@@ -995,12 +996,7 @@ class MainWindow(wx.Frame):
                 block, focus = grid_model.selection_after_move_to(len(numbers), dest)
             self.grid.select_channels(block)
             self.grid.focus_channel(focus)
-            first, last = block[0], block[-1]
-            if first == last:
-                where = f" Now on channel {first}."
-            else:
-                where = f" Now at channels {first} to {last}, on channel {first}."
-            self.announce.announce(f"{message}{where}")
+            self.announce.announce(f"{message} {self._now_at_phrase(block)}")
         else:
             # Structural ops (delete, insert, sort, arrange): full rebuild needed,
             # land on the single logical focus target.
@@ -1008,7 +1004,7 @@ class MainWindow(wx.Frame):
             target = self._op_focus_target(key, numbers, op)
             self.grid.select_channels([target])
             self.grid.focus_channel(target)
-            self.announce.announce(f"{message} Now on channel {target}.")
+            self.announce.announce(f"{message} {self._now_at_phrase([target])}")
 
     def _op_focus_target(self, key: str, numbers: list[int], op: dict) -> int:
         """Mirror of app.py _op_focus_target: where focus lands after an organize op."""

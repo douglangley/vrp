@@ -348,8 +348,9 @@ pass on 4.2 (focus must stay on the deleted row's slot).
 - [ ] **5.3 Extract the "Now on channel N / Now at channels A to B" phrasing**
   duplicated in `_do_move`, `on_move_to`, and `on_organize`
   (`vrp/native/main_window.py:867-871,903-907,976-980`) into one helper.
-- [ ] **5.4 Docstring/comment drift sweep** (stale architecture references that
-  mislead future readers — the webview/Flask era is gone):
+- [x] **5.4 Docstring/comment drift sweep** — DONE 2026-07-05 (commit 6bc04b4).
+  Stale architecture references that mislead future readers (the webview/Flask
+  era is gone) corrected:
   - `chirp_backend/radio.py:2` — "for use by Flask routes".
   - `chirp_backend/memory_ops.py:8-10` — "tells the Flask route…".
   - `chirp_backend/col_defs.py:12-13` — "used by the Flask routes… frontend".
@@ -359,10 +360,9 @@ pass on 4.2 (focus must stay on the deleted row's slot).
   - `GRID_RESTART_PLAN.md` — superseded by the 2026-07-04 work (0.9.0,
     cell cursor on macOS too); add a "SUPERSEDED — see PROGRESS_LOG 2026-07-04"
     banner or fold what's still true into `docs/` and retire it.
-- [ ] **5.5 `vrp/query_dialogs.py` naming.** Now holds only
-  `ImportDestinationDialog` (kept deliberately for RepeaterBook's return —
-  see PROGRESS_LOG 2026-07-05). Leave the filename, but make the module
-  docstring say exactly that so nobody "cleans it up".
+- [x] **5.5 `vrp/query_dialogs.py` naming** — DONE 2026-07-05 (commit 6bc04b4).
+  Module docstring now says the plural name is kept deliberately for
+  RepeaterBook's return so nobody "cleans it up".
 
 ---
 
