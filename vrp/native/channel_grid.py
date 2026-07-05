@@ -124,21 +124,21 @@ class ChannelGrid(wx.Panel):
         # Space/Ctrl+Space toggles the focused row, so the host can announce it.
         self._on_select_toggle = on_select_toggle
         if on_context_menu is not None or on_select_toggle is not None or self._has_cell_cursor:
-            # One EVT_KEY_DOWN handler for the keys we drive ourselves: the four
-            # arrows (the column-locked cursor), Shift+F10 (the generic control
-            # raises the context-menu event only for the Applications key /
-            # right-click), and Space/Ctrl+Space (native no-ops here). Everything
-            # else is Skipped.
+            # One EVT_KEY_DOWN handler for Shift+F10 (the generic control raises
+            # the context-menu event only for the Applications key / right-click)
+            # and Space/Ctrl+Space (native no-ops here). The four arrows are the
+            # library's column-locked cursor, not ours — we Skip them. Everything
+            # else is Skipped too.
             self._list.Bind(wx.EVT_KEY_DOWN, self._on_grid_key)
         if on_selection_changed is not None:
             self._list.Bind(dv.EVT_DATAVIEW_SELECTION_CHANGED, on_selection_changed)
 
     def _on_grid_key(self, event: wx.KeyEvent) -> None:
         """Handle the keys the library's cell cursor doesn't: Shift+F10 (row
-        context menu) and Space/Ctrl+Space (toggle selection). The four arrows are
-        owned by the library (bound first, since it binds before us), so we Skip
-        them. Before acting, sync the native selection to the library's cursor so
-        the action targets the row the user last arrowed to."""
+        context menu) and Space/Ctrl+Space (toggle selection). Everything else,
+        including the four arrows (the library's cell cursor), is Skipped. Before
+        acting, sync the native selection to the library's cursor so the action
+        targets the row the user last arrowed to."""
         code = event.GetKeyCode()
         if code == wx.WXK_F10 and event.ShiftDown() and self._context_menu_cb is not None:
             self._grid.sync_selection_to_cursor()  # act on the cursor row

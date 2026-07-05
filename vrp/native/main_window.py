@@ -422,7 +422,7 @@ class MainWindow(wx.Frame):
             self._edit_cell_column(number, mem, col)
             return
 
-        # macOS: no cell cursor — ask which field, then edit it.
+        # No cell cursor (GTK/other) — ask which field, then edit it.
         columns = self._editable_columns(mem)
         if not columns:
             self.on_edit_channel()  # nothing single-cell editable (all immutable)
@@ -449,8 +449,8 @@ class MainWindow(wx.Frame):
 
     def _editable_columns(self, mem) -> list:
         """The channel's single-cell-editable columns — the fields F2's
-        column-picker offers on macOS. Delegates the (headless, tested) predicate
-        to ``col_defs.editable_columns``."""
+        column-picker offers where there's no cell cursor (GTK/other). Delegates
+        the (headless, tested) predicate to ``col_defs.editable_columns``."""
         from chirp_backend.col_defs import build_column_defs, editable_columns
 
         return editable_columns(
