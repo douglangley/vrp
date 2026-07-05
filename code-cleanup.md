@@ -153,18 +153,19 @@ for display only.
 **Verify:** unit test with a stub RadioSettingValueString carrying trailing
 spaces: OK with no edits → `changed()` False everywhere, count 0.
 
-### 1.6 Minor robustness (batch into one commit)
+### 1.6 Minor robustness — PARTIAL 2026-07-05
 
-- [ ] `delete_memory`/`delete_range` do `"empty" in mem.immutable` — if a driver
-  returns `immutable=None` this raises `TypeError` and surfaces as a cryptic
-  message. Use `(mem.immutable or [])` (`chirp_backend/memory_ops.py:448,476`).
-- [ ] `vrp/native/app.py` calls `logging.basicConfig` again after `main.py`
-  already configured logging — a silent no-op; remove the duplicate (keep the
-  one in `main.py`).
-- [ ] `tests/conftest.py`/suite note: PROGRESS_LOG records 2 macOS-only
-  GUI-quirk failures in `test_channel_grid`; if reproducible, mark them
-  `xfail(sys.platform == 'darwin')` with a comment instead of leaving them red
-  on Mac.
+- [x] `delete_memory`/`delete_range` `"empty" in mem.immutable` → `(mem.immutable
+  or [])` so a driver reporting `immutable=None` doesn't `TypeError`. Tests:
+  `test_delete_immutable_none_does_not_crash`,
+  `test_delete_range_immutable_none_does_not_crash`.
+- [ ] `vrp/native/app.py` duplicate `logging.basicConfig` — **left as-is** on
+  review: it's idempotent (main.py configures the root logger first, so this is
+  a no-op there) and `vrp.native.app.run()` is a documented standalone entry
+  point that benefits from the fallback config if called without `main()`.
+  Not worth the churn/risk. Reopen only if it actually causes a problem.
+- [ ] macOS `test_channel_grid` xfail — **deferred**: can't reproduce or verify
+  on Windows. Do it during a macOS pass so the xfail condition is real.
 
 ### 1.7 Housekeeping with a correctness edge: the grid-library pin
 

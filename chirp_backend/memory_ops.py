@@ -445,7 +445,7 @@ def delete_memory(number: int) -> OpResult:
     try:
         radio = _get_radio()
         mem = _get_mem(radio, number)
-        if "empty" in mem.immutable:
+        if "empty" in (mem.immutable or []):
             return False, f"Channel {number} cannot be deleted", []
         _erase_mem(radio, number)
         from chirp_backend.radio import invalidate_cache
@@ -473,7 +473,7 @@ def delete_range(numbers: list[int]) -> OpResult:
         for n in numbers:
             try:
                 mem = _get_mem(radio, n)
-                if "empty" in mem.immutable:
+                if "empty" in (mem.immutable or []):
                     errors.append(f"{n} (immutable)")
                     continue
                 if not mem.empty:

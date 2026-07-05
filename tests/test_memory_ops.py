@@ -132,6 +132,15 @@ class TestDeleteMemory:
         assert not ok
         assert affected == []
 
+    def test_delete_immutable_none_does_not_crash(self, stub_radio):
+        # Some drivers report immutable as None; "empty" in None would TypeError.
+        _fill(stub_radio, (5, "REPEATER"))
+        stub_radio._channels[5].immutable = None
+        from chirp_backend.memory_ops import delete_memory
+        ok, msg, affected = delete_memory(5)
+        assert ok
+        assert stub_radio.get_memory(5).empty
+
 
 # ---------------------------------------------------------------------------
 # Tests: delete_range
@@ -151,6 +160,14 @@ class TestDeleteRange:
         ok, msg, affected = delete_range([])
         assert ok
         assert affected == []
+
+    def test_delete_range_immutable_none_does_not_crash(self, stub_radio):
+        _fill(stub_radio, (1, "A"), (2, "B"))
+        stub_radio._channels[1].immutable = None  # driver reports None
+        from chirp_backend.memory_ops import delete_range
+        ok, msg, affected = delete_range([1, 2])
+        assert ok
+        assert stub_radio.get_memory(1).empty and stub_radio.get_memory(2).empty
 
 
 # ---------------------------------------------------------------------------
