@@ -572,7 +572,10 @@ class MainWindow(wx.Frame):
         if not ok:
             self.announce.announce(message, assertive=True)
             return
-        self.grid.rebuild()
+        # Plain delete clears slots in place — no rows shift — so repaint just
+        # the affected rows. A full rebuild() is unnecessary here and jars the
+        # screen-reader focus; keep it for the structural ops in on_organize.
+        self.grid.refresh_numbers(numbers)
         low, high = radio_backend.get_state().memory_bounds
         target = min(max(first, low), high)
         self.grid.select_channels([target])

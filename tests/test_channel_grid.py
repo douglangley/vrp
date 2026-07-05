@@ -279,3 +279,39 @@ def test_main_window_constructs_and_lists_channels(app):
     finally:
         radio_backend.unload()
         win.Destroy()
+
+
+def test_plain_delete_refreshes_in_place_not_full_rebuild(app):
+    """Plain Delete clears slots in place, so on_delete_channels must repaint
+    only the affected rows (refresh_numbers) — not rebuild() the whole grid —
+    and land focus on the deleted slot (Phase 4.2)."""
+    from vrp.native.main_window import MainWindow
+
+    win = MainWindow()
+    try:
+        radio_backend.load_image(IMAGE)
+        win._load_into_grid()
+
+        # First occupied channel; select it and auto-confirm the dialog.
+        lo, hi = radio_backend.get_state().memory_bounds
+        target = next(
+            n for n in range(lo, hi + 1) if not radio_backend.get_memory(n).empty
+        )
+        win.grid.select_channels([target])
+        win._confirm = lambda _msg: True
+
+        calls = []
+        win.grid.rebuild = lambda: calls.append("rebuild")
+        real_refresh = win.grid.refresh_numbers
+        win.grid.refresh_numbers = lambda nums: (
+            calls.append(("refresh", nums)), real_refresh(nums))[1]
+
+        win.on_delete_channels()
+
+        assert radio_backend.get_memory(target).empty  # slot cleared
+        assert "rebuild" not in calls  # not a full rebuild
+        assert ("refresh", [target]) in calls  # in-place repaint of that row
+        assert win.grid.focused_channel() == target  # focus stayed on the slot
+    finally:
+        radio_backend.unload()
+        win.Destroy()

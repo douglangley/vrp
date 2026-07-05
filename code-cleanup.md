@@ -313,11 +313,11 @@ plausible hotspots are UI-side and in a few uncached scan loops:
   `refresh_numbers(affected)` is sufficient and keeps screen-reader focus
   steadier. (Keep `rebuild()` for the genuinely structural ops.) Cheap win,
   do this one.
-- [ ] **4.3 `paste_block` make-room scan reads every channel uncached.** The
-  occupancy scan (`chirp_backend/memory_ops.py:829-835`) walks
-  `destination..last_bound` with direct driver reads and no early exit. Iterate
-  from the tail and break at the first non-empty instead. Same pattern applies
-  to `find` (`:970-987`) — fine as-is unless profiling says otherwise.
+- [x] **4.3 `paste_block` make-room scan reads every channel uncached** — DONE
+  2026-07-05 (commit 0a3fcc9). Now scans `[destination, last_bound]` from the
+  tail down and breaks at the first occupied slot (only the highest matters).
+  Tests: two make-room-across-a-gap cases. `find` (`:970-987`) left as-is (fine
+  unless profiling says otherwise).
 - [ ] **4.4 `number_to_index` is a linear scan** (`vrp/native/grid_model.py:111`)
   called per-number by `select_channels` → O(N·M) on a big paste/undo
   selection. Rows are built contiguous `low..high`, so `number - low` with a
