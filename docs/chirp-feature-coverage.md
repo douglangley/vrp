@@ -55,14 +55,9 @@ update (`git pull` ./chirp) in case new dialogs appear.
 |----------------------------------|-----------|--------|
 | Download from Radio              | 4         | ☑ (verified on real hardware — Baofeng UV-5R Mini, COM4, 2026-06-23) |
 | Upload to Radio                  | 4         | ☑ (verified on real hardware — Baofeng UV-5R Mini, COM4, 2026-06-24) |
-| Query framework + import         | 7         | ☑ (HW/network test owed) |
-| Query: AMSAT                     | 7         | ☑      |
-| Query: SatNOGS                   | 7         | ☑      |
-| Query: DMR-MARC                  | 7         | ☑      |
-| Query: mapy73.pl                 | 7         | ☑      |
-| Query: RepeaterBook              | 7         | ◐ (needs dynamic country→state cascade) |
-| Query: RadioReference            | 7         | ◐ (needs credentials/login form) |
-| Query: przemienniki.net / .eu    | 7         | ◐ (needs band/mode code mapping + coords) |
+| Query framework + import         | 7         | ☐ (removed 2026-07-05; import-destination dialog kept for Import from File) |
+| Query: RepeaterBook              | 7         | ☐ (to be added purpose-built once API access is granted) |
+| Query: RadioReference            | 7         | ☐ (to be added purpose-built after RepeaterBook) |
 | Auto edits toggle                | 8         | ☑ (offset always-on; mode/step/tone via Preferences ▸ Apply band-plan defaults; duplex intentionally manual) |
 | Select bandplan                  | 8         | ☐      |
 

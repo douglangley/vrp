@@ -43,7 +43,6 @@ arrow keys move across top-level menus; NVDA reads it like any native app menu.
 | Radio | Upload to Radio | `Ctrl+Shift+U` | needs a loaded radio |
 | Radio | Favorite radios… | — | manage starred radios (no loaded radio needed); used by Download's Favorites toggle; has a **Radio details…** button |
 | Radio | Radio Info… | — | needs a loaded radio; opens a read-only, navigable, copyable edit box |
-| Radio | Query Source ▸ … | — | needs a loaded radio; one item per registered source |
 | Radio | Settings… | `Ctrl+Shift+P` | needs a loaded radio |
 | Channels | Edit channel… | `Ctrl+E` | needs a loaded radio; all fields (also `Enter` / double-click on the grid) |
 | Channels | Edit cell… | `F2` | needs a loaded radio; edits the focused cell (the column at the Left/Right cursor) |
@@ -232,17 +231,12 @@ intentionally not implemented — Export to CSV is the accessible equivalent.
 
 ### Query sources
 
-Radio ▸ Query Source ▸ (a source) opens a native param dialog (with the source's
-attribution + a descriptive Terms-of-Service link), then fetches on a background
-thread with the shared progress dialog (status announced). On success it
-announces the result count and opens an import dialog: a destination channel
-(defaults to the first empty channel) + Overwrite/Skip for occupied channels.
-Import adapts each memory for the target radio (CHIRP import_logic) and announces
-the counts. Reached via the menu (Alt → R → Q → source); no Ctrl shortcut (too
-many sources). Disabled until a radio is loaded. Wired now: AMSAT, SatNOGS,
-DMR-MARC (city/state/country) and mapy73.pl (network choice). Still deferred:
-RepeaterBook (dynamic country→state cascade), RadioReference (credentials/login),
-and przemienniki.net/.eu (band/mode code mapping + coordinates).
+Online query sources (RepeaterBook, RadioReference, etc.) are **not currently
+wired**. The earlier Phase 7 sources (AMSAT, SatNOGS, DMR-MARC, mapy73.pl) were
+removed; RepeaterBook (pending API access) and RadioReference will be added back
+purpose-built. The shared import destination dialog (`ImportDestinationDialog`)
+and `memory_ops.import_memories` remain — they back Import from File and will
+back a future query import.
 
 ### Banks
 

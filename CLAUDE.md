@@ -87,7 +87,9 @@ obscure it. Any future help/docs page must carry it too.
                          RadioListView (a wx.ListCtrl)
   - settings_dialog.py — native wx radio settings editor, Treebook
   - bank_dialog.py     — native wx dialog to assign a channel to banks
-  - query_dialogs.py   — native wx query-source param + import dialogs
+  - query_dialogs.py   — native wx import-destination dialog (ImportDestination
+                         Dialog; shared by Import from File — the online
+                         query-source dialogs were removed, see PROGRESS_LOG)
   - prefs_dialog.py    — native wx Preferences dialog: recent-files count, band
                          plan region, apply-band-defaults, speak-aloud
   - info_dialog.py     — read-only multiline edit box for reviewing text (Radio
@@ -100,7 +102,7 @@ obscure it. Any future help/docs page must carry it too.
                          radio (incl. describe_model), memory_ops, undo
                          (channel-edit undo/redo), bandplan (suggested repeater
                          offset + band defaults, by region), col_defs, bank_ops,
-                         query, serial_trace
+                         serial_trace
 - tests/               — unit tests (no hardware needed)
 - tools/               — update_chirp.py (CHIRP version bump); throwaway spikes
 - build.py             — PyInstaller build script

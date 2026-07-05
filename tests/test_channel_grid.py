@@ -246,12 +246,6 @@ def test_main_window_constructs_and_lists_channels(app):
         sb = win.GetStatusBar()
         assert sb is not None
         assert "chirpmyradio.com" in sb.GetStatusText(1)
-
-        # Radio menu must include a Query Source submenu.
-        radio_menu = win.GetMenuBar().GetMenu(2)  # "&Radio" is index 2 (after Edit)
-        labels = [radio_menu.FindItemByPosition(i).GetItemLabel()
-                  for i in range(radio_menu.GetMenuItemCount())]
-        assert any("Query Source" in lbl for lbl in labels)
     finally:
         radio_backend.unload()
         win.Destroy()

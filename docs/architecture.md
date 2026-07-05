@@ -61,7 +61,7 @@ main.py  (entry; launches the native UI)
        │    result row); the announcer covers summaries/errors with no
        │    natural focus target
        └─ chirp_backend/: radio.py, memory_ops.py, undo.py, bandplan.py,
-            col_defs.py, bank_ops.py, query.py, serial_trace.py (framework-agnostic)
+            col_defs.py, bank_ops.py, serial_trace.py (framework-agnostic)
             └─ chirp  (vendored ./chirp, used unmodified; serial + driver library)
 ```
 

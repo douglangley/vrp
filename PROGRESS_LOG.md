@@ -6,6 +6,35 @@ architecture, keyboard map, and CHIRP feature-coverage checklist.
 
 ---
 
+## 2026-07-05 — Removed the online query sources (Radio ▸ Query Source)
+
+The Phase 7 online query sources were removed — they weren't going to be used in
+this form. RepeaterBook will be added back **purpose-built** once the developer
+grants API access, followed by RadioReference.
+
+**What was removed:**
+- The **Radio ▸ Query Source** submenu and its per-source items in
+  `_build_radio_menu` (and the submenu's radio-gating in `_update_menu_state`).
+- The query handlers in `main_window.py`: `on_query_source`, `_run_query`,
+  `_on_query_progress`, `_on_query_done`.
+- `chirp_backend/query.py` (the source registry + `run_fetch`/`make_source_radio`
+  framework; sources were AMSAT, SatNOGS, DMR-MARC, mapy73.pl) — now orphaned,
+  deleted (recoverable from git history when RepeaterBook lands).
+- `QueryParamsDialog` in `vrp/query_dialogs.py`.
+
+**What was kept (shared with Import from File):** `ImportDestinationDialog` (title
+relabelled "Import query results" → "Import channels") and
+`MainWindow._import_results` / `memory_ops.import_memories`. `query_dialogs.py`
+now holds only `ImportDestinationDialog` — filename left as-is since a future
+purpose-built query param dialog would naturally live there again.
+
+**Docs updated:** `CLAUDE.md` (structure tree), `docs/keyboard-map.md`,
+`docs/architecture.md`, `docs/chirp-feature-coverage.md`, `ROADMAP.md`. Removed
+the "Radio menu has a Query Source submenu" assertion from
+`tests/test_channel_grid.py`.
+
+**Verified:** `uv run python -m pytest` → 198 passed.
+
 ## 2026-07-04 — macOS single-cell editing, column-locked grid navigation, coupled-field fixes
 
 Verified on real macOS (VoiceOver) and Windows (NVDA) hardware. Branch
