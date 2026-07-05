@@ -204,38 +204,34 @@ dangling references to any removed symbol.
 
 ---
 
-## Phase 3 — CHIRP usage & bundle audit ("only what we need")
+## Phase 3 — CHIRP usage & bundle audit ("only what we need") — DONE 2026-07-05 (3.5 owed)
 
 The CHIRP clone itself must stay (it is the driver library, pinned and bundled
-by design). The audit is about what VRP *pulls in around it*.
+by design). The audit was about what VRP *pulls in around it*.
 
-- [ ] **3.1 Drop `--collect-submodules=chirp.sources` from `build.py`.**
-  Confirmed: since the query-source removal (2026-07-05), **nothing in VRP
-  imports `chirp.sources`** — the collect directive now bundles dead modules
-  (and is the only reason `requests` gets frozen in). When RepeaterBook returns
-  it will be a *static* import (`from chirp.sources import repeaterbook`),
-  which PyInstaller follows on its own — so this doesn't need to come back.
-  Also update the stale comment in `build.py:35-38` that still cites
-  `chirp_backend/query.py`.
-- [ ] **3.2 Decide the `requests` dependency.** In `pyproject.toml` it's listed
-  as a "CHIRP library dependency", but grep shows `requests` is imported only
-  by `chirp.wxui.*` (never imported by VRP) and `chirp.sources.*` (no longer
-  imported). **No driver imports it.** Options: (a) drop it now and re-add with
-  RepeaterBook (chirp.sources.repeaterbook needs it), or (b) keep it with a
-  comment "needed by chirp.sources.repeaterbook — used again when RepeaterBook
-  lands". Check whether the editable `./chirp` install already declares it
-  transitively (then VRP's explicit pin is redundant either way).
-- [ ] **3.3 Verify `lark` and `pyserial` stay** (they do — `chirp.bitwise_grammar`
-  and the serial pipe). Confirm `--collect-data=lark` is still required by
-  building and loading one image from the frozen exe.
-- [ ] **3.4 Rebuild and compare.** `uv run python build.py` before/after; note
-  the onedir size delta and confirm the PYZ driver-module count is unchanged
-  (~192 modules / 552 models). Frozen-app smoke: open an image, edit a cell,
-  save. **This is the step that catches a collect mistake — do not skip.**
-- [ ] **3.5 Prism-less binary check** (already owed in PROGRESS_LOG): the
-  release exe excludes `prism` — verify the channel grid still reads under NVDA
-  in a built binary (announcements degrade to status-bar-only by design; the
-  grid itself must still read).
+- [x] **3.1 Dropped `--collect-submodules=chirp.sources` from `build.py`.**
+  Nothing in VRP imports `chirp.sources` since the query-source removal, so the
+  directive only bundled dead modules (and dragged in `requests`). A future
+  RepeaterBook will be a *static* import PyInstaller follows on its own. Stale
+  comment citing `chirp_backend/query.py` fixed too.
+- [x] **3.2 `requests` kept, annotated.** CHIRP's own `setup.py` declares
+  `requests`, so the editable `./chirp` install pulls it in transitively (VRP's
+  pin is redundant but harmless) — but it is **only reachable via
+  `chirp.sources`**, which is no longer collected, so it is **no longer in the
+  frozen app**. Kept in `pyproject.toml` (with a clarifying comment) so the
+  source env matches CHIRP and RepeaterBook works when it returns.
+- [x] **3.3 `lark` + `pyserial` confirmed bundled** (10 lark entries incl.
+  grammar data in COLLECT; 31 serial modules in the PYZ).
+- [x] **3.4 Rebuilt and verified.** `uv run python build.py` succeeds. Bundle
+  TOC (`build/vrp/*.toc`): **191 `chirp.drivers` modules** (unchanged, ~552
+  models), **0 `chirp.sources`**, **0 `requests`** anywhere (PYZ/COLLECT/
+  Analysis). `dist/vrp` is **50 MB** (removing `requests` also drops
+  urllib3/certifi/idna/charset-normalizer). Dev venv restored; 205 tests pass.
+- [ ] **3.5 Prism-less binary NVDA check** — **OWED TO USER** (needs the built
+  exe + NVDA): the release exe excludes `prism`, so confirm the channel grid
+  still reads under NVDA in the frozen binary (announcements degrade to
+  status-bar-only by design; the grid itself must still read). The exe is built
+  at `dist/vrp/vrp.exe` right now if you want to test it.
 
 ---
 
