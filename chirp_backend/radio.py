@@ -258,25 +258,42 @@ def _install_undo(radio) -> None:
         orig_set = radio.set_memory
         orig_erase = radio.erase_memory
 
+        # This wrapper is the single choke point every channel write funnels
+        # through (memory_ops._set_mem/_erase_mem call the radio methods directly,
+        # and so do this module's own set_memory/erase_memory), so it is also
+        # where we mark the image dirty. Without this, ordinary edits/deletes/
+        # moves left is_modified False and Radio Info wrongly said "Unsaved
+        # changes: No" (and any unsaved-changes prompt would be built on a lie).
+        # It never fires during load/download: the wrapper is installed *after*
+        # the image is read, and reading an image doesn't call set_memory.
         def recording_set(mem):
             if _undo is not None:
                 _undo.record(mem.number)
-            return orig_set(mem)
+            result = orig_set(mem)
+            _state.is_modified = True
+            return result
 
         def recording_erase(number):
             if _undo is not None:
                 _undo.record(number)
-            return orig_erase(number)
+            result = orig_erase(number)
+            _state.is_modified = True
+            return result
 
         radio.set_memory = recording_set
         radio.erase_memory = recording_erase
 
+        # Undo/redo also mutate the image relative to the file on disk, so they
+        # too mark it dirty (conservatively — undoing back to the exact saved
+        # state still flags modified, which at worst prompts a redundant save).
         def restore_set(mem):
             orig_set(mem)
+            _state.is_modified = True
             invalidate_cache([mem.number])
 
         def restore_erase(number):
             orig_erase(number)
+            _state.is_modified = True
             invalidate_cache([number])
 
         _undo = UndoManager(

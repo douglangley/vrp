@@ -37,7 +37,15 @@
 
 ## Phase 1 — Correctness bugs (highest priority)
 
-### 1.1 `is_modified` is never set by channel edits — BUG
+### 1.1 `is_modified` is never set by channel edits — BUG — FIXED 2026-07-05
+
+**DONE.** Marked dirty in the `_install_undo` recorder wrappers
+(`recording_set`/`recording_erase` and the undo/redo `restore_*`), the single
+choke point every write passes through. Test: `tests/test_is_modified.py`
+(fresh-load clean → edit dirties → save clears → undo re-dirties; plus delete
+dirties). 202 tests pass.
+
+<details><summary>Original finding</summary>
 
 **What:** `RadioState.is_modified` is only set by `import_memories`,
 `bank_ops.apply_bank_changes`, `apply_radio_settings`, and
@@ -61,6 +69,8 @@ module-level `radio.set_memory`/`erase_memory` (see 5.1).
 
 **Verify:** unit test — load image → `set_channel_field` → `is_modified` is
 True; save → False; undo → True again.
+
+</details>
 
 ### 1.2 No unsaved-changes prompt anywhere — data-loss BUG
 
