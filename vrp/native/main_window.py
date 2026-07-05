@@ -1156,6 +1156,29 @@ class MainWindow(wx.Frame):
         finally:
             dlg.Destroy()
 
+    def _show_error(self, title: str, message: str) -> None:
+        """Show an error in a modal, read-only, copyable edit box with an OK
+        button, then return focus to the grid.
+
+        A modal is used (not just ``announce``) so the screen reader is
+        guaranteed to read the error: focus lands inside the dialog's text, so
+        NVDA/VoiceOver read the title and the message directly. An announce-only
+        error can be missed — after a file dialog closes, focus is ambiguous and
+        a status-bar/prism cue races the screen reader's own focus chatter and
+        gets dropped (the "unsupported file error not read" bug). The edit box
+        (vs a MessageBox) also lets the user arrow through and copy a long driver
+        error. The status bar still gets the text as a visual record."""
+        from vrp.info_dialog import InfoDialog
+
+        self.SetStatusText(message)
+        dlg = InfoDialog(self, title, message, name="Error message",
+                         size=(460, 160), ok_button=True)
+        try:
+            dlg.ShowModal()
+        finally:
+            dlg.Destroy()
+            self.grid.SetFocus()
+
     # -- file handlers ------------------------------------------------
 
     def on_open(self, _evt=None) -> None:
@@ -1177,7 +1200,9 @@ class MainWindow(wx.Frame):
 
         ok, message = radio_backend.load_image(path)
         if not ok:
-            self.announce.announce(message, assertive=True)
+            # A modal (not just announce) so the error is reliably read — see
+            # _show_error. This is the "unsupported file error not read" fix.
+            self._show_error("Could not open file", message)
             return False
         self._load_into_grid()
         get_config().add_recent(path)

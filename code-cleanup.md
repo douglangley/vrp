@@ -167,6 +167,33 @@ spaces: OK with no edits → `changed()` False everywhere, count 0.
 - [ ] macOS `test_channel_grid` xfail — **deferred**: can't reproduce or verify
   on Windows. Do it during a macOS pass so the xfail condition is real.
 
+### 1.8 Load-failure error not read by the screen reader — FIXED 2026-07-05 (user-reported)
+
+**What:** Opening an unsupported/corrupt file showed nothing readable — the error
+("Failed to load image: Unsupported model …") only went to the status bar +
+prism via `announce`, with **no modal**. After the file dialog closes, focus is
+ambiguous and the status-bar/prism cue races the screen reader's own focus
+chatter, so NVDA dropped it. Every other error path in the app uses a modal.
+
+**Fix:** New `MainWindow._show_error(title, message)` shows the error in a modal,
+read-only, **copyable edit box with an OK button** (`InfoDialog(ok_button=True)`,
+a new option), then returns focus to the grid — so the reader is guaranteed to
+read it (focus lands in the dialog text) and a long driver error can be arrowed
+through / copied. Wired into `_open_path` (covers File ▸ Open and Open Recent).
+Status bar still gets the text as a visual record.
+
+**Verified:** headless tests (`test_info_dialog.py::test_info_dialog_ok_button_variant`,
+`test_channel_grid.py::test_open_failure_shows_modal_error`) + a runtime drive of
+the real path (unsupported file → modal built with the right title/text/OK
+button, status bar set). 207 tests pass. **Owed: your NVDA confirmation** that
+the dialog reads on open (it uses InfoDialog's existing, NVDA-verified focus
+path).
+
+**Note:** `_open_recent`'s separate "File not found — removed from recent"
+pre-check is still announce-only. Same class of issue but a different, lower-
+severity flow (it auto-removes the entry and refocuses the grid); left as-is
+unless you want it modal too.
+
 ### 1.7 Housekeeping with a correctness edge: the grid-library pin
 
 `pyproject.toml` pins `wx-accessible-grid` to the **payown fork**

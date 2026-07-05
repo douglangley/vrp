@@ -213,6 +213,36 @@ def test_goto_handler_focuses_channel(app, monkeypatch):
         win.Destroy()
 
 
+def test_open_failure_shows_modal_error(app, monkeypatch, tmp_path):
+    """A failed load routes through the modal _show_error (guaranteed read),
+    not an announce-only cue that a screen reader can miss."""
+    from vrp.native.main_window import MainWindow
+
+    win = MainWindow()
+    try:
+        bad = tmp_path / "not_an_image.img"
+        bad.write_bytes(b"this is not a radio image")
+
+        errors = []
+        monkeypatch.setattr(win, "_show_error",
+                            lambda title, msg: errors.append((title, msg)))
+        # If it regressed to announce-only, this would fire instead.
+        monkeypatch.setattr(
+            win.announce, "announce",
+            lambda *a, **k: pytest.fail("load error went to announce, not a modal"),
+        )
+
+        result = win._open_path(str(bad))
+        assert result is False
+        assert len(errors) == 1
+        title, msg = errors[0]
+        assert title == "Could not open file"
+        assert msg  # carries the driver's failure message
+    finally:
+        radio_backend.unload()
+        win.Destroy()
+
+
 def test_main_window_announces_ready_on_startup(app):
     from vrp.native.main_window import MainWindow
 
