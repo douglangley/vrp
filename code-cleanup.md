@@ -341,13 +341,14 @@ pass on 4.2 (focus must stay on the deleted row's slot).
   recorder wrapper, either (a) delete the module-level pair and let
   `invalidate_cache` remain the contract, or (b) route `memory_ops` through
   them. (a) is less churn; pick one and document it in `radio.py`'s docstring.
-- [ ] **5.2 Share one `Speaker`.** `main_window.py`, `edit_dialog.py`, and
-  `serial_dialogs.py` each build a module/instance-level `Speaker()` — three
-  prism contexts. Add `vrp.speech.get_speaker()` (module singleton) and use it
-  everywhere. Behavior identical; one backend acquisition.
-- [ ] **5.3 Extract the "Now on channel N / Now at channels A to B" phrasing**
-  duplicated in `_do_move`, `on_move_to`, and `on_organize`
-  (`vrp/native/main_window.py:867-871,903-907,976-980`) into one helper.
+- [x] **5.2 Share one `Speaker`** — DONE 2026-07-05 (commit a7f4b63).
+  `vrp.speech.get_speaker()` module singleton; `main_window`, `edit_dialog`, and
+  `serial_dialogs` all use it. Test: `tests/test_speaker_singleton.py`.
+- [x] **5.3 Extract the "Now on channel N / Now at channels A to B" phrasing** —
+  DONE 2026-07-05 (commit 16282ec). One `MainWindow._now_at_phrase(block)`
+  helper; `_do_move`, `on_move_to`, and both `on_organize` branches use it, with
+  callers keeping their own separator so announced text is byte-for-byte
+  unchanged. Test: `tests/test_now_at_phrase.py`.
 - [x] **5.4 Docstring/comment drift sweep** — DONE 2026-07-05 (commit 6bc04b4).
   Stale architecture references that mislead future readers (the webview/Flask
   era is gone) corrected:

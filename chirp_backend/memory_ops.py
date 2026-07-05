@@ -781,12 +781,15 @@ def paste_block(
             # cut sources as already empty (they get erased below). Everything
             # from destination up to it shifts down by n, so require room for it
             # before touching anything (atomic: fail leaves the radio unchanged).
+            # Scan from the tail down and stop at the first occupied slot — only
+            # the highest one matters, so there's no need to read every channel.
             last_nonempty = None
-            for k in range(destination, last_bound + 1):
+            for k in range(last_bound, destination - 1, -1):
                 if k in cut_set:
                     continue
                 if not _get_mem(radio, k).empty:
                     last_nonempty = k
+                    break
             if last_nonempty is not None and last_nonempty + n > last_bound:
                 return (
                     False,

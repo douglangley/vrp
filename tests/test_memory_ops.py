@@ -411,6 +411,29 @@ class TestPasteBlock:
         assert affected == []
         assert stub_radio.get_memory(5).name == "C5"  # unchanged
 
+    def test_make_room_finds_highest_occupied_across_gap(self, stub_radio):
+        # Only channel 18 occupied; 5..17 empty. The tail-first occupancy scan
+        # must still find 18 (not stop at the empties) so shifting it down by 2
+        # off the end (18+2 > 19) is correctly rejected.
+        _fill(stub_radio, (18, "T"))
+        from chirp_backend.memory_ops import paste_block
+        ok, _, affected = paste_block(
+            self._clip("A", "B"), destination=5, make_room=True
+        )
+        assert not ok
+        assert affected == []
+        assert stub_radio.get_memory(18).name == "T"  # unchanged
+
+    def test_make_room_across_gap_succeeds_with_room(self, stub_radio):
+        # Same gap layout but the occupied slot is low enough to shift down by 2.
+        _fill(stub_radio, (10, "T"))
+        from chirp_backend.memory_ops import paste_block
+        ok, _, _ = paste_block(self._clip("A", "B"), destination=5, make_room=True)
+        assert ok
+        assert stub_radio.get_memory(5).name == "A"
+        assert stub_radio.get_memory(6).name == "B"
+        assert stub_radio.get_memory(12).name == "T"  # 10 shifted down by 2
+
     def test_out_of_range_fails(self, stub_radio):
         from chirp_backend.memory_ops import paste_block
         ok, _, _ = paste_block(self._clip("A", "B"), destination=19)  # 19,20 -> OOB
