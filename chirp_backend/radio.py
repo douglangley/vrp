@@ -178,9 +178,22 @@ def get_memory(number: int) -> Optional[object]:
 
 def set_memory(mem: object) -> tuple[bool, str]:
     """
-    Write a memory channel back to the radio image.
-    Invalidates the cache entry for that channel.
+    Write a memory channel back to the radio image, updating the read cache.
     Returns (success, message).
+
+    Write-path note (see also ``_install_undo``): every channel write in the app
+    funnels through **one physical choke point** — the loaded radio's
+    ``set_memory``/``erase_memory``, which ``_install_undo`` wraps to record undo
+    and mark the image ``is_modified``. There are two *entry points* to it:
+
+      - ``memory_ops`` (the app path): calls ``radio.set_memory`` directly and
+        keeps the cache fresh by calling ``invalidate_cache`` after each op.
+      - this module-level pair (used by tests and available programmatically):
+        the same write, but it updates ``_mem_cache`` in place instead of
+        invalidating — a convenience for a single coherent read-after-write.
+
+    Both hit the same wrapped methods, so undo recording and ``is_modified`` are
+    identical regardless of entry point.
     """
     with _state_lock:
         if not _state.loaded:
@@ -197,8 +210,9 @@ def set_memory(mem: object) -> tuple[bool, str]:
 
 def erase_memory(number: int) -> tuple[bool, str]:
     """
-    Erase (blank out) a memory channel.
-    Returns (success, message).
+    Erase (blank out) a memory channel, dropping its cache entry.
+    Returns (success, message). See :func:`set_memory` for the write-path note
+    (one wrapped choke point; this is the cache-updating entry point).
     """
     with _state_lock:
         if not _state.loaded:

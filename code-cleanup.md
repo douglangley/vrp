@@ -72,7 +72,19 @@ True; save → False; undo → True again.
 
 </details>
 
-### 1.2 No unsaved-changes prompt anywhere — data-loss BUG
+### 1.2 No unsaved-changes prompt anywhere — data-loss BUG — FIXED 2026-07-05
+
+**DONE.** `_confirm_discard_or_save()` shows a native Yes/No/Cancel message
+dialog (Save / Don't save / Cancel, Escape = Cancel) when a loaded image
+`is_modified`; returns True to proceed, False to abort (with focus back to the
+grid). Wired into an `EVT_CLOSE` handler (window close + File ▸ Exit, vetoes the
+close), `_open_path` (Open + Open Recent), `on_close_image`, and `on_download`.
+`on_save`/`on_save_as` now return bool so a failed/cancelled save vetoes the
+step. Tests: `tests/test_unsaved_prompt.py` (all five branches + the Open
+guard). Commit 409e24b. **Owed: your NVDA confirmation** that the dialog reads
+and Escape cancels.
+
+<details><summary>Original finding</summary>
 
 **What:** `MainWindow` has no `EVT_CLOSE` handler; `on_exit` just calls
 `Close()`. `on_close_image`, `_open_path` (File ▸ Open over a modified image),
@@ -93,6 +105,8 @@ and `on_download` (download replaces the loaded image) never check
 
 **Verify:** headless test for the helper's decision logic; manual NVDA pass on
 the dialog (title + buttons read, Escape cancels).
+
+</details>
 
 ### 1.3 `get_memory()` can return `None` → crash paths in clipboard/paste — FIXED 2026-07-05
 
@@ -380,8 +394,8 @@ pass on 4.2 (focus must stay on the deleted row's slot).
 ## Phase 6 — Test-coverage gaps to close alongside the fixes
 
 - [ ] `is_modified` lifecycle (edit → dirty; save → clean; undo → dirty). (1.1)
-- [ ] Unsaved-changes decision helper: modified+cancel vetoes, save-fail vetoes,
-  unmodified passes straight through. (1.2)
+- [x] Unsaved-changes decision helper: modified+cancel vetoes, save-fail vetoes,
+  unmodified passes straight through. (1.2) DONE (commit 409e24b).
 - [ ] Clipboard ops with an unreadable channel (stub raising `get_memory`). (1.3)
 - [x] `delete_and_shift` non-contiguous behavior (whichever fix is chosen). (1.4)
   DONE (commit 022f5b9).
