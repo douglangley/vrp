@@ -71,6 +71,17 @@ show** (a 0–9 chooser): **0 removes the submenu entirely**, 1–9 shows that
 many. Recent entries are menu-only (no Ctrl shortcut); a file that no longer
 exists is announced and dropped from the list when chosen.
 
+**Unsaved-changes guard.** Any step that would discard the working image —
+**Exit** / the window close button, **Open** (or Open Recent) over a modified
+image, **Close Image**, and **Download from Radio** — first checks whether the
+loaded image has unsaved channel edits. If so, a native, focus-trapped
+**Save / Don't save / Cancel** dialog appears (title "Unsaved changes",
+`Escape` = Cancel). *Save* saves (falling back to Save As for a never-saved
+download) then proceeds; *Don't save* discards and proceeds; *Cancel* (or a
+failed/cancelled save) aborts and returns focus to the grid. A clean, unedited
+image is never prompted. "Unsaved changes: Yes/No" is also shown in **Radio ▸
+Radio Info**.
+
 ## Channel grid navigation and selection
 
 The grid is a multi-select `wx.dataview.DataViewListCtrl`, provided by
@@ -171,6 +182,10 @@ Copy to…, Sort…, Arrange (compact). Only the chosen operation's parameters s
 (shift mode, destination, sort column/order). Destructive/reordering ops show a
 native confirm dialog stating the range and count. After an op the grid
 refreshes, focus lands on the result channel, and the result is announced.
+**Delete and shift up** requires a **contiguous** run (no gaps): a gappy
+advanced list like `1-3,5` is rejected with a spoken error and no change, since
+the shift distance is only well-defined for a solid range (use plain Delete, or
+one run at a time).
 
 ### Find
 
