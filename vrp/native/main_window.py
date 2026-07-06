@@ -171,6 +171,8 @@ class MainWindow(wx.Frame):
         # Ctrl-combos.
         self._redo_accel_id = wx.NewIdRef()
         self.Bind(wx.EVT_MENU, self.on_redo, id=self._redo_accel_id)
+        # Guard against discarding unsaved channel edits on window close/Exit.
+        self.Bind(wx.EVT_CLOSE, self.on_close_window)
         self.SetAcceleratorTable(wx.AcceleratorTable([
             wx.AcceleratorEntry(wx.ACCEL_CTRL | wx.ACCEL_SHIFT, ord("Z"),
                                 self._redo_accel_id),
@@ -1198,6 +1200,10 @@ class MainWindow(wx.Frame):
         Open Recent submenu. Returns True on success."""
         from vrp.config import get_config
 
+        # Loading replaces the working image — guard unsaved edits first.
+        if not self._confirm_discard_or_save():
+            return False
+
         ok, message = radio_backend.load_image(path)
         if not ok:
             # A modal (not just announce) so the error is reliably read — see
@@ -1244,39 +1250,85 @@ class MainWindow(wx.Frame):
         self.announce.announce("Recent files cleared.")
         self.grid.SetFocus()
 
-    def on_save(self, _evt=None) -> None:
+    def on_save(self, _evt=None) -> bool:
+        """Save the loaded image. Returns True on a successful save, False on
+        failure or if the user cancelled the Save As it may fall back to."""
         state = radio_backend.get_state()
         if not state.loaded:
             self.announce.announce("No radio image is open.")
-            return
+            return False
         # No original path (downloaded but never saved) → Save As.
         if not state.image_path:
-            self.on_save_as(_evt)
-            return
+            return self.on_save_as(_evt)
         ok, message = radio_backend.save_image()
         self.announce.announce(message, assertive=not ok)
+        return ok
 
-    def on_save_as(self, _evt=None) -> None:
+    def on_save_as(self, _evt=None) -> bool:
+        """Save the loaded image to a chosen path. Returns True on a successful
+        save, False if the user cancelled the dialog or the save failed."""
         state = radio_backend.get_state()
         if not state.loaded:
             self.announce.announce("No radio image is open.")
-            return
+            return False
         with wx.FileDialog(
             self, "Save radio image as",
             wildcard="Radio images (*.img)|*.img",
             style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT,
         ) as dlg:
             if dlg.ShowModal() != wx.ID_OK:
-                return
+                return False
             path = dlg.GetPath()
         ok, message = radio_backend.save_image(path)
         self.announce.announce(message, assertive=not ok)
         if ok:
             self.SetTitle(f"{state.radio.VENDOR} {state.radio.MODEL} — VRP")
+        return ok
+
+    def _confirm_discard_or_save(self) -> bool:
+        """Guard a destructive step (close, Exit, Open, Download) against
+        discarding unsaved channel edits.
+
+        Returns True if it's safe to proceed — no image loaded, no unsaved
+        changes, the user chose *Don't save*, or a Save succeeded. Returns False
+        to abort — the user chose Cancel, or the Save they asked for failed. On
+        abort, focus returns to the grid so the screen reader lands somewhere
+        sensible. The dialog is a native, focus-trapped Yes/No/Cancel message
+        dialog (Escape = Cancel), read reliably by NVDA/VoiceOver.
+        """
+        state = radio_backend.get_state()
+        if not state.loaded or not state.is_modified:
+            return True
+        name = (
+            os.path.basename(state.image_path) if state.image_path
+            else "the current radio"
+        )
+        dlg = wx.MessageDialog(
+            self,
+            f"Save changes to {name} before continuing? "
+            f"Your unsaved channel edits will be lost otherwise.",
+            "Unsaved changes",
+            wx.YES_NO | wx.CANCEL | wx.ICON_WARNING,
+        )
+        dlg.SetYesNoCancelLabels("Save", "Don't save", "Cancel")
+        choice = dlg.ShowModal()
+        dlg.Destroy()
+        if choice == wx.ID_CANCEL:
+            self.grid.SetFocus()
+            return False
+        if choice == wx.ID_NO:
+            return True  # discard unsaved changes
+        # Yes → Save; veto the destructive step if the save doesn't succeed.
+        saved = self.on_save()
+        if not saved:
+            self.grid.SetFocus()
+        return saved
 
     def on_close_image(self, _evt=None) -> None:
         if not radio_backend.get_state().loaded:
             self.announce.announce("No radio image is open.")
+            return
+        if not self._confirm_discard_or_save():
             return
         radio_backend.unload()
         self._load_into_grid()
@@ -1284,6 +1336,14 @@ class MainWindow(wx.Frame):
 
     def on_exit(self, _evt=None) -> None:
         self.Close()
+
+    def on_close_window(self, event: wx.CloseEvent) -> None:
+        """EVT_CLOSE handler (window close button and File ▸ Exit). Prompt to
+        save unsaved edits; veto the close if the user cancels or a save fails."""
+        if event.CanVeto() and not self._confirm_discard_or_save():
+            event.Veto()
+            return
+        self.Destroy()
 
     def on_import_file(self, _evt=None) -> None:
         """File > Import — import channels from another radio image file."""
@@ -1428,6 +1488,11 @@ class MainWindow(wx.Frame):
     def on_download(self, _evt=None) -> None:
         """Radio > Download from Radio."""
         from vrp.serial_dialogs import DownloadDialog, show_radio_prompts
+
+        # A successful download replaces the working image — guard unsaved edits.
+        if not self._confirm_discard_or_save():
+            self.grid.SetFocus()
+            return
 
         models = radio_backend.list_radio_models()
         dlg = DownloadDialog(self, radio_backend.list_serial_ports, models,

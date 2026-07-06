@@ -120,7 +120,17 @@ channel.
 
 </details>
 
-### 1.4 `delete_and_shift` with a non-contiguous selection — verify semantics
+### 1.4 `delete_and_shift` with a non-contiguous selection — FIXED 2026-07-05
+
+**DONE (option a — restrict to contiguous).** `delete_and_shift` now dedupes/
+sorts its input and, if it isn't a solid `low..high` run, returns
+`(False, "Delete and shift needs a contiguous range …", [])` before touching
+the radio — `on_organize` announces that assertively. A contiguous spec given
+unsorted/with duplicates still works. Tests:
+`test_noncontiguous_selection_rejected`, `test_contiguous_out_of_order_still_shifts`.
+Commit 022f5b9. 223 tests pass.
+
+<details><summary>Original finding</summary>
 
 **What:** `delete_and_shift` (`chirp_backend/memory_ops.py:502`) computes
 `delta = len(numbers)` and shifts everything after `numbers_sorted[-1]` up by
@@ -136,6 +146,8 @@ ambiguity.
 
 **Verify:** unit test for the chosen behavior (non-contiguous input → clean
 error, or correct compaction).
+
+</details>
 
 ### 1.5 Settings dialog writes back *unchanged* values on OK — FIXED 2026-07-05
 
@@ -371,8 +383,10 @@ pass on 4.2 (focus must stay on the deleted row's slot).
 - [ ] Unsaved-changes decision helper: modified+cancel vetoes, save-fail vetoes,
   unmodified passes straight through. (1.2)
 - [ ] Clipboard ops with an unreadable channel (stub raising `get_memory`). (1.3)
-- [ ] `delete_and_shift` non-contiguous behavior (whichever fix is chosen). (1.4)
-- [ ] Settings OK-with-no-edits → zero `set_value` calls / `changed()` count 0. (1.5)
+- [x] `delete_and_shift` non-contiguous behavior (whichever fix is chosen). (1.4)
+  DONE (commit 022f5b9).
+- [x] Settings OK-with-no-edits → zero `set_value` calls / `changed()` count 0. (1.5)
+  DONE (commit 242ca7b).
 - [ ] Grid guard: `chirp.wxui` never imported (0.2).
 - [x] Post-delete focus lands on the erased slot without a full rebuild (4.2 —
   assert `refresh_numbers` path, not `rebuild`). DONE (commit 9cd8ffa).
