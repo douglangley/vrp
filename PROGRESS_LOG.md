@@ -6,6 +6,79 @@ architecture, keyboard map, and CHIRP feature-coverage checklist.
 
 ---
 
+## 2026-07-05 — Code cleanup & debug pass (code-cleanup.md, phases 1–5)
+
+Worked through `code-cleanup.md` (a phased source-review plan). 10 commits on
+branch `code-cleanup`; test count **198 → 229**, all green. Each item is an
+independent commit with its own test.
+
+**Correctness bugs**
+- **Unsaved-changes prompt (1.2, data-loss).** Nothing guarded the working
+  image: Exit, File ▸ Open (over a modified image), Open Recent, Download, and
+  Close Image all silently discarded unsaved channel edits. New
+  `MainWindow._confirm_discard_or_save()` shows a native, focus-trapped
+  Yes/No/Cancel dialog (Save / Don't save / Cancel, Escape = Cancel) only when a
+  loaded image is `is_modified`; returns True to proceed, False to abort (focus
+  back to the grid). Wired into a new `EVT_CLOSE` handler (window close + Exit,
+  vetoes the close), `_open_path` (Open + Open Recent), `on_close_image`, and
+  `on_download`. `on_save`/`on_save_as` now return bool so a failed/cancelled
+  save vetoes the step. `tests/test_unsaved_prompt.py` drives all five branches
+  + the Open guard. Commit 409e24b. **Owed: NVDA pass on the dialog.**
+- **Non-contiguous delete-and-shift (1.4).** `delete_and_shift` used a single
+  gap width of `len(numbers)`, so a gappy selection (e.g. `1-3,5` from the
+  Bulk-operations advanced list) left the in-between channels behind while the
+  tail jumped up by the full count — colliding rows. Now dedupes/sorts and
+  rejects a non-contiguous run up front with a clear, announced error; a
+  contiguous spec given unsorted/with duplicates still works. Commit 022f5b9.
+- **Settings dialog write-back (1.5).** `RadioSettingsDialog._on_ok` wrote every
+  enabled control, spuriously tripping `value.changed()` (miscounting "N
+  changed") and, because a String is displayed `rstrip()`'d, rewriting a value
+  with significant trailing padding. Now records each control's build-time value
+  and skips unchanged controls. `tests/test_settings_dialog.py`. Commit 242ca7b.
+
+**Performance**
+- **Delete refreshes in place (4.2).** Plain Delete clears slots in place (no
+  rows shift), but `on_delete_channels` called `grid.rebuild()`; now
+  `refresh_numbers(numbers)` — lighter and steadier for the screen reader.
+  `rebuild()` stays for the structural ops in `on_organize`. Commit 9cd8ffa.
+  **Owed: NVDA confirmation focus reads steadily on the cleared row.**
+- **Tail-first make-room scan (4.3).** `paste_block`'s make-room check only needs
+  the highest occupied channel in `[destination, last_bound]` but scanned the
+  whole range low-to-high with no early exit; now scans from the tail and breaks
+  at the first occupied slot. Commit 0a3fcc9.
+
+**Consolidation & consistency (Phase 5)**
+- **One documented write path (5.1 / 2.8).** 1.1 (earlier) already unified the
+  dirty-flag behavior via the `_install_undo` recorder wrapper, so `memory_ops`
+  and the module-level `radio.set_memory`/`erase_memory` are two coherent entry
+  points to **one physical choke point** (the wrapped radio methods), differing
+  only in cache update (invalidate vs. in-place). Documented in `radio.py`
+  rather than deleting the pair (which would churn the undo tests). Commit
+  21e2cc5.
+- **Shared `Speaker` (5.2).** `vrp.speech.get_speaker()` module singleton;
+  `main_window`, `edit_dialog`, `serial_dialogs` all use it — one prism backend
+  acquisition instead of three. Commit a7f4b63.
+- **`_now_at_phrase` helper (5.3).** Folded the "Now on channel N / Now at
+  channels A to B" phrasing duplicated across `_do_move`, `on_move_to`, and both
+  `on_organize` branches into one helper; announced text byte-for-byte
+  unchanged. Commit 16282ec.
+- **Docstring/comment drift sweep (5.4 / 5.5).** Corrected stale Flask/webview
+  references in `radio.py`, `memory_ops.py`, `col_defs.py`, `edit_dialog.py`;
+  fixed "frozen (Nuitka) build" → PyInstaller in `_chirp_path.py`; added a
+  SUPERSEDED banner to `GRID_RESTART_PLAN.md`; noted `query_dialogs.py` keeps its
+  plural name deliberately for RepeaterBook's return. Commit 6bc04b4.
+
+**Checked, still deferred**
+- **Grid-library pin (1.7).** Upstream PR Community-Access/wx-accessible-grid#4
+  is still **open** — pin stays on the payown fork; repoint once it merges.
+
+**Still owed to the developer (hardware / not doable headless):** NVDA passes for
+1.2 and 4.2 (and the earlier 1.8); the prism-less frozen-exe NVDA smoke (3.5).
+Deliberately deferred: the measurement-gated perf items (4.1/4.4/4.5), the
+`tools/` spikes (2.7), and the macOS-only `test_channel_grid` xfail (1.6).
+
+**Verified:** `uv run python -m pytest` → 229 passed.
+
 ## 2026-07-05 — Removed the online query sources (Radio ▸ Query Source)
 
 The Phase 7 online query sources were removed — they weren't going to be used in
