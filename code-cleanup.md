@@ -248,12 +248,13 @@ pre-check is still announce-only. Same class of issue but a different, lower-
 severity flow (it auto-removes the entry and refocuses the grid); left as-is
 unless you want it modal too.
 
-### 1.7 Housekeeping with a correctness edge: the grid-library pin
+### 1.7 Housekeeping with a correctness edge: the grid-library pin — CHECKED 2026-07-05, still deferred
 
 `pyproject.toml` pins `wx-accessible-grid` to the **payown fork**
-(`rev 494103f...`, PR Community-Access/wx-accessible-grid#4). Check whether the
-PR merged; if so, repoint to the Community-Access rev and re-run the suite +
-an NVDA smoke of the grid. (Already tracked in PROGRESS_LOG "Open / next".)
+(`rev 494103f...`, PR Community-Access/wx-accessible-grid#4). **Checked
+2026-07-05: PR #4 is still OPEN (not merged)**, so the pin stays on the payown
+fork. Repoint to the Community-Access rev (and re-run the suite + an NVDA smoke
+of the grid) once it merges. (Also tracked in PROGRESS_LOG "Open / next".)
 
 ---
 
@@ -277,8 +278,9 @@ All confirmed by grep to have **zero callers** in `vrp/`, `chirp_backend/`,
   by `docs/research/2026-06-24-native-grid-voiceover-feasibility.md` and relate
   to ongoing macOS VoiceOver work, so not deleting exploratory tooling
   unilaterally. Delete or move to `tools/spikes/` when you decide.
-- [ ] **2.8 Module-level `radio.set_memory`/`erase_memory`** — deferred to
-  Phase 5.1 (single write path) rather than deleting blind (tests use them).
+- [x] **2.8 Module-level `radio.set_memory`/`erase_memory`** — resolved in 5.1
+  (commit 21e2cc5): kept and documented as the cache-coherent entry point to the
+  single wrapped-radio choke point, not deleted.
 
 **Verified:** 205 tests pass; `import chirp_backend.*` clean; grep shows no
 dangling references to any removed symbol.
@@ -358,13 +360,16 @@ pass on 4.2 (focus must stay on the deleted row's slot).
 
 ## Phase 5 — Consolidation & consistency
 
-- [ ] **5.1 One write path for memories.** Today there are two:
-  `memory_ops._set_mem/_erase_mem` (used by the app; no cache update, no
-  `is_modified`) and `radio.set_memory/erase_memory` module functions (cache +
-  `is_modified`; used only by tests). After 1.1 puts `is_modified` in the
-  recorder wrapper, either (a) delete the module-level pair and let
-  `invalidate_cache` remain the contract, or (b) route `memory_ops` through
-  them. (a) is less churn; pick one and document it in `radio.py`'s docstring.
+- [x] **5.1 One write path for memories** — DONE 2026-07-05 (commit 21e2cc5).
+  Resolved by documentation, not deletion. 1.1 already closed the real
+  divergence: the recorder wrapper (`_install_undo`) sets `is_modified` for the
+  app path, so `memory_ops` and the module-level `set_memory`/`erase_memory` now
+  behave identically for undo + dirty flag. They are two *entry points* to one
+  physical choke point (the wrapped radio methods), differing only in cache
+  update (invalidate vs. in-place). Deleting the module-level pair (option a)
+  was rejected: it would churn the undo integration tests and lose their
+  cache-coherent read-after-write for no real gain. `radio.py`'s
+  `set_memory`/`erase_memory` docstrings now spell this out. (Closes 2.8 too.)
 - [x] **5.2 Share one `Speaker`** — DONE 2026-07-05 (commit a7f4b63).
   `vrp.speech.get_speaker()` module singleton; `main_window`, `edit_dialog`, and
   `serial_dialogs` all use it. Test: `tests/test_speaker_singleton.py`.
