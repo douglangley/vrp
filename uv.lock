@@ -224,23 +224,23 @@ wheels = [
 
 [[package]]
 name = "prismatoid"
-version = "0.16.6"
+version = "0.17.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "cffi" },
     { name = "win32more", marker = "sys_platform == 'win32'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/ca/1b/1177b1d9a3e5fb29ad943088d20021ab164ec6d8ad9747585b5dcd9f4766/prismatoid-0.16.6.tar.gz", hash = "sha256:e8c5531aed7bf07a053f23264873a42d86ae6b1ff3a2d998d06d91633a1af981", size = 1077831, upload-time = "2026-06-14T20:10:47.449Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/a7/33/0ef6acf8dab9c07b61b56f7ad34bd719933cdc8dfd059495e46a41edaea7/prismatoid-0.17.0.tar.gz", hash = "sha256:8cfb07430ba38146474e4b4d0ce1c10f243c95d5a2d8c5016b2caf51c9dd9d2c", size = 1283693, upload-time = "2026-07-07T18:34:07.965Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/7a/e9/5d5fb479a3814ba328a79b726d5d3eb0e207c0664e901d1f9447892ee494/prismatoid-0.16.6-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:fb4414d92fb0577db800e235d88ef392a612bfde6f7fb8f571a888d5ea4431e8", size = 184864, upload-time = "2026-06-14T20:09:03.797Z" },
-    { url = "https://files.pythonhosted.org/packages/e6/07/26e9d923052b31b07cc338e3e1ff18d8411a20bda67e2a4de0047783d749/prismatoid-0.16.6-cp311-cp311-macosx_11_0_x86_64.whl", hash = "sha256:c4edfe8dc608a3396486095bd63379ee9cd2499da14196f609e6f66993f55fd2", size = 299523, upload-time = "2026-06-14T20:09:05.283Z" },
-    { url = "https://files.pythonhosted.org/packages/9b/d3/f68f995d73e28a5568006ddf7d62f9964a56866cf6e3a7121ef519529170/prismatoid-0.16.6-cp311-cp311-manylinux_2_34_aarch64.whl", hash = "sha256:259dede2765144cc785a39dd33f5200e6be1d968f15175419bdcf9abfabc5557", size = 3626145, upload-time = "2026-06-14T20:09:06.87Z" },
-    { url = "https://files.pythonhosted.org/packages/64/d4/fcfd646a443f882dcadc129c11ebedb80194a200ef20e050ec801c68c7d4/prismatoid-0.16.6-cp311-cp311-manylinux_2_34_x86_64.whl", hash = "sha256:3bdfa663afb6c80bac44a762803c284d7868bb12ffd6f261b5465317c2c18e36", size = 4007179, upload-time = "2026-06-14T20:09:08.776Z" },
-    { url = "https://files.pythonhosted.org/packages/46/42/3928b3e7023c9dfd370feeb56248405eebeffaf7df864acab3616b0beaac/prismatoid-0.16.6-cp311-cp311-musllinux_1_2_aarch64.whl", hash = "sha256:a299260de557cbcc58e5ed22bdacb18e668fcf0f65f8902f1f980a0a313cb5c9", size = 4663893, upload-time = "2026-06-14T20:09:10.658Z" },
-    { url = "https://files.pythonhosted.org/packages/8a/4d/faa36b9b041fd5ae495cb2ecc9101e283b7a4958d17617ffd2cd0b7b22f4/prismatoid-0.16.6-cp311-cp311-musllinux_1_2_x86_64.whl", hash = "sha256:431d2b70199546dbe7021f00157e2c25b05c45d16d409a049ac2299c862697aa", size = 5027589, upload-time = "2026-06-14T20:09:13.248Z" },
-    { url = "https://files.pythonhosted.org/packages/78/db/a4ef8ed9459bd3ca9c94f1b30fb51b0f9a32a2d634c085ef4d991f0be2fe/prismatoid-0.16.6-cp311-cp311-win32.whl", hash = "sha256:ebd2573065a1023704716be6f5021e613cc769068b86ef1169652b6b636e1fa3", size = 482289, upload-time = "2026-06-14T20:09:14.866Z" },
-    { url = "https://files.pythonhosted.org/packages/87/3d/e16bafb9d0dcbdf3f1733692e98bb78273ceb993c2b892dc04179b30458e/prismatoid-0.16.6-cp311-cp311-win_amd64.whl", hash = "sha256:a3dd3c57a71501bbfb324df33602c6c9b3cdd12a5572f123a6f832352c590492", size = 482299, upload-time = "2026-06-14T20:09:16.58Z" },
-    { url = "https://files.pythonhosted.org/packages/a2/b1/9f3c2d10629bbac7d2626fb5cd102749ea37969a022292ae2644e8b9dea9/prismatoid-0.16.6-cp311-cp311-win_arm64.whl", hash = "sha256:ae9eddd3a0d0ec4fbaae07b0ce7475efa25d4c3c3c2bb142d7642e58dbf7ec69", size = 477367, upload-time = "2026-06-14T20:09:18.215Z" },
+    { url = "https://files.pythonhosted.org/packages/1e/af/47dd1bf68198f801d6c8f6273284d6f8ebbf5d96f1bcd3f8032d02387f3b/prismatoid-0.17.0-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:6f3e624fefbc2345ef0809d0d0251b16c56af3f2f19abcea347385dc1bcb86ba", size = 282358, upload-time = "2026-07-07T18:32:40.846Z" },
+    { url = "https://files.pythonhosted.org/packages/f1/b6/c4afcfd85220b4e5df84763d494124ecbb21ce9397c9452a87c951a1c681/prismatoid-0.17.0-cp311-cp311-macosx_11_0_x86_64.whl", hash = "sha256:67306b8efa7eda6f416e13d71170d228d86c0b720f2cb1a2857686878536996b", size = 399993, upload-time = "2026-07-07T18:32:42.365Z" },
+    { url = "https://files.pythonhosted.org/packages/a0/28/89efab97f37c53fded181fb06e48bb8513b3d47e7d531017daa327817f04/prismatoid-0.17.0-cp311-cp311-manylinux_2_34_aarch64.whl", hash = "sha256:c396b701484a3ff4e50e1c632f5a8b4a71bcbcd3ae42844ea8f39196d284e7d5", size = 3710204, upload-time = "2026-07-07T18:32:43.99Z" },
+    { url = "https://files.pythonhosted.org/packages/82/3b/e81984c669d418920fccc82a047e3254ff8570687ff613ded6de91416130/prismatoid-0.17.0-cp311-cp311-manylinux_2_34_x86_64.whl", hash = "sha256:7c6d82eeb4b284740ae1283037f616b61a440f02c8cbfefbf0969abb7c5e7b99", size = 4028945, upload-time = "2026-07-07T18:32:46.676Z" },
+    { url = "https://files.pythonhosted.org/packages/55/62/ad15b8c0c4becb597a699fa5cada679027a9d1e9868ba76501f7eef8d17d/prismatoid-0.17.0-cp311-cp311-musllinux_1_2_aarch64.whl", hash = "sha256:d828308e0831b652bc531910f1d89bd9baa27a57fcca02673a4f81f10389c8b9", size = 4750758, upload-time = "2026-07-07T18:32:48.335Z" },
+    { url = "https://files.pythonhosted.org/packages/51/83/8cdd8f1f977ddb06f34bd480d458d7f69bd7e27e1b28a3abb564fec5e18e/prismatoid-0.17.0-cp311-cp311-musllinux_1_2_x86_64.whl", hash = "sha256:112e44b2807adb46ebacc0246bdf77113c54bac5d49e217c61dc3924404eecec", size = 5116360, upload-time = "2026-07-07T18:32:50.609Z" },
+    { url = "https://files.pythonhosted.org/packages/89/94/9148238d328f7442436256f07994eb78b1eeeffe41813e5a1d8fdad34bc6/prismatoid-0.17.0-cp311-cp311-win32.whl", hash = "sha256:4870ba25463a3b00de04a84a34070b927453a040c1d97b92056f38fb7af35281", size = 496091, upload-time = "2026-07-07T18:32:52.506Z" },
+    { url = "https://files.pythonhosted.org/packages/7a/ed/275e1b0c4dc9da7282f4ab840f48b425c7eda6db956bf7e58203684c6ae9/prismatoid-0.17.0-cp311-cp311-win_amd64.whl", hash = "sha256:ea561dfe025402df622da17c476197f70bc6939dc6e90bc40953fad853ee744b", size = 496099, upload-time = "2026-07-07T18:32:53.991Z" },
+    { url = "https://files.pythonhosted.org/packages/23/7b/11edc9d8b2d5779d996ad10dd1101ab552b90371a8cecf904e911c208115/prismatoid-0.17.0-cp311-cp311-win_arm64.whl", hash = "sha256:795d8190a3f56a2a14d0a3676522fd113908bb0d33441748550be1007fa15add", size = 495777, upload-time = "2026-07-07T18:32:55.627Z" },
 ]
 
 [[package]]
@@ -436,7 +436,7 @@ dev = [
 requires-dist = [
     { name = "chirp", editable = "chirp" },
     { name = "lark", specifier = ">=1.1.0" },
-    { name = "prismatoid", specifier = ">=0.16.0" },
+    { name = "prismatoid", specifier = ">=0.17.0" },
     { name = "pyinstaller", marker = "extra == 'build'", specifier = ">=6.10.0" },
     { name = "pyserial", specifier = ">=3.5" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.0.0" },

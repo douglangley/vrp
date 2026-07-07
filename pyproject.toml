@@ -23,7 +23,7 @@ dependencies = [
     "wx-accessible-grid>=0.9.0",
     # Unified TTS / screen-reader speech (prism). Used to speak things that
     # ARIA alone can't convey. The Python bindings ship as `prismatoid`.
-    "prismatoid>=0.16.0",
+    "prismatoid>=0.17.0",
     # The CHIRP radio driver library. Installed as an editable local package
     # from the sibling ./chirp clone — see [tool.uv.sources] below. Clone it
     # with `git clone --depth=1 https://github.com/kk7ds/chirp.git` before

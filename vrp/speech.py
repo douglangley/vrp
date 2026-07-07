@@ -49,8 +49,10 @@ class Speaker:
 
     @staticmethod
     def _safe_name(backend) -> str:
+        # prism's Backend.name is a property (str), not a method — read it,
+        # don't call it. Falls back to repr if the backend can't report a name.
         try:
-            return backend.name()
+            return backend.name
         except Exception:
             return repr(backend)
 
