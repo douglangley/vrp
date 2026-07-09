@@ -115,6 +115,25 @@ class RepeaterBookQueryDialog(wx.Dialog):
 
         outer.Add(grid, 0, wx.ALL, 12)
 
+        # Bands: real native checkboxes (one per band, RT Systems style). Each
+        # self-labels, so it reads reliably under NVDA regardless of position
+        # (unlike a checkbox list). Grouped in a StaticBox for an accessible
+        # group name. Leaving all clear means "any band".
+        band_box = wx.StaticBoxSizer(
+            wx.VERTICAL, self, "Bands (leave all clear for any)"
+        )
+        band_grid = wx.FlexGridSizer(cols=2, vgap=2, hgap=16)
+        self._band_boxes: dict[str, wx.CheckBox] = {}
+        for name, lo, hi in repeaterbook.bands():
+            # "to" (not an en-dash) so screen readers speak the range cleanly.
+            label = f"{name} ({lo / 1e6:g} to {hi / 1e6:g} MHz)"
+            cb = wx.CheckBox(self, label=label)
+            cb.SetName(label)
+            self._band_boxes[name] = cb
+            band_grid.Add(cb)
+        band_box.Add(band_grid, 0, wx.ALL, 4)
+        outer.Add(band_box, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 12)
+
         self.open_only = wx.CheckBox(self, label="Open repeaters only")
         self.open_only.SetName("Open repeaters only")
         outer.Add(self.open_only, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 12)
@@ -151,6 +170,9 @@ class RepeaterBookQueryDialog(wx.Dialog):
         want = set(form.get("modes", []))
         for i in range(self.modes.GetCount()):
             self.modes.Check(i, self.modes.GetString(i) in want)
+        want_bands = set(form.get("bands", []))
+        for name, cb in self._band_boxes.items():
+            cb.SetValue(name in want_bands)
 
     def _populate_states(self) -> None:
         """Fill the state selector for the chosen country, or disable it.
@@ -167,6 +189,9 @@ class RepeaterBookQueryDialog(wx.Dialog):
         else:
             self.state.Enable(False)
 
+    def _selected_bands(self) -> list[str]:
+        return [name for name, cb in self._band_boxes.items() if cb.GetValue()]
+
     def get_form(self) -> dict:
         """Raw form values, for remembering and re-populating (results ▸ Back)."""
         return {
@@ -179,6 +204,7 @@ class RepeaterBookQueryDialog(wx.Dialog):
                 for i in range(self.modes.GetCount())
                 if self.modes.IsChecked(i)
             ],
+            "bands": self._selected_bands(),
         }
 
     def get_params(self) -> dict:
@@ -195,6 +221,7 @@ class RepeaterBookQueryDialog(wx.Dialog):
             filter_text=self.filter.GetValue().strip(),
             open_only=self.open_only.GetValue(),
             modes=modes,
+            bands=self._rb.band_ranges(self._selected_bands()),
         )
 
 

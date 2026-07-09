@@ -6,6 +6,22 @@ architecture, keyboard map, and CHIRP feature-coverage checklist.
 
 ---
 
+## 2026-07-09 — RepeaterBook band filter
+
+A state query returns far too many repeaters for a given radio (Oregon open FM =
+342). Added a **band** filter to the query dialog: a "Bands" StaticBox of native
+`wx.CheckBox` controls, one per amateur band (10 m, 6 m, 2 m, 1.25 m, 70 cm,
+33 cm, 23 cm; RT-Systems style, leave all clear for any). Individual checkboxes
+(each self-labels, reads reliably under NVDA) rather than a checkbox list.
+Backend: `repeaterbook.BANDS` + `bands()` + `band_ranges(names)`; the selected
+band ranges feed the `bands=` arg already accepted by `build_params` →
+`do_fetch`'s client-side `included_band`. Threaded through the dialog's
+`get_form`/`get_params`/`_apply_initial` (bands stored by short name; survive
+results ▸ Back). Verified live against the mirror: Oregon open FM 342 → 164 (2 m,
+all within 144–148 MHz) → 149 (70 cm); accNames re-checked via oleacc (grid
+fields unaffected, band checkboxes self-label). Tests +4. Full suite 265 passed.
+**Owed: NVDA pass on the band checkboxes.**
+
 ## 2026-07-09 — RepeaterBook results ▸ Back to search
 
 The results picker had no way back to the query form to refine a search (only

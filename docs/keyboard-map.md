@@ -249,8 +249,11 @@ intentionally not implemented — Export to CSV is the accessible equivalent.
 **RepeaterBook** is wired: **Radio ▸ Query Source ▸ RepeaterBook…** (menu-only,
 no Ctrl shortcut; disabled until a radio is loaded — results import into it).
 The dialog gathers country/state plus optional filters (search text, open-only,
-mode); the fetch runs on a background thread behind a cancellable progress
-dialog. Results then appear in a **multi-select picker** (`RepeaterBookResults
+mode, and **band** — a group of native checkboxes, one per amateur band
+10 m…23 cm, RT-Systems style; leave all clear for any). Band filtering is
+client-side (CHIRP's `included_band`), so it narrows the results shown without
+needing server support. The fetch runs on a background thread behind a
+cancellable progress dialog. Results then appear in a **multi-select picker** (`RepeaterBookResults
 Dialog`, a `wx.ListBox` with `LB_MULTIPLE`): arrow through the repeaters, press
 **Space** to include/exclude each (all start included), with **Select all** /
 **Unselect all** buttons and a **Back to search** button that returns to the

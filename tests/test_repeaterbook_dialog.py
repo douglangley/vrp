@@ -86,11 +86,27 @@ def test_query_prefill_round_trips(app):
     # results ▸ Back re-opens the query dialog with the previous inputs.
     form = {
         "country": "United States", "state": "Oregon", "filter": "portland",
-        "open_only": True, "modes": ["FM"],
+        "open_only": True, "modes": ["FM"], "bands": ["2 m", "70 cm"],
     }
     dlg = RepeaterBookQueryDialog(None, initial=form)
     try:
         assert dlg.get_form() == form
+    finally:
+        dlg.Destroy()
+
+
+def test_query_band_checkboxes_feed_get_params(app):
+    form = {
+        "country": "United States", "state": "Oregon", "filter": "",
+        "open_only": False, "modes": [], "bands": ["2 m", "70 cm"],
+    }
+    dlg = RepeaterBookQueryDialog(None, initial=form)
+    try:
+        assert dlg.get_form()["bands"] == ["2 m", "70 cm"]
+        params = dlg.get_params()
+        assert (144_000_000, 148_000_000) in params["bands"]
+        assert (420_000_000, 450_000_000) in params["bands"]
+        assert len(params["bands"]) == 2
     finally:
         dlg.Destroy()
 

@@ -34,6 +34,22 @@ def test_modes_are_chirps():
     assert set(rb.modes()) == {"FM", "DV", "DMR", "DN"}
 
 
+def test_bands_include_common_amateur_bands():
+    names = [name for name, _lo, _hi in rb.bands()]
+    assert "2 m" in names
+    assert "70 cm" in names
+
+
+def test_band_ranges_maps_names_in_band_order_ignoring_unknown():
+    ranges = rb.band_ranges(["70 cm", "2 m", "bogus"])
+    # BANDS order: 2 m comes before 70 cm regardless of input order.
+    assert ranges == [(144_000_000, 148_000_000), (420_000_000, 450_000_000)]
+
+
+def test_band_ranges_empty():
+    assert rb.band_ranges([]) == []
+
+
 # --- build_params -----------------------------------------------------------
 
 REQUIRED_KEYS = {"lat", "lon", "dist", "openonly", "cached", "state", "country"}

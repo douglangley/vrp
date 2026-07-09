@@ -111,6 +111,36 @@ def modes() -> list[str]:
     return list(repeaterbook.MODES)
 
 
+# Amateur bands offered as result filters, (label, low_hz, high_hz). Ranges are
+# generous (US/Region-2 edges, which also cover the narrower Region-1 allocations
+# for the same bands) — they only bucket repeaters for filtering, so erring wide
+# never hides a valid repeater. Filtering is client-side (do_fetch's
+# included_band), so it works on the mirror path with no server support.
+BANDS: list[tuple[str, int, int]] = [
+    ("10 m", 28_000_000, 29_700_000),
+    ("6 m", 50_000_000, 54_000_000),
+    ("2 m", 144_000_000, 148_000_000),
+    ("1.25 m", 222_000_000, 225_000_000),
+    ("70 cm", 420_000_000, 450_000_000),
+    ("33 cm", 902_000_000, 928_000_000),
+    ("23 cm", 1_240_000_000, 1_300_000_000),
+]
+
+
+def bands() -> list[tuple[str, int, int]]:
+    """Selectable amateur bands for filtering, (label, low_hz, high_hz)."""
+    return list(BANDS)
+
+
+def band_ranges(names) -> list[tuple[int, int]]:
+    """Map selected band labels to the (low_hz, high_hz) ranges do_fetch wants.
+
+    Unknown labels are ignored; ranges come back in BANDS order.
+    """
+    wanted = set(names)
+    return [(lo, hi) for (name, lo, hi) in BANDS if name in wanted]
+
+
 def has_states(country: str) -> bool:
     """True if ``country`` is queried per-state (US/Canada/Mexico)."""
     return bool(states(country))
