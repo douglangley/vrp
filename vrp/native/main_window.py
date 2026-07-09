@@ -1387,8 +1387,12 @@ class MainWindow(wx.Frame):
             return
         self._import_results(src, count)
 
-    def _import_results(self, src_radio, count: int) -> None:
-        """Shared import flow: pick destination, import, refresh grid, focus."""
+    def _import_results(self, src_radio, count: int, numbers=None) -> None:
+        """Shared import flow: pick destination, import, refresh grid, focus.
+
+        ``numbers`` optionally restricts the import to specific source channel
+        numbers (the rows checked in the results picker); None imports all.
+        """
         from chirp_backend import memory_ops
         from vrp.query_dialogs import ImportDestinationDialog
 
@@ -1404,7 +1408,9 @@ class MainWindow(wx.Frame):
             self.grid.SetFocus()
             return
 
-        ok, message, affected = memory_ops.import_memories(src_radio, dest, overwrite)
+        ok, message, affected = memory_ops.import_memories(
+            src_radio, dest, overwrite, numbers=numbers
+        )
         if ok:
             self._load_into_grid()
             target = affected[0] if affected else dest
@@ -1503,7 +1509,32 @@ class MainWindow(wx.Frame):
             self.announce.announce(message)
             return
         self.announce.announce(f"RepeaterBook: {message}")
-        self._import_results(result, count)
+        self._pick_and_import_repeaters(result)
+
+    def _pick_and_import_repeaters(self, result) -> None:
+        """Let the user check which fetched repeaters to import, then import.
+
+        Shows the multi-select results picker; the checked source channel
+        numbers flow into the shared _import_results (destination + overwrite).
+        """
+        from chirp_backend import repeaterbook
+        from vrp.query_dialogs import RepeaterBookResultsDialog
+
+        lines = repeaterbook.result_lines(result)
+        dlg = RepeaterBookResultsDialog(self, lines)
+        ok = dlg.ShowModal() == wx.ID_OK
+        selected = dlg.get_selected_numbers() if ok else []
+        dlg.Destroy()
+        if not ok:
+            self.grid.SetFocus()
+            return
+        if not selected:
+            self.announce.announce(
+                "No repeaters selected; nothing imported.", assertive=True
+            )
+            self.grid.SetFocus()
+            return
+        self._import_results(result, len(selected), numbers=selected)
 
     def on_export_csv(self, _evt=None) -> None:
         """File > Export — write the loaded radio's channels to a CSV file."""

@@ -144,6 +144,61 @@ def test_fetch_does_not_mutate_callers_params():
     assert params == before  # do_fetch pops from a copy, not the caller's dict
 
 
+class _Mem:
+    def __init__(self, number, freq, name, comment="", mode="FM", empty=False):
+        self.number = number
+        self.freq = freq
+        self.name = name
+        self.comment = comment
+        self.mode = mode
+        self.empty = empty
+
+
+class _ResultRadio:
+    def __init__(self, mems):
+        self._m = {m.number: m for m in mems}
+        self._lo, self._hi = min(self._m), max(self._m)
+
+    def get_features(self):
+        lo, hi = self._lo, self._hi
+
+        class F:
+            memory_bounds = (lo, hi)
+
+        return F()
+
+    def get_memory(self, number):
+        return self._m[number]
+
+
+def test_describe_result_whole_mhz_and_fields():
+    line = rb.describe_result(
+        _Mem(0, 146_000_000, "COUNCIL", comment="KR7IS near Gaston, Oregon OPEN")
+    )
+    assert "146.000 MHz" in line  # whole MHz not truncated to "146"
+    assert "FM" in line
+    assert "COUNCIL" in line
+    assert "Gaston" in line
+
+
+def test_describe_result_handles_blank_name_and_comment():
+    line = rb.describe_result(_Mem(0, 147_120_000, "", comment="", mode="DMR"))
+    assert "147.12" in line
+    assert "DMR" in line
+    assert line  # never blank
+
+
+def test_result_lines_skips_empty_and_keeps_order():
+    radio = _ResultRadio([
+        _Mem(0, 146_000_000, "A"),
+        _Mem(1, 147_000_000, "", empty=True),
+        _Mem(2, 145_000_000, "C"),
+    ])
+    lines = rb.result_lines(radio)
+    assert [n for n, _ in lines] == [0, 2]  # empty #1 skipped, order preserved
+    assert "A" in lines[0][1] and "C" in lines[1][1]
+
+
 def test_gettext_shim_installed_by_fetch():
     import builtins
 

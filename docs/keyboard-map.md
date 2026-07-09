@@ -250,8 +250,14 @@ intentionally not implemented — Export to CSV is the accessible equivalent.
 no Ctrl shortcut; disabled until a radio is loaded — results import into it).
 The dialog gathers country/state plus optional filters (search text, open-only,
 mode); the fetch runs on a background thread behind a cancellable progress
-dialog, then flows through the shared `ImportDestinationDialog` +
-`memory_ops.import_memories`. It currently pulls from **CHIRP's mirror**
+dialog. Results then appear in a **multi-select picker** (`RepeaterBookResults
+Dialog`, a `wx.ListBox` with `LB_MULTIPLE`): arrow through the repeaters, press
+**Space** to include/exclude each (all start included), with **Select all** /
+**Unselect all** buttons. The checked rows flow through the shared
+`ImportDestinationDialog` + `memory_ops.import_memories` (its `numbers=`
+argument limits the import to the checked source channels). A checkbox list
+(`wx.CheckListBox`) was avoided — its per-item checkboxes read unreliably under
+NVDA; a multi-select ListBox announces each row and its selected state. It currently pulls from **CHIRP's mirror**
 (`data.chirpmyradio.com/rb/`, generic CHIRP User-Agent, no credential) — the
 direct RepeaterBook API is a localized swap in
 `chirp_backend/repeaterbook.py` once RepeaterBook issues VRP a User-Agent.

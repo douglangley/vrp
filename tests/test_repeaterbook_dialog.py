@@ -8,7 +8,16 @@ import pytest
 
 wx = pytest.importorskip("wx")
 
-from vrp.query_dialogs import RepeaterBookQueryDialog  # noqa: E402
+from vrp.query_dialogs import (  # noqa: E402
+    RepeaterBookQueryDialog,
+    RepeaterBookResultsDialog,
+)
+
+SAMPLE_LINES = [
+    (0, "146.000 MHz  FM  A — Portland"),
+    (3, "147.040 MHz  FM  B — Gresham"),
+    (7, "442.950 MHz  FM  C — Beaverton"),
+]
 
 
 @pytest.fixture
@@ -69,6 +78,48 @@ def test_row_country_disables_state(app):
         assert not dlg.state.IsEnabled()
         # A country without sub-regions yields state "all" in the params.
         assert dlg.get_params()["state"] == "all"
+    finally:
+        dlg.Destroy()
+
+
+def test_results_all_selected_by_default(app):
+    dlg = RepeaterBookResultsDialog(None, SAMPLE_LINES)
+    try:
+        # Default: everything checked, keyed by source channel number, not index.
+        assert dlg.get_selected_numbers() == [0, 3, 7]
+    finally:
+        dlg.Destroy()
+
+
+def test_results_select_and_unselect_all(app):
+    dlg = RepeaterBookResultsDialog(None, SAMPLE_LINES)
+    try:
+        dlg._on_unselect_all()
+        assert dlg.get_selected_numbers() == []
+        dlg._on_select_all()
+        assert dlg.get_selected_numbers() == [0, 3, 7]
+    finally:
+        dlg.Destroy()
+
+
+def test_results_returns_only_checked_source_numbers(app):
+    dlg = RepeaterBookResultsDialog(None, SAMPLE_LINES)
+    try:
+        dlg.listbox.Deselect(1)  # drop the middle row (source number 3)
+        assert dlg.get_selected_numbers() == [0, 7]
+    finally:
+        dlg.Destroy()
+
+
+def test_results_list_label_created_before_control(app):
+    # Same wxMSW naming rule as the query dialog: the list's label must be the
+    # StaticText created immediately before it, or NVDA misnames the list.
+    dlg = RepeaterBookResultsDialog(None, SAMPLE_LINES)
+    try:
+        kids = list(dlg.GetChildren())
+        prev = kids[kids.index(dlg.listbox) - 1]
+        assert isinstance(prev, wx.StaticText)
+        assert "Repeaters found" in prev.GetLabel()
     finally:
         dlg.Destroy()
 

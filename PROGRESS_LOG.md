@@ -6,6 +6,40 @@ architecture, keyboard map, and CHIRP feature-coverage checklist.
 
 ---
 
+## 2026-07-09 — RepeaterBook results picker + off-by-one label fix
+
+Two follow-ups to the RepeaterBook query source (same day).
+
+**Results picker (enhancement).** After a query, results now appear in a
+multi-select picker before import: `RepeaterBookResultsDialog`
+(`vrp/query_dialogs.py`), a `wx.ListBox` with `LB_MULTIPLE` — arrow through the
+repeaters, Space toggles each in/out of the import (all start included), plus
+Select all / Unselect all buttons and a live "N of M selected" readout (spoken
+on the bulk buttons via the shared Speaker). Chosen over a `wx.CheckListBox`,
+whose per-item checkboxes read unreliably under NVDA; a multi-select ListBox
+announces each row + its selected state and is well supported. `describe_result`
+/ `result_lines` (in `chirp_backend/repeaterbook.py`) build the one-line row
+summaries (freq + mode + name + parsed location). `memory_ops.import_memories`
+gained a `numbers=` argument restricting the import to the checked source
+channels (ignores dupes/out-of-range, imports ascending). `main_window` inserts
+`_pick_and_import_repeaters` between the fetch and the shared `_import_results`.
+Verified end-to-end against the live mirror (fetched 22, imported a chosen
+subset of 2) and at the MSAA level (oleacc: the list's accName is its own
+instructive label). Tests: +11 (import subset, describe/result_lines, picker
+select-all/subset/label-order). **Owed: NVDA pass on the picker (Space toggle +
+Select/Unselect all).**
+
+**Off-by-one label fix (bug).** Every field in `RepeaterBookQueryDialog` read
+one label off under NVDA (state combo announced "Country", etc.). Root cause,
+proven by reading MSAA `get_accName` via `ctypes`+`oleacc`: **wxMSW names a
+native control from the StaticText created immediately before it, and `SetName`
+does NOT reach MSAA** for these controls. The dialog's helper created each
+control *before* its label, so every field inherited the previous field's
+label. Fix: create each label immediately before its control (label-then-
+control), matching `PreferencesDialog`. After the fix every control's accName is
+its own label. Guard test asserts label-precedes-control creation order.
+Recorded as a project-wide rule (memory: create the label before the control).
+
 ## 2026-07-09 — RepeaterBook query source (via CHIRP's mirror)
 
 Added RepeaterBook back as a purpose-built query source (Phase 7). It fetches

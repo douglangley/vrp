@@ -163,6 +163,41 @@ def result_count(radio) -> int:
     return (hi - lo + 1) if hi >= lo else 0
 
 
+def describe_result(mem) -> str:
+    """One-line, screen-reader-friendly summary of a result memory.
+
+    Frequency + mode + name + location (the parsed comment RepeaterBook builds,
+    e.g. "W7ABC near Portland, Multnomah County, Oregon OPEN"). Used to label
+    each row in the results picker.
+    """
+    from chirp_backend.col_defs import format_freq_mhz
+
+    freq = format_freq_mhz(getattr(mem, "freq", 0))
+    mode = getattr(mem, "mode", "") or ""
+    name = (getattr(mem, "name", "") or "").strip()
+    comment = (getattr(mem, "comment", "") or "").strip()
+    parts = [p for p in (f"{freq} MHz" if freq else "", mode, name) if p]
+    line = "  ".join(parts)
+    if comment:
+        line = f"{line} — {comment}" if line else comment
+    return line or "(empty)"
+
+
+def result_lines(radio) -> list[tuple[int, str]]:
+    """(source_number, summary) for every result memory, in channel order."""
+    lo, hi = radio.get_features().memory_bounds
+    out: list[tuple[int, str]] = []
+    for n in range(lo, hi + 1):
+        try:
+            mem = radio.get_memory(n)
+        except Exception:  # noqa: BLE001
+            continue
+        if getattr(mem, "empty", False):
+            continue
+        out.append((n, describe_result(mem)))
+    return out
+
+
 def fetch(
     params: dict,
     progress_cb: Optional[ProgressCallback] = None,

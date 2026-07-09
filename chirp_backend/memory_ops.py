@@ -282,13 +282,23 @@ def set_channel_field(number: int, field: str, value):
 
 
 @undo.records
-def import_memories(src_radio, destination: int, overwrite: bool = True) -> OpResult:
+def import_memories(
+    src_radio,
+    destination: int,
+    overwrite: bool = True,
+    numbers=None,
+) -> OpResult:
     """Import a query/source radio's memories into the loaded radio.
 
     Copies each non-empty source memory into consecutive destination channels
     starting at ``destination``, adapting it for the target radio via CHIRP's
     import_logic (handles mode/tone/power differences). With overwrite=False,
     occupied destination channels are skipped. Returns (ok, message, affected).
+
+    ``numbers`` optionally restricts the import to a subset of source channel
+    numbers (e.g. the rows the user checked in the results picker); given
+    None, every non-empty source memory is imported. Out-of-range or duplicate
+    numbers are ignored; the surviving numbers are imported in ascending order.
     """
     from chirp import import_logic
 
@@ -301,10 +311,15 @@ def import_memories(src_radio, destination: int, overwrite: bool = True) -> OpRe
     src_features = src_radio.get_features()
     slo, shi = src_features.memory_bounds
 
+    if numbers is None:
+        source_numbers = range(slo, shi + 1)
+    else:
+        source_numbers = sorted({n for n in numbers if slo <= n <= shi})
+
     dest = destination
     imported = overwritten = skipped = 0
     affected: list[int] = []
-    for n in range(slo, shi + 1):
+    for n in source_numbers:
         if dest > thi:
             break
         try:

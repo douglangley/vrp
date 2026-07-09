@@ -163,3 +163,101 @@ class RepeaterBookQueryDialog(wx.Dialog):
             open_only=self.open_only.GetValue(),
             modes=modes,
         )
+
+
+class RepeaterBookResultsDialog(wx.Dialog):
+    """Pick which fetched repeaters to import.
+
+    A multi-select wx.ListBox (LB_MULTIPLE): arrow through the results, Space
+    toggles each row in/out of the import (NVDA/VoiceOver announce the row text
+    and its selected state), with Select all / Unselect all buttons. All rows
+    start selected — the common case is "import the lot, drop a few". Chosen
+    over a checkbox list (wx.CheckListBox), whose per-item checkboxes read
+    unreliably under NVDA.
+
+    Accessibility: the list's StaticText label is created immediately before it
+    (wxMSW names the control from the preceding static text — see
+    RepeaterBookQueryDialog); a real modal, Escape = Cancel. get_selected_numbers
+    returns the source channel numbers still checked.
+    """
+
+    def __init__(self, parent, lines: list[tuple[int, str]]) -> None:
+        super().__init__(
+            parent, title="RepeaterBook results",
+            style=wx.DEFAULT_DIALOG_STYLE | wx.RESIZE_BORDER,
+        )
+        from vrp.speech import get_speaker
+
+        self._speaker = get_speaker()
+        self._numbers = [n for n, _ in lines]
+        outer = wx.BoxSizer(wx.VERTICAL)
+
+        # Label BEFORE the list (load-bearing for the screen-reader name).
+        outer.Add(
+            wx.StaticText(
+                self,
+                label="Repeaters found. Arrow through the list and press Space "
+                "to include or exclude each one.",
+            ),
+            0, wx.ALL, 10,
+        )
+        self.listbox = wx.ListBox(
+            self, choices=[text for _, text in lines],
+            style=wx.LB_MULTIPLE | wx.LB_NEEDED_SB, size=(460, 240),
+        )
+        self.listbox.SetName("Repeaters found, Space toggles import")
+        for i in range(self.listbox.GetCount()):
+            self.listbox.SetSelection(i)  # default: all included
+        self.listbox.Bind(wx.EVT_LISTBOX, lambda _e: self._update_count())
+        outer.Add(self.listbox, 1, wx.EXPAND | wx.LEFT | wx.RIGHT, 10)
+
+        self.count_label = wx.StaticText(self, label="")
+        outer.Add(self.count_label, 0, wx.ALL, 10)
+
+        btnrow = wx.BoxSizer(wx.HORIZONTAL)
+        sel_all = wx.Button(self, label="Select &all")
+        sel_none = wx.Button(self, label="&Unselect all")
+        sel_all.Bind(wx.EVT_BUTTON, self._on_select_all)
+        sel_none.Bind(wx.EVT_BUTTON, self._on_unselect_all)
+        btnrow.Add(sel_all, 0, wx.RIGHT, 8)
+        btnrow.Add(sel_none, 0)
+        outer.Add(btnrow, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 10)
+
+        buttons = self.CreateStdDialogButtonSizer(wx.OK | wx.CANCEL)
+        ok = self.FindWindowById(wx.ID_OK)
+        if ok:
+            ok.SetLabel("Import selected")
+        outer.Add(buttons, 0, wx.EXPAND | wx.ALL, 8)
+
+        self.SetSizerAndFit(outer)
+        self.SetEscapeId(wx.ID_CANCEL)
+        self._update_count()
+        self.listbox.SetFocus()
+
+    def _update_count(self) -> None:
+        sel = len(self.listbox.GetSelections())
+        total = self.listbox.GetCount()
+        self.count_label.SetLabel(f"{sel} of {total} selected")
+
+    def _set_all(self, selected: bool) -> None:
+        for i in range(self.listbox.GetCount()):
+            if selected:
+                self.listbox.SetSelection(i)
+            else:
+                self.listbox.Deselect(i)
+        self._update_count()
+        # Speak the outcome: the static count label alone isn't auto-announced,
+        # and focus stays on the button. Supplemental speech, no-op without prism.
+        total = self.listbox.GetCount()
+        self._speaker.speak(
+            f"All {total} selected" if selected else "All cleared", interrupt=True
+        )
+
+    def _on_select_all(self, _evt=None) -> None:
+        self._set_all(True)
+
+    def _on_unselect_all(self, _evt=None) -> None:
+        self._set_all(False)
+
+    def get_selected_numbers(self) -> list[int]:
+        return [self._numbers[i] for i in self.listbox.GetSelections()]

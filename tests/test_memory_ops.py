@@ -480,3 +480,59 @@ class TestPasteBlock:
         assert stub_radio.get_memory(11).name == "S2"
         assert stub_radio.get_memory(12).name == "X"
         assert stub_radio.get_memory(13).name == "Y"
+
+
+class TestImportMemories:
+    """import_memories, incl. the numbers= subset (results-picker) path.
+
+    import_logic.import_mem is stubbed to identity so these exercise the
+    selection/placement logic, not CHIRP's field adaptation (which needs real
+    driver Memory objects — covered by the live end-to-end drive)."""
+
+    def _source(self):
+        src = StubRadio(num_channels=5)
+        for i in range(5):
+            src.set_memory(StubMemory(i, freq=146_000_000 + i * 100_000,
+                                      name=f"R{i}", empty=False))
+        return src
+
+    @pytest.fixture
+    def identity_import(self, monkeypatch):
+        monkeypatch.setattr("chirp.import_logic.import_mem",
+                            lambda target, feats, mem: mem.dupe())
+
+    def test_import_all(self, stub_radio, identity_import):
+        from chirp_backend.memory_ops import import_memories
+        ok, _msg, affected = import_memories(self._source(), 0, overwrite=True)
+        assert ok
+        assert affected == [0, 1, 2, 3, 4]  # empties 5..19 skipped
+        assert stub_radio.get_memory(0).name == "R0"
+
+    def test_import_subset_places_selected_consecutively(self, stub_radio, identity_import):
+        from chirp_backend.memory_ops import import_memories
+        ok, _msg, affected = import_memories(
+            self._source(), 3, overwrite=True, numbers=[0, 2, 4]
+        )
+        assert ok
+        assert affected == [3, 4, 5]
+        assert stub_radio.get_memory(3).name == "R0"
+        assert stub_radio.get_memory(4).name == "R2"
+        assert stub_radio.get_memory(5).name == "R4"
+
+    def test_import_subset_ignores_dupes_and_out_of_range(self, stub_radio, identity_import):
+        from chirp_backend.memory_ops import import_memories
+        ok, _msg, affected = import_memories(
+            self._source(), 0, overwrite=True, numbers=[2, 2, 99, -1, 0]
+        )
+        assert ok
+        assert affected == [0, 1]  # {0, 2}, ascending
+        assert stub_radio.get_memory(0).name == "R0"
+        assert stub_radio.get_memory(1).name == "R2"
+
+    def test_import_empty_subset_imports_nothing(self, stub_radio, identity_import):
+        from chirp_backend.memory_ops import import_memories
+        ok, _msg, affected = import_memories(
+            self._source(), 0, overwrite=True, numbers=[]
+        )
+        assert not ok  # imported 0 -> ok is False
+        assert affected == []
