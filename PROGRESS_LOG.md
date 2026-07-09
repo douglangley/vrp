@@ -6,6 +6,20 @@ architecture, keyboard map, and CHIRP feature-coverage checklist.
 
 ---
 
+## 2026-07-09 — RepeaterBook results ▸ Back to search
+
+The results picker had no way back to the query form to refine a search (only
+Import or Cancel out entirely). Added a **Back to search** button
+(`wx.ID_BACKWARD`) that ends the picker modal with that code;
+`MainWindow._pick_and_import_repeaters` re-opens the query dialog **prefilled
+with the last search** (`_open_repeaterbook_query(prefill=self._rb_last_form)`)
+and re-runs the fetch, so query → results loops until Import or Cancel.
+`RepeaterBookQueryDialog` gained an `initial=` prefill (`_apply_initial`) and a
+`get_form()` (raw field values, remembered as `_rb_last_form`). Tests +3
+(prefill round-trip, rest-of-world country has no state, Back button present);
+accNames re-verified unchanged (oleacc). Full suite 261 passed. **Owed: NVDA
+pass on the Back button + prefilled re-open.**
+
 ## 2026-07-09 — RepeaterBook results picker + off-by-one label fix
 
 Two follow-ups to the RepeaterBook query source (same day).

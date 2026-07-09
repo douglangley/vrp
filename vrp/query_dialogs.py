@@ -67,7 +67,7 @@ class RepeaterBookQueryDialog(wx.Dialog):
     Cancel button.
     """
 
-    def __init__(self, parent) -> None:
+    def __init__(self, parent, initial: dict | None = None) -> None:
         super().__init__(parent, title="Query RepeaterBook")
         from chirp_backend import repeaterbook
 
@@ -128,10 +128,29 @@ class RepeaterBookQueryDialog(wx.Dialog):
         self.SetSizerAndFit(outer)
         self.SetEscapeId(wx.ID_CANCEL)
         self._populate_states()
+        if initial:
+            self._apply_initial(initial)
         self.country.SetFocus()
 
     def _on_country(self, _evt=None) -> None:
         self._populate_states()
+
+    def _apply_initial(self, form: dict) -> None:
+        """Pre-fill the form from a previous search (used by results ▸ Back)."""
+        ci = self.country.FindString(form.get("country", ""))
+        if ci != wx.NOT_FOUND:
+            self.country.SetSelection(ci)
+        self._populate_states()
+        state = form.get("state", "")
+        if state and self.state.IsEnabled():
+            si = self.state.FindString(state)
+            if si != wx.NOT_FOUND:
+                self.state.SetSelection(si)
+        self.filter.SetValue(form.get("filter", ""))
+        self.open_only.SetValue(bool(form.get("open_only", False)))
+        want = set(form.get("modes", []))
+        for i in range(self.modes.GetCount()):
+            self.modes.Check(i, self.modes.GetString(i) in want)
 
     def _populate_states(self) -> None:
         """Fill the state selector for the chosen country, or disable it.
@@ -147,6 +166,20 @@ class RepeaterBookQueryDialog(wx.Dialog):
             self.state.Enable(True)
         else:
             self.state.Enable(False)
+
+    def get_form(self) -> dict:
+        """Raw form values, for remembering and re-populating (results ▸ Back)."""
+        return {
+            "country": self.country.GetStringSelection(),
+            "state": self.state.GetStringSelection() if self.state.IsEnabled() else "",
+            "filter": self.filter.GetValue().strip(),
+            "open_only": self.open_only.GetValue(),
+            "modes": [
+                self.modes.GetString(i)
+                for i in range(self.modes.GetCount())
+                if self.modes.IsChecked(i)
+            ],
+        }
 
     def get_params(self) -> dict:
         country = self.country.GetStringSelection()
@@ -223,11 +256,20 @@ class RepeaterBookResultsDialog(wx.Dialog):
         btnrow.Add(sel_none, 0)
         outer.Add(btnrow, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 10)
 
-        buttons = self.CreateStdDialogButtonSizer(wx.OK | wx.CANCEL)
+        # Bottom row: [Back to search] .... [Import selected] [Cancel]. Back ends
+        # the modal with wx.ID_BACKWARD so the caller can re-open the query
+        # dialog (prefilled) to refine the search instead of starting over.
+        bottom = wx.BoxSizer(wx.HORIZONTAL)
+        back = wx.Button(self, wx.ID_BACKWARD, "&Back to search")
+        back.Bind(wx.EVT_BUTTON, lambda _e: self.EndModal(wx.ID_BACKWARD))
+        bottom.Add(back, 0, wx.ALIGN_CENTER_VERTICAL)
+        bottom.AddStretchSpacer()
+        std = self.CreateStdDialogButtonSizer(wx.OK | wx.CANCEL)
         ok = self.FindWindowById(wx.ID_OK)
         if ok:
             ok.SetLabel("Import selected")
-        outer.Add(buttons, 0, wx.EXPAND | wx.ALL, 8)
+        bottom.Add(std, 0, wx.ALIGN_CENTER_VERTICAL)
+        outer.Add(bottom, 0, wx.EXPAND | wx.ALL, 8)
 
         self.SetSizerAndFit(outer)
         self.SetEscapeId(wx.ID_CANCEL)

@@ -1432,12 +1432,12 @@ class MainWindow(wx.Frame):
         """Radio ▸ Query Source ▸ RepeaterBook.
 
         Gathers the query (country/state + filters) in RepeaterBookQueryDialog,
-        runs the fetch on a background thread, and imports the results into the
-        loaded radio via the shared _import_results flow. Requires a loaded
-        radio (results import into it) — gated in the menu and guarded here.
+        runs the fetch on a background thread, and imports the chosen results
+        into the loaded radio. The results picker's "Back to search" button
+        re-opens the query dialog (prefilled) via _open_repeaterbook_query, so
+        query → results loops until Import or Cancel. Requires a loaded radio
+        (results import into it) — gated in the menu and guarded here.
         """
-        from vrp.query_dialogs import RepeaterBookQueryDialog
-
         if not radio_backend.get_state().loaded:
             self.announce.announce(
                 "Open or download a radio first; RepeaterBook results import "
@@ -1445,13 +1445,21 @@ class MainWindow(wx.Frame):
                 assertive=True,
             )
             return
-        dlg = RepeaterBookQueryDialog(self)
+        self._open_repeaterbook_query()
+
+    def _open_repeaterbook_query(self, prefill: dict | None = None) -> None:
+        """Show the query form (optionally prefilled) and kick off the fetch."""
+        from vrp.query_dialogs import RepeaterBookQueryDialog
+
+        dlg = RepeaterBookQueryDialog(self, initial=prefill)
         ok = dlg.ShowModal() == wx.ID_OK
         params = dlg.get_params() if ok else None
+        form = dlg.get_form() if ok else None
         dlg.Destroy()
         if not ok:
             self.grid.SetFocus()
             return
+        self._rb_last_form = form  # remembered so results ▸ Back can prefill
         self._run_repeaterbook_query(params)
 
     def _run_repeaterbook_query(self, params: dict) -> None:
@@ -1522,10 +1530,14 @@ class MainWindow(wx.Frame):
 
         lines = repeaterbook.result_lines(result)
         dlg = RepeaterBookResultsDialog(self, lines)
-        ok = dlg.ShowModal() == wx.ID_OK
-        selected = dlg.get_selected_numbers() if ok else []
+        code = dlg.ShowModal()
+        selected = dlg.get_selected_numbers() if code == wx.ID_OK else []
         dlg.Destroy()
-        if not ok:
+        if code == wx.ID_BACKWARD:
+            # Back to the search form, prefilled with the last query, and re-run.
+            self._open_repeaterbook_query(prefill=getattr(self, "_rb_last_form", None))
+            return
+        if code != wx.ID_OK:
             self.grid.SetFocus()
             return
         if not selected:

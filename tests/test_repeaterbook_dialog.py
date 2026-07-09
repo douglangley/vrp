@@ -82,6 +82,41 @@ def test_row_country_disables_state(app):
         dlg.Destroy()
 
 
+def test_query_prefill_round_trips(app):
+    # results ▸ Back re-opens the query dialog with the previous inputs.
+    form = {
+        "country": "United States", "state": "Oregon", "filter": "portland",
+        "open_only": True, "modes": ["FM"],
+    }
+    dlg = RepeaterBookQueryDialog(None, initial=form)
+    try:
+        assert dlg.get_form() == form
+    finally:
+        dlg.Destroy()
+
+
+def test_query_prefill_row_country_has_no_state(app):
+    form = {"country": "Germany", "state": "", "filter": "", "open_only": False, "modes": []}
+    dlg = RepeaterBookQueryDialog(None, initial=form)
+    try:
+        assert not dlg.state.IsEnabled()
+        got = dlg.get_form()
+        assert got["country"] == "Germany"
+        assert got["state"] == ""
+    finally:
+        dlg.Destroy()
+
+
+def test_results_has_back_button(app):
+    dlg = RepeaterBookResultsDialog(None, SAMPLE_LINES)
+    try:
+        back = dlg.FindWindowById(wx.ID_BACKWARD)
+        assert back is not None
+        assert "Back" in back.GetLabel()
+    finally:
+        dlg.Destroy()
+
+
 def test_results_all_selected_by_default(app):
     dlg = RepeaterBookResultsDialog(None, SAMPLE_LINES)
     try:

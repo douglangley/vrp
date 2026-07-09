@@ -253,7 +253,9 @@ mode); the fetch runs on a background thread behind a cancellable progress
 dialog. Results then appear in a **multi-select picker** (`RepeaterBookResults
 Dialog`, a `wx.ListBox` with `LB_MULTIPLE`): arrow through the repeaters, press
 **Space** to include/exclude each (all start included), with **Select all** /
-**Unselect all** buttons. The checked rows flow through the shared
+**Unselect all** buttons and a **Back to search** button that returns to the
+query dialog with the previous inputs preserved (query → results loops until
+Import or Cancel). The checked rows flow through the shared
 `ImportDestinationDialog` + `memory_ops.import_memories` (its `numbers=`
 argument limits the import to the checked source channels). A checkbox list
 (`wx.CheckListBox`) was avoided — its per-item checkboxes read unreliably under
