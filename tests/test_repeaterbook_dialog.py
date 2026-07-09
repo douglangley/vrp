@@ -21,6 +21,33 @@ def app():
     a.Destroy()
 
 
+def test_each_field_label_created_immediately_before_its_control(app):
+    # Root-cause regression guard. On Windows wxMSW names a native control from
+    # the StaticText created just before it (SetName does NOT reach MSAA), so a
+    # field label must be created immediately before its control or the screen
+    # reader reads every field off by one. GetChildren() is creation order;
+    # assert each control's preceding sibling is its own label. Verified at the
+    # MSAA level (oleacc get_accName) during development.
+    dlg = RepeaterBookQueryDialog(None)
+    try:
+        kids = list(dlg.GetChildren())
+
+        def label_before(control, expected):
+            prev = kids[kids.index(control) - 1]
+            assert isinstance(prev, wx.StaticText), (
+                f"{expected!r}: expected a StaticText created before the control, "
+                f"got {type(prev).__name__}"
+            )
+            assert prev.GetLabel() == expected
+
+        label_before(dlg.country, "Country:")
+        label_before(dlg.state, "State or province:")
+        label_before(dlg.filter, "Search (city, callsign, county):")
+        label_before(dlg.modes, "Modes (leave all clear for any):")
+    finally:
+        dlg.Destroy()
+
+
 def test_defaults_to_us_with_states_enabled(app):
     dlg = RepeaterBookQueryDialog(None)
     try:

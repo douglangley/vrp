@@ -58,10 +58,13 @@ class ImportDestinationDialog(wx.Dialog):
 class RepeaterBookQueryDialog(wx.Dialog):
     """Gather RepeaterBook query parameters (country/state + optional filters).
 
-    Accessibility: every control has a preceding label and a matching SetName so
-    NVDA/VoiceOver announce it; the state selector is disabled (not hidden) for
-    countries queried whole, so its state is still discoverable; the dialog is a
-    real modal wx.Dialog with an Escape-able Cancel button.
+    Accessibility: each field's StaticText label is created immediately BEFORE
+    its control — on Windows wxMSW takes a native control's accessible name from
+    the static text created just before it, so control-before-label ordering
+    reads every field off by one (see __init__). The state selector is disabled
+    (not hidden) for countries queried whole, so its state is still
+    discoverable; the dialog is a real modal wx.Dialog with an Escape-able
+    Cancel button.
     """
 
     def __init__(self, parent) -> None:
@@ -71,43 +74,50 @@ class RepeaterBookQueryDialog(wx.Dialog):
         self._rb = repeaterbook
         outer = wx.BoxSizer(wx.VERTICAL)
 
-        intro = wx.StaticText(
-            self,
-            label="Search the RepeaterBook directory. Results import into the "
-            "open radio.",
-        )
-        outer.Add(intro, 0, wx.ALL, 10)
+        # LABEL BEFORE CONTROL — this ordering is load-bearing for screen
+        # readers on Windows. wxMSW gives a native control its accessible name
+        # from the static-text sibling created immediately *before* it; SetName
+        # does not propagate to MSAA for these controls. If the control is
+        # created before its label (e.g. a helper that takes an already-built
+        # control), every field inherits the *previous* field's label — the
+        # classic "off by one" read. So each _label(...) MUST run before the
+        # wx control it describes is constructed. (PreferencesDialog works for
+        # exactly this reason; SetName is kept only for macOS/VoiceOver, where
+        # it does map to NSAccessibility.)
+        grid = wx.FlexGridSizer(cols=2, vgap=8, hgap=10)
 
-        grid = wx.FlexGridSizer(cols=2, vgap=8, hgap=8)
-        grid.AddGrowableCol(1, 1)
+        def _label(text: str) -> None:
+            grid.Add(wx.StaticText(self, label=text), 0, wx.ALIGN_CENTER_VERTICAL)
 
-        def _row(label_text: str, control: wx.Window, name: str) -> None:
-            label = wx.StaticText(self, label=label_text)
-            control.SetName(name)
-            grid.Add(label, 0, wx.ALIGN_CENTER_VERTICAL)
-            grid.Add(control, 0, wx.EXPAND)
-
+        _label("Country:")
         countries = repeaterbook.countries()
         self.country = wx.Choice(self, choices=countries)
         default = countries.index("United States") if "United States" in countries else 0
         self.country.SetSelection(default)
+        self.country.SetName("Country")
         self.country.Bind(wx.EVT_CHOICE, self._on_country)
-        _row("&Country:", self.country, "Country")
+        grid.Add(self.country)
 
+        _label("State or province:")
         self.state = wx.Choice(self, choices=[])
-        _row("&State or province:", self.state, "State or province")
+        self.state.SetName("State or province")
+        grid.Add(self.state)
 
-        self.filter = wx.TextCtrl(self)
-        _row("&Search (city, callsign, county):", self.filter, "Search text")
+        _label("Search (city, callsign, county):")
+        self.filter = wx.TextCtrl(self, size=(220, -1))
+        self.filter.SetName("Search text, city callsign or county")
+        grid.Add(self.filter)
 
+        _label("Modes (leave all clear for any):")
         self.modes = wx.CheckListBox(self, choices=repeaterbook.modes())
-        _row("&Modes (leave all clear for any):", self.modes, "Modes")
+        self.modes.SetName("Modes, leave all clear for any")
+        grid.Add(self.modes)
 
-        outer.Add(grid, 0, wx.EXPAND | wx.LEFT | wx.RIGHT, 10)
+        outer.Add(grid, 0, wx.ALL, 12)
 
-        self.open_only = wx.CheckBox(self, label="&Open repeaters only")
+        self.open_only = wx.CheckBox(self, label="Open repeaters only")
         self.open_only.SetName("Open repeaters only")
-        outer.Add(self.open_only, 0, wx.ALL, 10)
+        outer.Add(self.open_only, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 12)
 
         buttons = self.CreateStdDialogButtonSizer(wx.OK | wx.CANCEL)
         ok = self.FindWindowById(wx.ID_OK)
