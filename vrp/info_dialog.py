@@ -17,9 +17,16 @@ class InfoDialog(wx.Dialog):
     plus a Close button. Escape closes; focus opens in the text at line 1."""
 
     def __init__(self, parent, title: str, text: str, *,
-                 name: str = "Information", size=(520, 360)) -> None:
+                 name: str = "Information", size=(520, 360),
+                 ok_button: bool = False) -> None:
         super().__init__(parent, title=title,
                          style=wx.DEFAULT_DIALOG_STYLE | wx.RESIZE_BORDER)
+
+        # Errors/confirmations read more naturally with an "OK" button; reviewing
+        # dialogs (Radio Info, Radio details) use "Close". Either way Escape and
+        # the button dismiss it, and focus opens in the copyable text.
+        button_id = wx.ID_OK if ok_button else wx.ID_CLOSE
+        button_flag = wx.OK if ok_button else wx.CLOSE
 
         outer = wx.BoxSizer(wx.VERTICAL)
         # TE_READONLY still allows caret navigation, selection, and copy — it
@@ -31,11 +38,11 @@ class InfoDialog(wx.Dialog):
         )
         self.text.SetName(name)
         outer.Add(self.text, 1, wx.EXPAND | wx.ALL, 10)
-        outer.Add(self.CreateButtonSizer(wx.CLOSE), 0, wx.EXPAND | wx.ALL, 8)
+        outer.Add(self.CreateButtonSizer(button_flag), 0, wx.EXPAND | wx.ALL, 8)
 
         self.SetSizerAndFit(outer)
-        self.SetEscapeId(wx.ID_CLOSE)  # Escape closes (no Cancel button here)
-        self.Bind(wx.EVT_BUTTON, lambda _e: self.EndModal(wx.ID_CLOSE), id=wx.ID_CLOSE)
+        self.SetEscapeId(button_id)  # Escape dismisses
+        self.Bind(wx.EVT_BUTTON, lambda _e: self.EndModal(button_id), id=button_id)
         self.Bind(wx.EVT_INIT_DIALOG, self._on_init_dialog)
 
     def _on_init_dialog(self, event) -> None:

@@ -32,10 +32,14 @@ Notes:
     trigger. onedir starts immediately; ship the folder wrapped in the Inno Setup
     installer (--installer), which is exactly how upstream CHIRP distributes its
     own PyInstaller build (Start-menu shortcut + uninstaller, not a loose .exe).
-  - chirp.drivers and chirp.sources are loaded by dynamic `__import__` /
-    importlib.import_module(name) (see chirp/directory.py and
-    chirp_backend/query.py), so PyInstaller's static import analysis can't
-    discover them on its own — --collect-submodules pulls them in explicitly.
+  - chirp.drivers is loaded by dynamic `__import__` / importlib.import_module
+    (see chirp/directory.py), so PyInstaller's static analysis can't discover the
+    driver modules on its own — --collect-submodules pulls them in explicitly.
+    chirp.sources is deliberately NOT collected: VRP stopped importing it when
+    the online query sources were removed (2026-07-05), so collecting it would
+    bundle dead modules and drag in `requests` (which nothing VRP runs imports).
+    A future purpose-built RepeaterBook will be a static import PyInstaller
+    follows on its own.
   - prism (supplemental speech) is intentionally NOT bundled: it drags in the
     entire win32more Windows-API binding surface (~795 modules) plus numpy.
     Speech is opt-in and OFF by default; vrp/speech.py no-ops without prism.
@@ -166,14 +170,19 @@ def build(onefile: bool) -> int:
         "--exclude-module=win32more",
         "--exclude-module=numpy",
 
-        # ---- CHIRP library (drivers/sources loaded by dynamic import) ----
+        # ---- CHIRP library (drivers loaded by dynamic import) ----
         "--collect-submodules=chirp.drivers",
-        "--collect-submodules=chirp.sources",
         # VRP's out-of-tree drivers are imported dynamically by
         # chirp_backend.extra_drivers.register_all() (importlib.import_module),
         # which PyInstaller's static analysis can't follow — collect explicitly
         # so the packaged exe ships them (e.g. the Wouxun KG-UV96M driver).
         "--collect-submodules=chirp_backend.extra_drivers",
+        # NOTE: chirp.sources is deliberately NOT collected. The only source VRP
+        # uses is RepeaterBook, imported as a static
+        # `from chirp.sources import repeaterbook` (chirp_backend/repeaterbook.py)
+        # that PyInstaller discovers on its own — pulling in only repeaterbook +
+        # its deps (base/fips/requests). Collecting all of chirp.sources would
+        # bundle dead modules (amsats, dmrmarc, ...) for no gain.
         # NOTE: deliberately NOT --collect-data=chirp. CHIRP is an editable
         # install rooted at the repo, so --collect-data=chirp sweeps in the
         # whole working tree — .git/ (~3.8 MB), tests/ radio .img images

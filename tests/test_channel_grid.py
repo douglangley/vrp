@@ -213,6 +213,36 @@ def test_goto_handler_focuses_channel(app, monkeypatch):
         win.Destroy()
 
 
+def test_open_failure_shows_modal_error(app, monkeypatch, tmp_path):
+    """A failed load routes through the modal _show_error (guaranteed read),
+    not an announce-only cue that a screen reader can miss."""
+    from vrp.native.main_window import MainWindow
+
+    win = MainWindow()
+    try:
+        bad = tmp_path / "not_an_image.img"
+        bad.write_bytes(b"this is not a radio image")
+
+        errors = []
+        monkeypatch.setattr(win, "_show_error",
+                            lambda title, msg: errors.append((title, msg)))
+        # If it regressed to announce-only, this would fire instead.
+        monkeypatch.setattr(
+            win.announce, "announce",
+            lambda *a, **k: pytest.fail("load error went to announce, not a modal"),
+        )
+
+        result = win._open_path(str(bad))
+        assert result is False
+        assert len(errors) == 1
+        title, msg = errors[0]
+        assert title == "Could not open file"
+        assert msg  # carries the driver's failure message
+    finally:
+        radio_backend.unload()
+        win.Destroy()
+
+
 def test_main_window_announces_ready_on_startup(app):
     from vrp.native.main_window import MainWindow
 
@@ -246,12 +276,42 @@ def test_main_window_constructs_and_lists_channels(app):
         sb = win.GetStatusBar()
         assert sb is not None
         assert "chirpmyradio.com" in sb.GetStatusText(1)
+    finally:
+        radio_backend.unload()
+        win.Destroy()
 
-        # Radio menu must include a Query Source submenu.
-        radio_menu = win.GetMenuBar().GetMenu(2)  # "&Radio" is index 2 (after Edit)
-        labels = [radio_menu.FindItemByPosition(i).GetItemLabel()
-                  for i in range(radio_menu.GetMenuItemCount())]
-        assert any("Query Source" in lbl for lbl in labels)
+
+def test_plain_delete_refreshes_in_place_not_full_rebuild(app):
+    """Plain Delete clears slots in place, so on_delete_channels must repaint
+    only the affected rows (refresh_numbers) — not rebuild() the whole grid —
+    and land focus on the deleted slot (Phase 4.2)."""
+    from vrp.native.main_window import MainWindow
+
+    win = MainWindow()
+    try:
+        radio_backend.load_image(IMAGE)
+        win._load_into_grid()
+
+        # First occupied channel; select it and auto-confirm the dialog.
+        lo, hi = radio_backend.get_state().memory_bounds
+        target = next(
+            n for n in range(lo, hi + 1) if not radio_backend.get_memory(n).empty
+        )
+        win.grid.select_channels([target])
+        win._confirm = lambda _msg: True
+
+        calls = []
+        win.grid.rebuild = lambda: calls.append("rebuild")
+        real_refresh = win.grid.refresh_numbers
+        win.grid.refresh_numbers = lambda nums: (
+            calls.append(("refresh", nums)), real_refresh(nums))[1]
+
+        win.on_delete_channels()
+
+        assert radio_backend.get_memory(target).empty  # slot cleared
+        assert "rebuild" not in calls  # not a full rebuild
+        assert ("refresh", [target]) in calls  # in-place repaint of that row
+        assert win.grid.focused_channel() == target  # focus stayed on the slot
     finally:
         radio_backend.unload()
         win.Destroy()

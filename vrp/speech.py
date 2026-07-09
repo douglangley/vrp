@@ -49,8 +49,10 @@ class Speaker:
 
     @staticmethod
     def _safe_name(backend) -> str:
+        # prism's Backend.name is a property (str), not a method — read it,
+        # don't call it. Falls back to repr if the backend can't report a name.
         try:
-            return backend.name()
+            return backend.name
         except Exception:
             return repr(backend)
 
@@ -73,3 +75,18 @@ class Speaker:
             backend.stop()
         except Exception as exc:  # pragma: no cover - environment dependent
             LOG.warning("prism: stop failed (%s)", exc)
+
+
+_shared: "Speaker | None" = None
+
+
+def get_speaker() -> "Speaker":
+    """Return the process-wide shared ``Speaker``.
+
+    Every UI surface that speaks (the main window, dialogs) uses this one
+    instance so the prism backend is acquired once, not once per window.
+    """
+    global _shared
+    if _shared is None:
+        _shared = Speaker()
+    return _shared

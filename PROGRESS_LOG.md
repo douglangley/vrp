@@ -6,6 +6,221 @@ architecture, keyboard map, and CHIRP feature-coverage checklist.
 
 ---
 
+## 2026-07-09 — RepeaterBook band filter
+
+A state query returns far too many repeaters for a given radio (Oregon open FM =
+342). Added a **band** filter to the query dialog: a "Bands" StaticBox of native
+`wx.CheckBox` controls, one per amateur band (10 m, 6 m, 2 m, 1.25 m, 70 cm,
+33 cm, 23 cm; RT-Systems style, leave all clear for any). Individual checkboxes
+(each self-labels, reads reliably under NVDA) rather than a checkbox list.
+Backend: `repeaterbook.BANDS` + `bands()` + `band_ranges(names)`; the selected
+band ranges feed the `bands=` arg already accepted by `build_params` →
+`do_fetch`'s client-side `included_band`. Threaded through the dialog's
+`get_form`/`get_params`/`_apply_initial` (bands stored by short name; survive
+results ▸ Back). Verified live against the mirror: Oregon open FM 342 → 164 (2 m,
+all within 144–148 MHz) → 149 (70 cm); accNames re-checked via oleacc (grid
+fields unaffected, band checkboxes self-label). Tests +4. Full suite 265 passed.
+**Owed: NVDA pass on the band checkboxes.**
+
+## 2026-07-09 — RepeaterBook results ▸ Back to search
+
+The results picker had no way back to the query form to refine a search (only
+Import or Cancel out entirely). Added a **Back to search** button
+(`wx.ID_BACKWARD`) that ends the picker modal with that code;
+`MainWindow._pick_and_import_repeaters` re-opens the query dialog **prefilled
+with the last search** (`_open_repeaterbook_query(prefill=self._rb_last_form)`)
+and re-runs the fetch, so query → results loops until Import or Cancel.
+`RepeaterBookQueryDialog` gained an `initial=` prefill (`_apply_initial`) and a
+`get_form()` (raw field values, remembered as `_rb_last_form`). Tests +3
+(prefill round-trip, rest-of-world country has no state, Back button present);
+accNames re-verified unchanged (oleacc). Full suite 261 passed. **Owed: NVDA
+pass on the Back button + prefilled re-open.**
+
+## 2026-07-09 — RepeaterBook results picker + off-by-one label fix
+
+Two follow-ups to the RepeaterBook query source (same day).
+
+**Results picker (enhancement).** After a query, results now appear in a
+multi-select picker before import: `RepeaterBookResultsDialog`
+(`vrp/query_dialogs.py`), a `wx.ListBox` with `LB_MULTIPLE` — arrow through the
+repeaters, Space toggles each in/out of the import (all start included), plus
+Select all / Unselect all buttons and a live "N of M selected" readout (spoken
+on the bulk buttons via the shared Speaker). Chosen over a `wx.CheckListBox`,
+whose per-item checkboxes read unreliably under NVDA; a multi-select ListBox
+announces each row + its selected state and is well supported. `describe_result`
+/ `result_lines` (in `chirp_backend/repeaterbook.py`) build the one-line row
+summaries (freq + mode + name + parsed location). `memory_ops.import_memories`
+gained a `numbers=` argument restricting the import to the checked source
+channels (ignores dupes/out-of-range, imports ascending). `main_window` inserts
+`_pick_and_import_repeaters` between the fetch and the shared `_import_results`.
+Verified end-to-end against the live mirror (fetched 22, imported a chosen
+subset of 2) and at the MSAA level (oleacc: the list's accName is its own
+instructive label). Tests: +11 (import subset, describe/result_lines, picker
+select-all/subset/label-order). **Owed: NVDA pass on the picker (Space toggle +
+Select/Unselect all).**
+
+**Off-by-one label fix (bug).** Every field in `RepeaterBookQueryDialog` read
+one label off under NVDA (state combo announced "Country", etc.). Root cause,
+proven by reading MSAA `get_accName` via `ctypes`+`oleacc`: **wxMSW names a
+native control from the StaticText created immediately before it, and `SetName`
+does NOT reach MSAA** for these controls. The dialog's helper created each
+control *before* its label, so every field inherited the previous field's
+label. Fix: create each label immediately before its control (label-then-
+control), matching `PreferencesDialog`. After the fix every control's accName is
+its own label. Guard test asserts label-precedes-control creation order.
+Recorded as a project-wide rule (memory: create the label before the control).
+
+## 2026-07-09 — RepeaterBook query source (via CHIRP's mirror)
+
+Added RepeaterBook back as a purpose-built query source (Phase 7). It fetches
+through **CHIRP's mirror** — `https://data.chirpmyradio.com/rb/<state>.xz`, the
+generic `CHIRP/<ver>` User-Agent — so it needs **no RepeaterBook credential or
+custom User-Agent** and works today, while we wait for RepeaterBook to issue VRP
+its own per-application User-Agent.
+
+**Why the mirror:** CHIRP's own RepeaterBook driver never queries RepeaterBook's
+API directly; it downloads pre-built, state/country-cached JSON dumps from
+CHIRP's server. There is no RepeaterBook-issued User-Agent anywhere in CHIRP to
+borrow — CHIRP satisfies RepeaterBook's UA policy server-side, on the mirror.
+
+**Backend** — `chirp_backend/repeaterbook.py` wraps CHIRP's tested
+`chirp.sources.repeaterbook.RepeaterBook`:
+- `countries()` / `states(country)` / `modes()` re-export CHIRP's geography
+  lists (single source of truth). Only US/Canada/Mexico are queried per-state;
+  every other country is fetched whole (`states()` → `[]`).
+- `build_params(...)` guarantees every key `do_fetch` pops with no default
+  (`lat`/`lon`/`dist`/`openonly`/`cached`/`state`) is present. Proximity search
+  is off in v1 (no lat/lon UI).
+- `fetch(params, progress_cb, radio=None)` runs `do_fetch` on the caller's
+  thread, adapts CHIRP's `QueryStatus` to a progress callback, and returns
+  `(ok, message, result_radio)`. Installs the same guarded gettext `_` shim as
+  `radio._ensure_chirp` (do_fetch calls `_('No results!')`) without loading the
+  552 drivers. `radio=` is injectable for tests.
+- **Direct-API seam:** the source is a named subclass `VRPRepeaterBook`; when
+  RepeaterBook grants a UA, set `USER_AGENT` and override `get_data` to hit their
+  endpoint. Everything above `get_data` (filtering, `item_to_memory`) is reused.
+
+**UI** — `RepeaterBookQueryDialog` (`vrp/query_dialogs.py`): country/state
+cascade (state disabled, not hidden, for whole-country fetches), search text,
+open-only checkbox, mode CheckListBox. Every control has a label + `SetName`;
+real modal, Escape = Cancel. Wired as **Radio ▸ Query Source ▸ RepeaterBook…**
+(re-created submenu, gated on a loaded radio). `on_repeaterbook` →
+`_run_repeaterbook_query` (background thread + `CloneProgressDialog`) →
+`_on_repeaterbook_done` → shared `_import_results` (`ImportDestinationDialog` +
+`memory_ops.import_memories`). Re-added the `_on_query_progress` helper removed
+with the old query code.
+
+**Verified:** `uv run python -m pytest` → **246 passed** (+17: 14 backend, 3
+dialog). Live end-to-end drive: loaded a real UV-5R image, fetched 22
+Portland-area open-FM repeaters from the mirror, imported 21 (2 overwritten, 1
+skipped; CHIRP's import_logic correctly rejected a 927 MHz repeater the UV-5R
+can't hold), channel 0 read back `145.2300 MHz 'COUNCIL'`, `is_modified` set.
+Menu wiring smoke-checked headless (item present, gated, disabled with no radio).
+**Owed:** NVDA pass on the query dialog + progress; the direct RepeaterBook API
+once they issue VRP a User-Agent.
+
+## 2026-07-05 — Code cleanup & debug pass (code-cleanup.md, phases 1–5)
+
+Worked through `code-cleanup.md` (a phased source-review plan). 10 commits on
+branch `code-cleanup`; test count **198 → 229**, all green. Each item is an
+independent commit with its own test.
+
+**Correctness bugs**
+- **Unsaved-changes prompt (1.2, data-loss).** Nothing guarded the working
+  image: Exit, File ▸ Open (over a modified image), Open Recent, Download, and
+  Close Image all silently discarded unsaved channel edits. New
+  `MainWindow._confirm_discard_or_save()` shows a native, focus-trapped
+  Yes/No/Cancel dialog (Save / Don't save / Cancel, Escape = Cancel) only when a
+  loaded image is `is_modified`; returns True to proceed, False to abort (focus
+  back to the grid). Wired into a new `EVT_CLOSE` handler (window close + Exit,
+  vetoes the close), `_open_path` (Open + Open Recent), `on_close_image`, and
+  `on_download`. `on_save`/`on_save_as` now return bool so a failed/cancelled
+  save vetoes the step. `tests/test_unsaved_prompt.py` drives all five branches
+  + the Open guard. Commit 409e24b. **Owed: NVDA pass on the dialog.**
+- **Non-contiguous delete-and-shift (1.4).** `delete_and_shift` used a single
+  gap width of `len(numbers)`, so a gappy selection (e.g. `1-3,5` from the
+  Bulk-operations advanced list) left the in-between channels behind while the
+  tail jumped up by the full count — colliding rows. Now dedupes/sorts and
+  rejects a non-contiguous run up front with a clear, announced error; a
+  contiguous spec given unsorted/with duplicates still works. Commit 022f5b9.
+- **Settings dialog write-back (1.5).** `RadioSettingsDialog._on_ok` wrote every
+  enabled control, spuriously tripping `value.changed()` (miscounting "N
+  changed") and, because a String is displayed `rstrip()`'d, rewriting a value
+  with significant trailing padding. Now records each control's build-time value
+  and skips unchanged controls. `tests/test_settings_dialog.py`. Commit 242ca7b.
+
+**Performance**
+- **Delete refreshes in place (4.2).** Plain Delete clears slots in place (no
+  rows shift), but `on_delete_channels` called `grid.rebuild()`; now
+  `refresh_numbers(numbers)` — lighter and steadier for the screen reader.
+  `rebuild()` stays for the structural ops in `on_organize`. Commit 9cd8ffa.
+  **Owed: NVDA confirmation focus reads steadily on the cleared row.**
+- **Tail-first make-room scan (4.3).** `paste_block`'s make-room check only needs
+  the highest occupied channel in `[destination, last_bound]` but scanned the
+  whole range low-to-high with no early exit; now scans from the tail and breaks
+  at the first occupied slot. Commit 0a3fcc9.
+
+**Consolidation & consistency (Phase 5)**
+- **One documented write path (5.1 / 2.8).** 1.1 (earlier) already unified the
+  dirty-flag behavior via the `_install_undo` recorder wrapper, so `memory_ops`
+  and the module-level `radio.set_memory`/`erase_memory` are two coherent entry
+  points to **one physical choke point** (the wrapped radio methods), differing
+  only in cache update (invalidate vs. in-place). Documented in `radio.py`
+  rather than deleting the pair (which would churn the undo tests). Commit
+  21e2cc5.
+- **Shared `Speaker` (5.2).** `vrp.speech.get_speaker()` module singleton;
+  `main_window`, `edit_dialog`, `serial_dialogs` all use it — one prism backend
+  acquisition instead of three. Commit a7f4b63.
+- **`_now_at_phrase` helper (5.3).** Folded the "Now on channel N / Now at
+  channels A to B" phrasing duplicated across `_do_move`, `on_move_to`, and both
+  `on_organize` branches into one helper; announced text byte-for-byte
+  unchanged. Commit 16282ec.
+- **Docstring/comment drift sweep (5.4 / 5.5).** Corrected stale Flask/webview
+  references in `radio.py`, `memory_ops.py`, `col_defs.py`, `edit_dialog.py`;
+  fixed "frozen (Nuitka) build" → PyInstaller in `_chirp_path.py`; added a
+  SUPERSEDED banner to `GRID_RESTART_PLAN.md`; noted `query_dialogs.py` keeps its
+  plural name deliberately for RepeaterBook's return. Commit 6bc04b4.
+
+**Checked, still deferred**
+- **Grid-library pin (1.7).** Upstream PR Community-Access/wx-accessible-grid#4
+  is still **open** — pin stays on the payown fork; repoint once it merges.
+
+**Still owed to the developer (hardware / not doable headless):** NVDA passes for
+1.2 and 4.2 (and the earlier 1.8); the prism-less frozen-exe NVDA smoke (3.5).
+Deliberately deferred: the measurement-gated perf items (4.1/4.4/4.5), the
+`tools/` spikes (2.7), and the macOS-only `test_channel_grid` xfail (1.6).
+
+**Verified:** `uv run python -m pytest` → 229 passed.
+
+## 2026-07-05 — Removed the online query sources (Radio ▸ Query Source)
+
+The Phase 7 online query sources were removed — they weren't going to be used in
+this form. RepeaterBook will be added back **purpose-built** once the developer
+grants API access, followed by RadioReference.
+
+**What was removed:**
+- The **Radio ▸ Query Source** submenu and its per-source items in
+  `_build_radio_menu` (and the submenu's radio-gating in `_update_menu_state`).
+- The query handlers in `main_window.py`: `on_query_source`, `_run_query`,
+  `_on_query_progress`, `_on_query_done`.
+- `chirp_backend/query.py` (the source registry + `run_fetch`/`make_source_radio`
+  framework; sources were AMSAT, SatNOGS, DMR-MARC, mapy73.pl) — now orphaned,
+  deleted (recoverable from git history when RepeaterBook lands).
+- `QueryParamsDialog` in `vrp/query_dialogs.py`.
+
+**What was kept (shared with Import from File):** `ImportDestinationDialog` (title
+relabelled "Import query results" → "Import channels") and
+`MainWindow._import_results` / `memory_ops.import_memories`. `query_dialogs.py`
+now holds only `ImportDestinationDialog` — filename left as-is since a future
+purpose-built query param dialog would naturally live there again.
+
+**Docs updated:** `CLAUDE.md` (structure tree), `docs/keyboard-map.md`,
+`docs/architecture.md`, `docs/chirp-feature-coverage.md`, `ROADMAP.md`. Removed
+the "Radio menu has a Query Source submenu" assertion from
+`tests/test_channel_grid.py`.
+
+**Verified:** `uv run python -m pytest` → 198 passed.
+
 ## 2026-07-04 — macOS single-cell editing, column-locked grid navigation, coupled-field fixes
 
 Verified on real macOS (VoiceOver) and Windows (NVDA) hardware. Branch

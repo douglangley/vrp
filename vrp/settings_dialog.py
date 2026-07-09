@@ -33,6 +33,9 @@ class RadioSettingsDialog(wx.Dialog):
         )
         self._controls: list[tuple] = []      # (RadioSettingValue, wx control)
         self._page_of: dict[int, int] = {}     # ctrl id -> treebook page index
+        # ctrl id -> the control's value at build time, so on OK we only write
+        # back controls the user actually changed (see _on_ok).
+        self._initial: dict[int, object] = {}
 
         outer = wx.BoxSizer(wx.VERTICAL)
         self.tb = wx.Treebook(self, style=wx.BK_LEFT)
@@ -69,6 +72,7 @@ class RadioSettingsDialog(wx.Dialog):
         for value, ctrl in page_controls:
             self._controls.append((value, ctrl))
             self._page_of[ctrl.GetId()] = idx
+            self._initial[ctrl.GetId()] = self._read(ctrl)
 
     def _render_group(self, group, panel, sizer, depth, page_controls) -> None:
         for child in group:
@@ -148,8 +152,16 @@ class RadioSettingsDialog(wx.Dialog):
         for value, ctrl in self._controls:
             if not ctrl.IsEnabled():
                 continue
+            new = self._read(ctrl)
+            # Only write controls the user actually changed. Writing every
+            # control spuriously flagged value.changed() (miscounting "N changed")
+            # and, because a String is *displayed* rstrip()'d, would write the
+            # trimmed value back — silently altering a setting with significant
+            # trailing padding. Comparing to the build-time value skips both.
+            if new == self._initial.get(ctrl.GetId()):
+                continue
             try:
-                value.set_value(self._read(ctrl))
+                value.set_value(new)
             except Exception as e:  # InvalidValueError etc. — keep dialog open
                 idx = self._page_of.get(ctrl.GetId())
                 if idx is not None:

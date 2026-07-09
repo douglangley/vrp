@@ -1,11 +1,11 @@
 """Native wx dialog for editing one memory channel.
 
-Why a native dialog instead of editing in the HTML grid: with large radios
+Why a dedicated dialog instead of editing inline in the grid: with large radios
 (thousands of channels) putting controls in the grid forces the screen reader
 to re-read the whole table on every interaction. A native ``wx.Dialog`` is a
 separate top-level window with first-class keyboard/screen-reader support, so
-the big channel table stays a fast, read-only HTML table and only the edited
-row is refreshed afterward. (Accessibility-lead approved model.)
+the channel grid stays a fast, navigable table and only the edited row is
+refreshed afterward. (Accessibility-lead approved model.)
 
 Fields are built from the same ``build_column_defs`` the table uses, so the
 dialog never shows a field the radio doesn't support. Immutable fields are
@@ -20,12 +20,12 @@ from __future__ import annotations
 import wx
 
 from chirp_backend.col_defs import build_column_defs
-from vrp.speech import Speaker
+from vrp.speech import get_speaker
 
 # Supplemental speech for transient dialog confirmations that don't move focus
-# (e.g. the auto-filled offset suggestion). Module-level so the prism backend is
-# acquired once, not per dialog; a no-op when speech is unavailable.
-_speaker = Speaker()
+# (e.g. the auto-filled offset suggestion). The shared process-wide Speaker, so
+# the prism backend is acquired once; a no-op when speech is unavailable.
+_speaker = get_speaker()
 
 # Several choice columns store terse tokens — a blank ("no value") entry, single
 # letters, "+"/"-" — that a screen reader reads poorly or as nothing. We show a

@@ -6,8 +6,8 @@ object directly) plus parameters, perform the operation, and return
 (success, message, affected_channel_numbers).
 
 This mirrors the operations available in CHIRP's memedit.py but decoupled
-from any GUI. The affected_channel_numbers list tells the Flask route which
-channels to re-read and return to the frontend for refresh.
+from any GUI. The affected_channel_numbers list tells the UI which channels to
+re-read and refresh in the grid.
 
 Reference: chirp/chirp/wxui/memedit.py methods:
   _delete_memories_at, _mem_insert, cb_move, _do_sort_memories,
@@ -82,51 +82,6 @@ def _parse_field_value(radio, mem, field: str, value: str):
     # name, comment, and choice columns (tmode, duplex, mode, skip,
     # dtcs_polarity, cross_mode) are set as plain strings.
     return value
-
-
-@undo.records
-def set_field(number: int, field: str, value: str) -> OpResult:
-    """Set one field on one memory channel and write it back to the image.
-
-    Returns (success, message, [number]). Rejects immutable fields and turns
-    parse/validation errors into a friendly message instead of raising.
-    """
-    try:
-        radio = _get_radio()
-    except RuntimeError as e:
-        return False, str(e), []
-
-    if field == "number":
-        return False, "Channel number is not editable.", []
-
-    try:
-        mem = _get_mem(radio, number)
-    except Exception as e:  # noqa: BLE001
-        return False, f"Could not read channel {number}: {e}", []
-
-    if field in (mem.immutable or []):
-        return False, (
-            f"Channel {number}: {field} cannot be changed on this radio."
-        ), []
-
-    try:
-        parsed = _parse_field_value(radio, mem, field, value)
-    except (ValueError, TypeError) as e:
-        return False, f"Invalid value for {field}: {value!r} ({e})", []
-
-    try:
-        setattr(mem, field, parsed)
-        # Entering a frequency populates a slot; a zero frequency empties it.
-        if field == "freq":
-            mem.empty = parsed == 0
-        _set_mem(radio, mem)
-    except Exception as e:  # noqa: BLE001
-        return False, f"Failed to set {field} on channel {number}: {e}", []
-
-    from chirp_backend.radio import invalidate_cache
-
-    invalidate_cache([number])
-    return True, f"Channel {number} {field} updated.", [number]
 
 
 def _parse_all(radio, mem, values: dict):
@@ -327,13 +282,23 @@ def set_channel_field(number: int, field: str, value):
 
 
 @undo.records
-def import_memories(src_radio, destination: int, overwrite: bool = True) -> OpResult:
+def import_memories(
+    src_radio,
+    destination: int,
+    overwrite: bool = True,
+    numbers=None,
+) -> OpResult:
     """Import a query/source radio's memories into the loaded radio.
 
     Copies each non-empty source memory into consecutive destination channels
     starting at ``destination``, adapting it for the target radio via CHIRP's
     import_logic (handles mode/tone/power differences). With overwrite=False,
     occupied destination channels are skipped. Returns (ok, message, affected).
+
+    ``numbers`` optionally restricts the import to a subset of source channel
+    numbers (e.g. the rows the user checked in the results picker); given
+    None, every non-empty source memory is imported. Out-of-range or duplicate
+    numbers are ignored; the surviving numbers are imported in ascending order.
     """
     from chirp import import_logic
 
@@ -346,10 +311,15 @@ def import_memories(src_radio, destination: int, overwrite: bool = True) -> OpRe
     src_features = src_radio.get_features()
     slo, shi = src_features.memory_bounds
 
+    if numbers is None:
+        source_numbers = range(slo, shi + 1)
+    else:
+        source_numbers = sorted({n for n in numbers if slo <= n <= shi})
+
     dest = destination
     imported = overwritten = skipped = 0
     affected: list[int] = []
-    for n in range(slo, shi + 1):
+    for n in source_numbers:
         if dest > thi:
             break
         try:
@@ -445,7 +415,7 @@ def delete_memory(number: int) -> OpResult:
     try:
         radio = _get_radio()
         mem = _get_mem(radio, number)
-        if "empty" in mem.immutable:
+        if "empty" in (mem.immutable or []):
             return False, f"Channel {number} cannot be deleted", []
         _erase_mem(radio, number)
         from chirp_backend.radio import invalidate_cache
@@ -473,7 +443,7 @@ def delete_range(numbers: list[int]) -> OpResult:
         for n in numbers:
             try:
                 mem = _get_mem(radio, n)
-                if "empty" in mem.immutable:
+                if "empty" in (mem.immutable or []):
                     errors.append(f"{n} (immutable)")
                     continue
                 if not mem.empty:
@@ -514,10 +484,25 @@ def delete_and_shift(numbers: list[int], mode: str = "all") -> OpResult:
     if not numbers:
         return False, "No channels specified", []
 
+    numbers_sorted = sorted(set(numbers))
+    # Delete-and-shift only has one honest meaning for a *contiguous* run: the
+    # gap it opens is `len(numbers)` wide, and everything past the run slides up
+    # by that. For a gappy selection (e.g. 1-3,5) the channels *between* the
+    # deleted ones would be left behind while the tail jumps up by the full
+    # count — collapsing different-sized gaps and colliding rows. Reject it with
+    # a clear message rather than silently corrupting the layout (plain Delete,
+    # or one contiguous run at a time, is the accessible alternative).
+    if numbers_sorted != list(range(numbers_sorted[0], numbers_sorted[-1] + 1)):
+        return (
+            False,
+            "Delete and shift needs a contiguous range of channels (no gaps). "
+            "Select a solid run, or use plain Delete to clear channels in place.",
+            [],
+        )
+
     try:
         radio = _get_radio()
         first, last_bound = _mem_bounds()
-        numbers_sorted = sorted(numbers)
         delta = len(numbers_sorted)
         next_after = numbers_sorted[-1] + 1
 
@@ -826,12 +811,15 @@ def paste_block(
             # cut sources as already empty (they get erased below). Everything
             # from destination up to it shifts down by n, so require room for it
             # before touching anything (atomic: fail leaves the radio unchanged).
+            # Scan from the tail down and stop at the first occupied slot — only
+            # the highest one matters, so there's no need to read every channel.
             last_nonempty = None
-            for k in range(destination, last_bound + 1):
+            for k in range(last_bound, destination - 1, -1):
                 if k in cut_set:
                     continue
                 if not _get_mem(radio, k).empty:
                     last_nonempty = k
+                    break
             if last_nonempty is not None and last_nonempty + n > last_bound:
                 return (
                     False,
@@ -977,9 +965,12 @@ def find(
                     val = getattr(mem, field_name, None)
                     if val is None:
                         continue
-                    # Format freq as MHz string for search
+                    # Format freq as MHz string for search — the same form the
+                    # grid shows (min 3 decimals), so a search for what the user
+                    # sees ("146.000") matches, and a partial "146" still does.
                     if field_name == "freq":
-                        val = f"{val / 1_000_000:.6f}".rstrip("0").rstrip(".")
+                        from chirp_backend.col_defs import format_freq_mhz
+                        val = format_freq_mhz(val)
                     else:
                         val = str(val)
                     if text_lower in val.lower():
@@ -991,25 +982,4 @@ def find(
 
     except Exception as e:
         LOG.exception("find")
-        return False, str(e), []
-
-
-def goto(number: int) -> OpResult:
-    """
-    Validate that a channel number exists and return it.
-    The frontend uses the returned number to scroll/focus the table row.
-    """
-    try:
-        radio = _get_radio()
-        first_bound, last_bound = _mem_bounds()
-        if number < first_bound or number > last_bound:
-            return (
-                False,
-                f"Channel {number} is out of range ({first_bound}–{last_bound})",
-                [],
-            )
-        return True, f"Jumped to channel {number}", [number]
-
-    except Exception as e:
-        LOG.exception("goto(%d)", number)
         return False, str(e), []

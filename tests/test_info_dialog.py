@@ -27,7 +27,24 @@ def test_info_dialog_is_readonly_multiline_and_holds_text(app):
         assert not dlg.text.IsEditable()                    # read-only...
         assert dlg.text.GetWindowStyle() & wx.TE_MULTILINE  # ...but navigable
         assert dlg.text.GetName() == "Radio information"
-        assert dlg.GetEscapeId() == wx.ID_CLOSE             # Escape closes
+        assert dlg.GetEscapeId() == wx.ID_CLOSE             # Escape closes (default)
+        dlg.Destroy()
+    finally:
+        frame.Destroy()
+
+
+def test_info_dialog_ok_button_variant(app):
+    """ok_button=True gives an OK button that Escape maps to (used for errors)."""
+    from vrp.info_dialog import InfoDialog
+
+    frame = wx.Frame(None)
+    try:
+        dlg = InfoDialog(frame, "Could not open file",
+                         "Failed to load image: Unsupported model X",
+                         name="Error message", ok_button=True)
+        assert dlg.GetEscapeId() == wx.ID_OK                # Escape -> OK
+        assert dlg.FindWindowById(wx.ID_OK) is not None     # an OK button exists
+        assert not dlg.text.IsEditable()                    # still copyable/read-only
         dlg.Destroy()
     finally:
         frame.Destroy()

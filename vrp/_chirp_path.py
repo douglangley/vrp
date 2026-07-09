@@ -17,7 +17,7 @@ finder resolve ``chirp`` first while every other import still falls through to
 Importing this module applies the fix exactly once. It must run before the
 first ``import chirp`` anywhere in the process, so it is imported as the very
 first line of ``vrp/__init__`` and of ``main.py``. It is a harmless no-op in a
-frozen (Nuitka) build, where there is no ``./chirp`` directory to shadow.
+frozen (PyInstaller) build, where there is no ``./chirp`` directory to shadow.
 """
 
 from __future__ import annotations

@@ -1,8 +1,9 @@
 """
-Radio backend — wraps the CHIRP library for use by Flask routes.
+Radio backend — wraps the CHIRP library for the wx UI.
 
 Manages a single "active radio" (loaded image + optional live serial
-connection). All state lives here so routes stay stateless.
+connection). All radio state lives here, framework-agnostic, so the UI layer
+holds no CHIRP objects of its own.
 
 CHIRP library notes:
   - directory.import_drivers() must be called once before any radio ops.
@@ -72,7 +73,6 @@ class RadioState:
     radio: object = None            # chirp CloneModeRadio instance
     image_path: Optional[str] = None
     is_modified: bool = False
-    serial_port: Optional[str] = None
     # Cache of memory objects keyed by channel number, populated on load
     _mem_cache: dict = field(default_factory=dict)
 
@@ -109,7 +109,6 @@ def unload() -> None:
         _state.radio = None
         _state.image_path = None
         _state.is_modified = False
-        _state.serial_port = None
         _state._mem_cache = {}
     _undo = None  # drop the undo history with the radio
 
@@ -190,9 +189,22 @@ def get_memory(number: int) -> Optional[object]:
 
 def set_memory(mem: object) -> tuple[bool, str]:
     """
-    Write a memory channel back to the radio image.
-    Invalidates the cache entry for that channel.
+    Write a memory channel back to the radio image, updating the read cache.
     Returns (success, message).
+
+    Write-path note (see also ``_install_undo``): every channel write in the app
+    funnels through **one physical choke point** — the loaded radio's
+    ``set_memory``/``erase_memory``, which ``_install_undo`` wraps to record undo
+    and mark the image ``is_modified``. There are two *entry points* to it:
+
+      - ``memory_ops`` (the app path): calls ``radio.set_memory`` directly and
+        keeps the cache fresh by calling ``invalidate_cache`` after each op.
+      - this module-level pair (used by tests and available programmatically):
+        the same write, but it updates ``_mem_cache`` in place instead of
+        invalidating — a convenience for a single coherent read-after-write.
+
+    Both hit the same wrapped methods, so undo recording and ``is_modified`` are
+    identical regardless of entry point.
     """
     with _state_lock:
         if not _state.loaded:
@@ -209,8 +221,9 @@ def set_memory(mem: object) -> tuple[bool, str]:
 
 def erase_memory(number: int) -> tuple[bool, str]:
     """
-    Erase (blank out) a memory channel.
-    Returns (success, message).
+    Erase (blank out) a memory channel, dropping its cache entry.
+    Returns (success, message). See :func:`set_memory` for the write-path note
+    (one wrapped choke point; this is the cache-updating entry point).
     """
     with _state_lock:
         if not _state.loaded:
@@ -269,25 +282,42 @@ def _install_undo(radio) -> None:
         orig_set = radio.set_memory
         orig_erase = radio.erase_memory
 
+        # This wrapper is the single choke point every channel write funnels
+        # through (memory_ops._set_mem/_erase_mem call the radio methods directly,
+        # and so do this module's own set_memory/erase_memory), so it is also
+        # where we mark the image dirty. Without this, ordinary edits/deletes/
+        # moves left is_modified False and Radio Info wrongly said "Unsaved
+        # changes: No" (and any unsaved-changes prompt would be built on a lie).
+        # It never fires during load/download: the wrapper is installed *after*
+        # the image is read, and reading an image doesn't call set_memory.
         def recording_set(mem):
             if _undo is not None:
                 _undo.record(mem.number)
-            return orig_set(mem)
+            result = orig_set(mem)
+            _state.is_modified = True
+            return result
 
         def recording_erase(number):
             if _undo is not None:
                 _undo.record(number)
-            return orig_erase(number)
+            result = orig_erase(number)
+            _state.is_modified = True
+            return result
 
         radio.set_memory = recording_set
         radio.erase_memory = recording_erase
 
+        # Undo/redo also mutate the image relative to the file on disk, so they
+        # too mark it dirty (conservatively — undoing back to the exact saved
+        # state still flags modified, which at worst prompts a redundant save).
         def restore_set(mem):
             orig_set(mem)
+            _state.is_modified = True
             invalidate_cache([mem.number])
 
         def restore_erase(number):
             orig_erase(number)
+            _state.is_modified = True
             invalidate_cache([number])
 
         _undo = UndoManager(
@@ -349,61 +379,6 @@ def export_to_csv(path: str) -> tuple:
     except Exception as e:  # noqa: BLE001
         LOG.exception("export_to_csv failed: %s", path)
         return False, f"Export failed: {e}", 0
-
-
-def describe_radio_html(state) -> str:
-    """Build an accessible label/value HTML summary of the loaded radio."""
-    from html import escape
-
-    radio = state.radio
-    f = radio.get_features()
-    lo, hi = f.memory_bounds
-
-    def yn(b):
-        return "Yes" if b else "No"
-
-    bands = "; ".join(
-        f"{a / 1_000_000:.3f}–{b / 1_000_000:.3f} MHz"
-        for a, b in (getattr(f, "valid_bands", None) or [])
-    )
-    modes = ", ".join(getattr(f, "valid_modes", None) or [])
-    variant = getattr(radio, "VARIANT", "") or ""
-    source = os.path.basename(state.image_path) if state.image_path else "Downloaded, not yet saved"
-
-    identity = [("Vendor", radio.VENDOR), ("Model", radio.MODEL)]
-    if variant:
-        identity.append(("Variant", variant))
-    identity += [("Source", source), ("Unsaved changes", yn(state.is_modified))]
-
-    capacity = [("Channels", f"{hi - lo + 1} (numbered {lo} to {hi})")]
-
-    has_name = getattr(f, "has_name", False)
-    name_detail = yn(has_name)
-    if has_name and getattr(f, "valid_name_length", 0):
-        name_detail += f", up to {f.valid_name_length} characters"
-    capabilities = [
-        ("Channel names", name_detail),
-        ("Banks", yn(getattr(f, "has_bank", False))),
-        ("Settings", yn(getattr(f, "has_settings", False))),
-        ("Comments", yn(getattr(f, "has_comment", False))),
-        ("DTCS", yn(getattr(f, "has_dtcs", False))),
-        ("Bands", bands or "—"),
-        ("Modes", modes or "—"),
-    ]
-
-    def table(title, rows):
-        cells = "".join(
-            f'<tr><th scope="row">{escape(str(k))}</th><td>{escape(str(v))}</td></tr>'
-            for k, v in rows
-        )
-        return f"<h3>{escape(title)}</h3><table>{cells}</table>"
-
-    return (
-        f"<h2>{escape(radio.VENDOR)} {escape(radio.MODEL)}</h2>"
-        + table("Identity", identity)
-        + table("Capacity", capacity)
-        + table("Capabilities", capabilities)
-    )
 
 
 def has_settings() -> bool:
@@ -777,7 +752,6 @@ def download_from_radio(
 
         with _state_lock:
             _state.radio = radio
-            _state.serial_port = port
             _state.image_path = None   # downloaded, not yet saved to disk
             _state.is_modified = True
             _state._mem_cache = {}

@@ -1,10 +1,13 @@
 # VRP Grid Rebuild — Restart Plan & Keyboard Spec
 
-> **Living document.** Edit the **"Keyboard & function spec"** section freely while
-> we wait — add any keys or functions you think of. This is the source of truth
-> for the restart; everything else here is context so we don't re-derive it.
+> **SUPERSEDED — see PROGRESS_LOG.md "2026-07-04".** The grid rebuild is done:
+> the native grid runs on wx-accessible-grid **0.9.0** with the Left/Right cell
+> cursor wired on Windows *and* macOS, and the keyboard spec below is
+> implemented and reflected in `docs/keyboard-map.md`. This file is kept only as
+> historical context for how the restart was planned; do not treat it as the
+> current source of truth.
 >
-> **Last updated:** 2026-06-27
+> **Last updated:** 2026-06-27 (frozen; superseded 2026-07-04)
 
 ---
 

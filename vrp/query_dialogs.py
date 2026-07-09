@@ -1,83 +1,25 @@
-"""Native wx dialogs for online query sources (Phase 7).
+"""Native wx dialogs for online query import.
 
-QueryParamsDialog gathers a source's parameters (none for the v1 sources) plus
-shows its attribution and a descriptive Terms-of-Service link. ImportDestination
-Dialog chooses where the fetched results land and how to treat occupied
-channels. The fetch itself runs on a background thread with the shared
-CloneProgressDialog; import goes through memory_ops.import_memories.
+- ImportDestinationDialog chooses the destination channel for a block of
+  imported memories and how to treat occupied channels; the import itself goes
+  through memory_ops.import_memories. Shared by "Import from File" and the
+  query sources.
+- RepeaterBookQueryDialog gathers the RepeaterBook query parameters
+  (country/state + optional filters); the fetch runs on a background thread in
+  main_window and its results flow through ImportDestinationDialog too.
+
+The plural module name earns its keep again with RepeaterBook back (see
+PROGRESS_LOG). Don't "tidy" it to import_dialog.py.
 """
 
 from __future__ import annotations
 
-import urllib.parse
-
 import wx
-import wx.adv
-
-
-class QueryParamsDialog(wx.Dialog):
-    def __init__(self, parent, source: dict) -> None:
-        super().__init__(parent, title=f"Query {source['label']}")
-        self._spec = source.get("params", [])
-        self._controls: dict = {}
-
-        outer = wx.BoxSizer(wx.VERTICAL)
-        attribution = source.get("attribution", "")
-        if attribution:
-            outer.Add(wx.StaticText(self, label=attribution), 0, wx.ALL, 10)
-        tos = source.get("tos")
-        if tos:
-            host = urllib.parse.urlparse(tos).netloc or tos
-            link = wx.adv.HyperlinkCtrl(
-                self, label=f"Open {host} terms of service in your browser", url=tos
-            )
-            link.SetName(f"Open {host} terms of service in your browser")
-            outer.Add(link, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 10)
-
-        if self._spec:
-            grid = wx.FlexGridSizer(cols=2, vgap=6, hgap=10)
-            grid.AddGrowableCol(1, 1)
-            for p in self._spec:
-                grid.Add(wx.StaticText(self, label=p["label"] + ":"), 0,
-                         wx.ALIGN_CENTER_VERTICAL)
-                if p.get("kind") == "choice":
-                    ctrl = wx.Choice(self, choices=list(p.get("options", [])))
-                    if ctrl.GetCount():
-                        ctrl.SetSelection(0)
-                else:
-                    ctrl = wx.TextCtrl(self)
-                ctrl.SetName(p["label"])
-                grid.Add(ctrl, 0, wx.EXPAND)
-                self._controls[p["name"]] = ctrl
-            outer.Add(grid, 0, wx.EXPAND | wx.ALL, 10)
-        else:
-            outer.Add(
-                wx.StaticText(self, label="No options. Choose Query to fetch results."),
-                0, wx.ALL, 10,
-            )
-
-        buttons = self.CreateStdDialogButtonSizer(wx.OK | wx.CANCEL)
-        ok = self.FindWindowById(wx.ID_OK)
-        if ok:
-            ok.SetLabel("Query")
-        outer.Add(buttons, 0, wx.EXPAND | wx.ALL, 8)
-        self.SetSizerAndFit(outer)
-
-    def get_params(self) -> dict:
-        # Include every declared param (some sources read params['key'] directly,
-        # so a missing key would crash do_fetch). Blank text fields pass "".
-        out = {}
-        for name, ctrl in self._controls.items():
-            if isinstance(ctrl, wx.Choice):
-                out[name] = ctrl.GetStringSelection()
-            else:
-                out[name] = ctrl.GetValue().strip()
-        return out
 
 
 class ImportDestinationDialog(wx.Dialog):
     def __init__(self, parent, count: int, low: int, high: int, default_dest: int) -> None:
-        super().__init__(parent, title="Import query results")
+        super().__init__(parent, title="Import channels")
         outer = wx.BoxSizer(wx.VERTICAL)
         outer.Add(
             wx.StaticText(self, label=f"{count} result(s) ready to import."),
@@ -111,3 +53,280 @@ class ImportDestinationDialog(wx.Dialog):
 
     def get_overwrite(self) -> bool:
         return self.mode.GetSelection() == 0
+
+
+class RepeaterBookQueryDialog(wx.Dialog):
+    """Gather RepeaterBook query parameters (country/state + optional filters).
+
+    Accessibility: each field's StaticText label is created immediately BEFORE
+    its control — on Windows wxMSW takes a native control's accessible name from
+    the static text created just before it, so control-before-label ordering
+    reads every field off by one (see __init__). The state selector is disabled
+    (not hidden) for countries queried whole, so its state is still
+    discoverable; the dialog is a real modal wx.Dialog with an Escape-able
+    Cancel button.
+    """
+
+    def __init__(self, parent, initial: dict | None = None) -> None:
+        super().__init__(parent, title="Query RepeaterBook")
+        from chirp_backend import repeaterbook
+
+        self._rb = repeaterbook
+        outer = wx.BoxSizer(wx.VERTICAL)
+
+        # LABEL BEFORE CONTROL — this ordering is load-bearing for screen
+        # readers on Windows. wxMSW gives a native control its accessible name
+        # from the static-text sibling created immediately *before* it; SetName
+        # does not propagate to MSAA for these controls. If the control is
+        # created before its label (e.g. a helper that takes an already-built
+        # control), every field inherits the *previous* field's label — the
+        # classic "off by one" read. So each _label(...) MUST run before the
+        # wx control it describes is constructed. (PreferencesDialog works for
+        # exactly this reason; SetName is kept only for macOS/VoiceOver, where
+        # it does map to NSAccessibility.)
+        grid = wx.FlexGridSizer(cols=2, vgap=8, hgap=10)
+
+        def _label(text: str) -> None:
+            grid.Add(wx.StaticText(self, label=text), 0, wx.ALIGN_CENTER_VERTICAL)
+
+        _label("Country:")
+        countries = repeaterbook.countries()
+        self.country = wx.Choice(self, choices=countries)
+        default = countries.index("United States") if "United States" in countries else 0
+        self.country.SetSelection(default)
+        self.country.SetName("Country")
+        self.country.Bind(wx.EVT_CHOICE, self._on_country)
+        grid.Add(self.country)
+
+        _label("State or province:")
+        self.state = wx.Choice(self, choices=[])
+        self.state.SetName("State or province")
+        grid.Add(self.state)
+
+        _label("Search (city, callsign, county):")
+        self.filter = wx.TextCtrl(self, size=(220, -1))
+        self.filter.SetName("Search text, city callsign or county")
+        grid.Add(self.filter)
+
+        _label("Modes (leave all clear for any):")
+        self.modes = wx.CheckListBox(self, choices=repeaterbook.modes())
+        self.modes.SetName("Modes, leave all clear for any")
+        grid.Add(self.modes)
+
+        outer.Add(grid, 0, wx.ALL, 12)
+
+        # Bands: real native checkboxes (one per band, RT Systems style). Each
+        # self-labels, so it reads reliably under NVDA regardless of position
+        # (unlike a checkbox list). Grouped in a StaticBox for an accessible
+        # group name. Leaving all clear means "any band".
+        band_box = wx.StaticBoxSizer(
+            wx.VERTICAL, self, "Bands (leave all clear for any)"
+        )
+        band_grid = wx.FlexGridSizer(cols=2, vgap=2, hgap=16)
+        self._band_boxes: dict[str, wx.CheckBox] = {}
+        for name, lo, hi in repeaterbook.bands():
+            # "to" (not an en-dash) so screen readers speak the range cleanly.
+            label = f"{name} ({lo / 1e6:g} to {hi / 1e6:g} MHz)"
+            cb = wx.CheckBox(self, label=label)
+            cb.SetName(label)
+            self._band_boxes[name] = cb
+            band_grid.Add(cb)
+        band_box.Add(band_grid, 0, wx.ALL, 4)
+        outer.Add(band_box, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 12)
+
+        self.open_only = wx.CheckBox(self, label="Open repeaters only")
+        self.open_only.SetName("Open repeaters only")
+        outer.Add(self.open_only, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 12)
+
+        buttons = self.CreateStdDialogButtonSizer(wx.OK | wx.CANCEL)
+        ok = self.FindWindowById(wx.ID_OK)
+        if ok:
+            ok.SetLabel("Query")
+        outer.Add(buttons, 0, wx.EXPAND | wx.ALL, 8)
+
+        self.SetSizerAndFit(outer)
+        self.SetEscapeId(wx.ID_CANCEL)
+        self._populate_states()
+        if initial:
+            self._apply_initial(initial)
+        self.country.SetFocus()
+
+    def _on_country(self, _evt=None) -> None:
+        self._populate_states()
+
+    def _apply_initial(self, form: dict) -> None:
+        """Pre-fill the form from a previous search (used by results ▸ Back)."""
+        ci = self.country.FindString(form.get("country", ""))
+        if ci != wx.NOT_FOUND:
+            self.country.SetSelection(ci)
+        self._populate_states()
+        state = form.get("state", "")
+        if state and self.state.IsEnabled():
+            si = self.state.FindString(state)
+            if si != wx.NOT_FOUND:
+                self.state.SetSelection(si)
+        self.filter.SetValue(form.get("filter", ""))
+        self.open_only.SetValue(bool(form.get("open_only", False)))
+        want = set(form.get("modes", []))
+        for i in range(self.modes.GetCount()):
+            self.modes.Check(i, self.modes.GetString(i) in want)
+        want_bands = set(form.get("bands", []))
+        for name, cb in self._band_boxes.items():
+            cb.SetValue(name in want_bands)
+
+    def _populate_states(self) -> None:
+        """Fill the state selector for the chosen country, or disable it.
+
+        US/Canada/Mexico are queried per-state; every other country is fetched
+        whole, so the state control is disabled (state becomes 'all')."""
+        country = self.country.GetStringSelection()
+        states = self._rb.states(country)
+        self.state.Clear()
+        if states:
+            self.state.Append(states)
+            self.state.SetSelection(0)
+            self.state.Enable(True)
+        else:
+            self.state.Enable(False)
+
+    def _selected_bands(self) -> list[str]:
+        return [name for name, cb in self._band_boxes.items() if cb.GetValue()]
+
+    def get_form(self) -> dict:
+        """Raw form values, for remembering and re-populating (results ▸ Back)."""
+        return {
+            "country": self.country.GetStringSelection(),
+            "state": self.state.GetStringSelection() if self.state.IsEnabled() else "",
+            "filter": self.filter.GetValue().strip(),
+            "open_only": self.open_only.GetValue(),
+            "modes": [
+                self.modes.GetString(i)
+                for i in range(self.modes.GetCount())
+                if self.modes.IsChecked(i)
+            ],
+            "bands": self._selected_bands(),
+        }
+
+    def get_params(self) -> dict:
+        country = self.country.GetStringSelection()
+        state = self.state.GetStringSelection() if self.state.IsEnabled() else ""
+        modes = [
+            self.modes.GetString(i)
+            for i in range(self.modes.GetCount())
+            if self.modes.IsChecked(i)
+        ]
+        return self._rb.build_params(
+            country,
+            state,
+            filter_text=self.filter.GetValue().strip(),
+            open_only=self.open_only.GetValue(),
+            modes=modes,
+            bands=self._rb.band_ranges(self._selected_bands()),
+        )
+
+
+class RepeaterBookResultsDialog(wx.Dialog):
+    """Pick which fetched repeaters to import.
+
+    A multi-select wx.ListBox (LB_MULTIPLE): arrow through the results, Space
+    toggles each row in/out of the import (NVDA/VoiceOver announce the row text
+    and its selected state), with Select all / Unselect all buttons. All rows
+    start selected — the common case is "import the lot, drop a few". Chosen
+    over a checkbox list (wx.CheckListBox), whose per-item checkboxes read
+    unreliably under NVDA.
+
+    Accessibility: the list's StaticText label is created immediately before it
+    (wxMSW names the control from the preceding static text — see
+    RepeaterBookQueryDialog); a real modal, Escape = Cancel. get_selected_numbers
+    returns the source channel numbers still checked.
+    """
+
+    def __init__(self, parent, lines: list[tuple[int, str]]) -> None:
+        super().__init__(
+            parent, title="RepeaterBook results",
+            style=wx.DEFAULT_DIALOG_STYLE | wx.RESIZE_BORDER,
+        )
+        from vrp.speech import get_speaker
+
+        self._speaker = get_speaker()
+        self._numbers = [n for n, _ in lines]
+        outer = wx.BoxSizer(wx.VERTICAL)
+
+        # Label BEFORE the list (load-bearing for the screen-reader name).
+        outer.Add(
+            wx.StaticText(
+                self,
+                label="Repeaters found. Arrow through the list and press Space "
+                "to include or exclude each one.",
+            ),
+            0, wx.ALL, 10,
+        )
+        self.listbox = wx.ListBox(
+            self, choices=[text for _, text in lines],
+            style=wx.LB_MULTIPLE | wx.LB_NEEDED_SB, size=(460, 240),
+        )
+        self.listbox.SetName("Repeaters found, Space toggles import")
+        for i in range(self.listbox.GetCount()):
+            self.listbox.SetSelection(i)  # default: all included
+        self.listbox.Bind(wx.EVT_LISTBOX, lambda _e: self._update_count())
+        outer.Add(self.listbox, 1, wx.EXPAND | wx.LEFT | wx.RIGHT, 10)
+
+        self.count_label = wx.StaticText(self, label="")
+        outer.Add(self.count_label, 0, wx.ALL, 10)
+
+        btnrow = wx.BoxSizer(wx.HORIZONTAL)
+        sel_all = wx.Button(self, label="Select &all")
+        sel_none = wx.Button(self, label="&Unselect all")
+        sel_all.Bind(wx.EVT_BUTTON, self._on_select_all)
+        sel_none.Bind(wx.EVT_BUTTON, self._on_unselect_all)
+        btnrow.Add(sel_all, 0, wx.RIGHT, 8)
+        btnrow.Add(sel_none, 0)
+        outer.Add(btnrow, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 10)
+
+        # Bottom row: [Back to search] .... [Import selected] [Cancel]. Back ends
+        # the modal with wx.ID_BACKWARD so the caller can re-open the query
+        # dialog (prefilled) to refine the search instead of starting over.
+        bottom = wx.BoxSizer(wx.HORIZONTAL)
+        back = wx.Button(self, wx.ID_BACKWARD, "&Back to search")
+        back.Bind(wx.EVT_BUTTON, lambda _e: self.EndModal(wx.ID_BACKWARD))
+        bottom.Add(back, 0, wx.ALIGN_CENTER_VERTICAL)
+        bottom.AddStretchSpacer()
+        std = self.CreateStdDialogButtonSizer(wx.OK | wx.CANCEL)
+        ok = self.FindWindowById(wx.ID_OK)
+        if ok:
+            ok.SetLabel("Import selected")
+        bottom.Add(std, 0, wx.ALIGN_CENTER_VERTICAL)
+        outer.Add(bottom, 0, wx.EXPAND | wx.ALL, 8)
+
+        self.SetSizerAndFit(outer)
+        self.SetEscapeId(wx.ID_CANCEL)
+        self._update_count()
+        self.listbox.SetFocus()
+
+    def _update_count(self) -> None:
+        sel = len(self.listbox.GetSelections())
+        total = self.listbox.GetCount()
+        self.count_label.SetLabel(f"{sel} of {total} selected")
+
+    def _set_all(self, selected: bool) -> None:
+        for i in range(self.listbox.GetCount()):
+            if selected:
+                self.listbox.SetSelection(i)
+            else:
+                self.listbox.Deselect(i)
+        self._update_count()
+        # Speak the outcome: the static count label alone isn't auto-announced,
+        # and focus stays on the button. Supplemental speech, no-op without prism.
+        total = self.listbox.GetCount()
+        self._speaker.speak(
+            f"All {total} selected" if selected else "All cleared", interrupt=True
+        )
+
+    def _on_select_all(self, _evt=None) -> None:
+        self._set_all(True)
+
+    def _on_unselect_all(self, _evt=None) -> None:
+        self._set_all(False)
+
+    def get_selected_numbers(self) -> list[int]:
+        return [self._numbers[i] for i in self.listbox.GetSelections()]

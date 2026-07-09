@@ -132,6 +132,15 @@ class TestDeleteMemory:
         assert not ok
         assert affected == []
 
+    def test_delete_immutable_none_does_not_crash(self, stub_radio):
+        # Some drivers report immutable as None; "empty" in None would TypeError.
+        _fill(stub_radio, (5, "REPEATER"))
+        stub_radio._channels[5].immutable = None
+        from chirp_backend.memory_ops import delete_memory
+        ok, msg, affected = delete_memory(5)
+        assert ok
+        assert stub_radio.get_memory(5).empty
+
 
 # ---------------------------------------------------------------------------
 # Tests: delete_range
@@ -152,6 +161,14 @@ class TestDeleteRange:
         assert ok
         assert affected == []
 
+    def test_delete_range_immutable_none_does_not_crash(self, stub_radio):
+        _fill(stub_radio, (1, "A"), (2, "B"))
+        stub_radio._channels[1].immutable = None  # driver reports None
+        from chirp_backend.memory_ops import delete_range
+        ok, msg, affected = delete_range([1, 2])
+        assert ok
+        assert stub_radio.get_memory(1).empty and stub_radio.get_memory(2).empty
+
 
 # ---------------------------------------------------------------------------
 # Tests: delete_and_shift
@@ -169,6 +186,29 @@ class TestDeleteAndShift:
         assert stub_radio.get_memory(1).name == "C"
         assert stub_radio.get_memory(2).name == "D"
         assert stub_radio.get_memory(3).empty
+
+    def test_noncontiguous_selection_rejected(self, stub_radio):
+        # A gappy selection (1-3, 5) has no well-defined shift; reject cleanly
+        # and leave the radio untouched rather than corrupting the layout.
+        _fill(stub_radio, (1, "B"), (2, "C"), (3, "D"), (4, "E"), (5, "F"),
+              (6, "G"))
+        from chirp_backend.memory_ops import delete_and_shift
+        ok, msg, affected = delete_and_shift([1, 2, 3, 5], mode="all")
+        assert not ok
+        assert "contiguous" in msg.lower()
+        assert affected == []
+        # Nothing moved or erased.
+        assert stub_radio.get_memory(4).name == "E"
+        assert stub_radio.get_memory(6).name == "G"
+
+    def test_contiguous_out_of_order_still_shifts(self, stub_radio):
+        # Same channels, given unsorted and with a duplicate, are contiguous.
+        _fill(stub_radio, (1, "B"), (2, "C"), (3, "D"), (4, "E"))
+        from chirp_backend.memory_ops import delete_and_shift
+        ok, _msg, _affected = delete_and_shift([3, 1, 2, 2], mode="all")
+        assert ok
+        assert stub_radio.get_memory(1).name == "E"  # 4 shifted up to 1
+        assert stub_radio.get_memory(2).empty
 
     def test_shift_block(self, stub_radio):
         # Fill channels 0-2 (block), 3 empty, 4-5 another block
@@ -321,23 +361,6 @@ class TestFind:
 
 
 # ---------------------------------------------------------------------------
-# Tests: goto
-# ---------------------------------------------------------------------------
-
-class TestGoto:
-    def test_goto_valid(self, stub_radio):
-        from chirp_backend.memory_ops import goto
-        ok, msg, affected = goto(10)
-        assert ok
-        assert affected == [10]
-
-    def test_goto_out_of_range(self, stub_radio):
-        from chirp_backend.memory_ops import goto
-        ok, msg, affected = goto(99)
-        assert not ok
-
-
-# ---------------------------------------------------------------------------
 # Tests: paste_block (cut / copy / paste of whole rows)
 # ---------------------------------------------------------------------------
 
@@ -411,6 +434,29 @@ class TestPasteBlock:
         assert affected == []
         assert stub_radio.get_memory(5).name == "C5"  # unchanged
 
+    def test_make_room_finds_highest_occupied_across_gap(self, stub_radio):
+        # Only channel 18 occupied; 5..17 empty. The tail-first occupancy scan
+        # must still find 18 (not stop at the empties) so shifting it down by 2
+        # off the end (18+2 > 19) is correctly rejected.
+        _fill(stub_radio, (18, "T"))
+        from chirp_backend.memory_ops import paste_block
+        ok, _, affected = paste_block(
+            self._clip("A", "B"), destination=5, make_room=True
+        )
+        assert not ok
+        assert affected == []
+        assert stub_radio.get_memory(18).name == "T"  # unchanged
+
+    def test_make_room_across_gap_succeeds_with_room(self, stub_radio):
+        # Same gap layout but the occupied slot is low enough to shift down by 2.
+        _fill(stub_radio, (10, "T"))
+        from chirp_backend.memory_ops import paste_block
+        ok, _, _ = paste_block(self._clip("A", "B"), destination=5, make_room=True)
+        assert ok
+        assert stub_radio.get_memory(5).name == "A"
+        assert stub_radio.get_memory(6).name == "B"
+        assert stub_radio.get_memory(12).name == "T"  # 10 shifted down by 2
+
     def test_out_of_range_fails(self, stub_radio):
         from chirp_backend.memory_ops import paste_block
         ok, _, _ = paste_block(self._clip("A", "B"), destination=19)  # 19,20 -> OOB
@@ -434,3 +480,59 @@ class TestPasteBlock:
         assert stub_radio.get_memory(11).name == "S2"
         assert stub_radio.get_memory(12).name == "X"
         assert stub_radio.get_memory(13).name == "Y"
+
+
+class TestImportMemories:
+    """import_memories, incl. the numbers= subset (results-picker) path.
+
+    import_logic.import_mem is stubbed to identity so these exercise the
+    selection/placement logic, not CHIRP's field adaptation (which needs real
+    driver Memory objects — covered by the live end-to-end drive)."""
+
+    def _source(self):
+        src = StubRadio(num_channels=5)
+        for i in range(5):
+            src.set_memory(StubMemory(i, freq=146_000_000 + i * 100_000,
+                                      name=f"R{i}", empty=False))
+        return src
+
+    @pytest.fixture
+    def identity_import(self, monkeypatch):
+        monkeypatch.setattr("chirp.import_logic.import_mem",
+                            lambda target, feats, mem: mem.dupe())
+
+    def test_import_all(self, stub_radio, identity_import):
+        from chirp_backend.memory_ops import import_memories
+        ok, _msg, affected = import_memories(self._source(), 0, overwrite=True)
+        assert ok
+        assert affected == [0, 1, 2, 3, 4]  # empties 5..19 skipped
+        assert stub_radio.get_memory(0).name == "R0"
+
+    def test_import_subset_places_selected_consecutively(self, stub_radio, identity_import):
+        from chirp_backend.memory_ops import import_memories
+        ok, _msg, affected = import_memories(
+            self._source(), 3, overwrite=True, numbers=[0, 2, 4]
+        )
+        assert ok
+        assert affected == [3, 4, 5]
+        assert stub_radio.get_memory(3).name == "R0"
+        assert stub_radio.get_memory(4).name == "R2"
+        assert stub_radio.get_memory(5).name == "R4"
+
+    def test_import_subset_ignores_dupes_and_out_of_range(self, stub_radio, identity_import):
+        from chirp_backend.memory_ops import import_memories
+        ok, _msg, affected = import_memories(
+            self._source(), 0, overwrite=True, numbers=[2, 2, 99, -1, 0]
+        )
+        assert ok
+        assert affected == [0, 1]  # {0, 2}, ascending
+        assert stub_radio.get_memory(0).name == "R0"
+        assert stub_radio.get_memory(1).name == "R2"
+
+    def test_import_empty_subset_imports_nothing(self, stub_radio, identity_import):
+        from chirp_backend.memory_ops import import_memories
+        ok, _msg, affected = import_memories(
+            self._source(), 0, overwrite=True, numbers=[]
+        )
+        assert not ok  # imported 0 -> ok is False
+        assert affected == []

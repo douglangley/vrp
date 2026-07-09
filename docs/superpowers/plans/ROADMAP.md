@@ -37,11 +37,20 @@ Accessibility / screen-reader passes owed (no blocker, just need a hand pass):
 - ☐ NVDA pass on the banks editor (membership readout, checkbox/radiobox state).
 
 Query sources (Phase 7):
-- ☐ Live network test for AMSAT/SatNOGS/DMR-MARC/mapy73.pl (no network
-  available in past dev sessions).
-- ◐ RepeaterBook — needs a dynamic country→state cascade control.
-- ◐ RadioReference — needs a credentials/login param form.
-- ◐ przemienniki.net / .eu — needs band/mode code mapping + coordinates.
+- The generic query framework and the earlier sources (AMSAT, SatNOGS, DMR-MARC,
+  mapy73.pl) were **removed 2026-07-05** — they weren't going to be used. The
+  `chirp_backend/query.py` framework and `QueryParamsDialog` are gone; the shared
+  `ImportDestinationDialog` + `memory_ops.import_memories` stay (they back Import
+  from File and will back a future query import). Recoverable from git history.
+- ◐ RepeaterBook — **wired via CHIRP's mirror** (2026-07-09). Radio ▸ Query
+  Source ▸ RepeaterBook…: country→state cascade + filter/open-only/mode form,
+  background fetch, shared import flow. Backend `chirp_backend/repeaterbook.py`
+  wraps CHIRP's tested source, which pulls pre-built dumps from
+  `data.chirpmyradio.com/rb/` with the generic CHIRP User-Agent (no credential).
+  **Owed:** the direct RepeaterBook API — a localized `VRPRepeaterBook.get_data`
+  override + `USER_AGENT`, once RepeaterBook issues VRP a per-app User-Agent;
+  and an NVDA pass on the query dialog + progress.
+- ☐ RadioReference — purpose-built after RepeaterBook (credentials/login form).
 
 Smaller deferred items (chirp-feature-coverage.md "☐"/"◐" rows):
 - ☐ Bank renaming + "channels in a bank" overview (Phase 6.1).

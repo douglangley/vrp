@@ -29,7 +29,7 @@ from chirp_backend import radio as radio_backend
 from vrp import __version__
 from vrp.native.announce import Announcer
 from vrp.native.channel_grid import ChannelGrid
-from vrp.speech import Speaker
+from vrp.speech import get_speaker
 
 LOG = logging.getLogger(__name__)
 
@@ -95,10 +95,10 @@ class MainWindow(wx.Frame):
         self.SetStatusWidths([-3, -2])
         self.SetStatusText(_CHIRP_ATTRIBUTION, 1)
 
-        # Build speech: Speaker is a class, not a bare function. Create an
-        # instance and pass its .speak method; if prism is unavailable the
-        # method is a no-op, so Announcer degrades gracefully.
-        self._speaker = Speaker()
+        # Build speech: get_speaker() returns the shared process-wide Speaker.
+        # Pass its .speak method; if prism is unavailable the method is a no-op,
+        # so Announcer degrades gracefully.
+        self._speaker = get_speaker()
         # Announcer calls set_status(message) with ONE argument, which maps to
         # SetStatusText(message) — the no-index form writes field 0 only, so
         # the attribution in field 1 is never touched.
@@ -171,6 +171,8 @@ class MainWindow(wx.Frame):
         # Ctrl-combos.
         self._redo_accel_id = wx.NewIdRef()
         self.Bind(wx.EVT_MENU, self.on_redo, id=self._redo_accel_id)
+        # Guard against discarding unsaved channel edits on window close/Exit.
+        self.Bind(wx.EVT_CLOSE, self.on_close_window)
         self.SetAcceleratorTable(wx.AcceleratorTable([
             wx.AcceleratorEntry(wx.ACCEL_CTRL | wx.ACCEL_SHIFT, ord("Z"),
                                 self._redo_accel_id),
@@ -296,31 +298,20 @@ class MainWindow(wx.Frame):
         return m
 
     def _build_radio_menu(self) -> wx.Menu:
-        from chirp_backend import query as query_mod
-
         m = wx.Menu()
         self._add(m, "download", "&Download from Radio\tCtrl+Shift+D", self.on_download)
         self._add(m, "upload", "&Upload to Radio\tCtrl+Shift+U", self.on_upload, needs_radio=True)
         self._add(m, "favorites", "&Favorite radios…", self.on_favorites)
         m.AppendSeparator()
-
-        # Query Source submenu — one item per registered online source.
-        # Each item is gated on a loaded radio (the results import into it).
-        query_submenu = wx.Menu()
-        self._query_submenu_items: list[wx.MenuItem] = []
-        for src in query_mod.SOURCES:
-            item = query_submenu.Append(wx.ID_ANY, src["label"] + "…")
-            self.Bind(
-                wx.EVT_MENU,
-                lambda e, k=src["key"]: self.on_query_source(k),
-                item,
-            )
-            self._query_submenu_items.append(item)
-        self._mi_query_source = m.AppendSubMenu(query_submenu, "&Query Source")
-
-        m.AppendSeparator()
         self._add(m, "settings", "&Settings…\tCtrl+Shift+P", self.on_settings, needs_radio=True)
         self._add(m, "radio_info", "Radio &Info…", self.on_radio_info, needs_radio=True)
+        m.AppendSeparator()
+        # Query Source submenu (online repeater directories). Gated on a loaded
+        # radio — results import into it. RadioReference will slot in here later.
+        query = wx.Menu()
+        self._add(query, "query_repeaterbook", "&RepeaterBook…",
+                  self.on_repeaterbook, needs_radio=True)
+        m.AppendSubMenu(query, "&Query Source")
         return m
 
     def _build_channels_menu(self) -> wx.Menu:
@@ -354,13 +345,6 @@ class MainWindow(wx.Frame):
         loaded = radio_backend.get_state().loaded
         for key in self._radio_gated_keys:
             self._menu_items[key].Enable(loaded)
-        # Gate the Query Source submenu: disable the parent item and each child
-        # item individually when no radio is loaded (results import into the
-        # loaded radio, so querying without one is meaningless).
-        if hasattr(self, "_mi_query_source"):
-            self._mi_query_source.Enable(loaded)
-        for item in getattr(self, "_query_submenu_items", []):
-            item.Enable(loaded)
 
     # -- channel handlers ---------------------------------------------
 
@@ -597,7 +581,10 @@ class MainWindow(wx.Frame):
         if not ok:
             self.announce.announce(message, assertive=True)
             return
-        self.grid.rebuild()
+        # Plain delete clears slots in place — no rows shift — so repaint just
+        # the affected rows. A full rebuild() is unnecessary here and jars the
+        # screen-reader focus; keep it for the structural ops in on_organize.
+        self.grid.refresh_numbers(numbers)
         low, high = radio_backend.get_state().memory_bounds
         target = min(max(first, low), high)
         self.grid.select_channels([target])
@@ -718,7 +705,11 @@ class MainWindow(wx.Frame):
 
     def _snapshot_selection(self) -> tuple[list[int], list] | None:
         """The selected channel numbers and deep-copied Memory snapshots, or None
-        (with an announcement) when nothing is available to act on."""
+        (with an announcement) when nothing is available to act on.
+
+        A channel that can't be read (``get_memory`` returns None) is skipped
+        rather than crashing on ``.dupe()``; the returned numbers match the
+        snapshots actually captured, so a later cut erases only what was copied."""
         if not radio_backend.get_state().loaded:
             self.announce.announce("No radio image is open.", assertive=True)
             return None
@@ -726,8 +717,20 @@ class MainWindow(wx.Frame):
         if not numbers:
             self.announce.announce("No channel selected.")
             return None
-        mems = [radio_backend.get_memory(n).dupe() for n in numbers]
-        return numbers, mems
+        readable: list[int] = []
+        mems = []
+        for n in numbers:
+            mem = radio_backend.get_memory(n)
+            if mem is None:
+                continue
+            readable.append(n)
+            mems.append(mem.dupe())
+        if not mems:
+            self.announce.announce(
+                "Could not read the selected channel(s).", assertive=True
+            )
+            return None
+        return readable, mems
 
     def on_copy(self, _evt=None) -> None:
         """Copy the selected channel(s) to the in-app clipboard (source kept)."""
@@ -778,11 +781,17 @@ class MainWindow(wx.Frame):
 
         cut_from = clip.source_numbers if clip.mode == "cut" else None
         cut_set = set(cut_from or [])
-        # Occupied destination slots that aren't sources being moved out.
-        occupied = [
-            k for k in range(dest, dest + n)
-            if k not in cut_set and not radio_backend.get_memory(k).empty
-        ]
+        # Occupied destination slots that aren't sources being moved out. An
+        # unreadable slot (get_memory None) is treated as empty here — consistent
+        # with _destination_occupied / _first_empty_channel — so it never crashes
+        # on `.empty`; paste_block does the real write regardless.
+        occupied = []
+        for k in range(dest, dest + n):
+            if k in cut_set:
+                continue
+            mem = radio_backend.get_memory(k)
+            if mem is not None and not mem.empty:
+                occupied.append(k)
         make_room = False
         if occupied:
             choice = self._ask_paste_conflict(dest, dest + n - 1, len(occupied))
@@ -875,6 +884,17 @@ class MainWindow(wx.Frame):
         self.grid.select_channels([number])
         self.grid.focus_channel(number)
 
+    @staticmethod
+    def _now_at_phrase(block: list[int]) -> str:
+        """Screen-reader phrase for where focus landed after a move/copy.
+
+        Callers prepend their own separator (e.g. ``f"{message}. {phrase}"``).
+        """
+        first, last = block[0], block[-1]
+        if first == last:
+            return f"Now on channel {first}."
+        return f"Now at channels {first} to {last}, on channel {first}."
+
     def _do_move(self, direction: int) -> None:
         """Shared implementation for move-up / move-down."""
         from chirp_backend import memory_ops
@@ -889,12 +909,7 @@ class MainWindow(wx.Frame):
             new_sel, focus = grid_model.selection_after_move(numbers, direction)
             self.grid.select_channels(new_sel)
             self.grid.focus_channel(focus)
-            first, last = new_sel[0], new_sel[-1]
-            if first == last:
-                where = f". Now on channel {first}."
-            else:
-                where = f". Now at channels {first} to {last}, on channel {first}."
-            self.announce.announce(message + where)
+            self.announce.announce(f"{message}. {self._now_at_phrase(new_sel)}")
         else:
             self.announce.announce(message, assertive=True)
 
@@ -925,12 +940,7 @@ class MainWindow(wx.Frame):
             new_sel, focus = grid_model.selection_after_move_to(len(numbers), dest)
             self.grid.select_channels(new_sel)
             self.grid.focus_channel(focus)
-            first, last = new_sel[0], new_sel[-1]
-            if first == last:
-                where = f". Now on channel {first}."
-            else:
-                where = f". Now at channels {first} to {last}, on channel {first}."
-            self.announce.announce(message + where)
+            self.announce.announce(f"{message}. {self._now_at_phrase(new_sel)}")
         else:
             self.announce.announce(message, assertive=True)
 
@@ -998,12 +1008,7 @@ class MainWindow(wx.Frame):
                 block, focus = grid_model.selection_after_move_to(len(numbers), dest)
             self.grid.select_channels(block)
             self.grid.focus_channel(focus)
-            first, last = block[0], block[-1]
-            if first == last:
-                where = f" Now on channel {first}."
-            else:
-                where = f" Now at channels {first} to {last}, on channel {first}."
-            self.announce.announce(f"{message}{where}")
+            self.announce.announce(f"{message} {self._now_at_phrase(block)}")
         else:
             # Structural ops (delete, insert, sort, arrange): full rebuild needed,
             # land on the single logical focus target.
@@ -1011,7 +1016,7 @@ class MainWindow(wx.Frame):
             target = self._op_focus_target(key, numbers, op)
             self.grid.select_channels([target])
             self.grid.focus_channel(target)
-            self.announce.announce(f"{message} Now on channel {target}.")
+            self.announce.announce(f"{message} {self._now_at_phrase([target])}")
 
     def _op_focus_target(self, key: str, numbers: list[int], op: dict) -> int:
         """Mirror of app.py _op_focus_target: where focus lands after an organize op."""
@@ -1128,12 +1133,13 @@ class MainWindow(wx.Frame):
 
     def _describe_match(self, number: int, prefix: str = "") -> str:
         """Human-readable description of a find match."""
+        from chirp_backend.col_defs import format_freq_mhz
+
         mem = radio_backend.get_memory(number)
         detail = ""
         if mem is not None and not getattr(mem, "empty", True):
             name = (getattr(mem, "name", "") or "").strip()
-            mhz = f"{mem.freq / 1_000_000:.6f}".rstrip("0").rstrip(".")
-            detail = f": {name or mhz}"
+            detail = f": {name or format_freq_mhz(mem.freq)}"
         return f"{prefix}'{self._find_query}' at channel {number}{detail}."
 
     # -- helpers shared by handlers -----------------------------------
@@ -1159,6 +1165,29 @@ class MainWindow(wx.Frame):
         finally:
             dlg.Destroy()
 
+    def _show_error(self, title: str, message: str) -> None:
+        """Show an error in a modal, read-only, copyable edit box with an OK
+        button, then return focus to the grid.
+
+        A modal is used (not just ``announce``) so the screen reader is
+        guaranteed to read the error: focus lands inside the dialog's text, so
+        NVDA/VoiceOver read the title and the message directly. An announce-only
+        error can be missed — after a file dialog closes, focus is ambiguous and
+        a status-bar/prism cue races the screen reader's own focus chatter and
+        gets dropped (the "unsupported file error not read" bug). The edit box
+        (vs a MessageBox) also lets the user arrow through and copy a long driver
+        error. The status bar still gets the text as a visual record."""
+        from vrp.info_dialog import InfoDialog
+
+        self.SetStatusText(message)
+        dlg = InfoDialog(self, title, message, name="Error message",
+                         size=(460, 160), ok_button=True)
+        try:
+            dlg.ShowModal()
+        finally:
+            dlg.Destroy()
+            self.grid.SetFocus()
+
     # -- file handlers ------------------------------------------------
 
     def on_open(self, _evt=None) -> None:
@@ -1178,9 +1207,15 @@ class MainWindow(wx.Frame):
         Open Recent submenu. Returns True on success."""
         from vrp.config import get_config
 
+        # Loading replaces the working image — guard unsaved edits first.
+        if not self._confirm_discard_or_save():
+            return False
+
         ok, message = radio_backend.load_image(path)
         if not ok:
-            self.announce.announce(message, assertive=True)
+            # A modal (not just announce) so the error is reliably read — see
+            # _show_error. This is the "unsupported file error not read" fix.
+            self._show_error("Could not open file", message)
             return False
         self._load_into_grid()
         get_config().add_recent(path)
@@ -1222,39 +1257,85 @@ class MainWindow(wx.Frame):
         self.announce.announce("Recent files cleared.")
         self.grid.SetFocus()
 
-    def on_save(self, _evt=None) -> None:
+    def on_save(self, _evt=None) -> bool:
+        """Save the loaded image. Returns True on a successful save, False on
+        failure or if the user cancelled the Save As it may fall back to."""
         state = radio_backend.get_state()
         if not state.loaded:
             self.announce.announce("No radio image is open.")
-            return
+            return False
         # No original path (downloaded but never saved) → Save As.
         if not state.image_path:
-            self.on_save_as(_evt)
-            return
+            return self.on_save_as(_evt)
         ok, message = radio_backend.save_image()
         self.announce.announce(message, assertive=not ok)
+        return ok
 
-    def on_save_as(self, _evt=None) -> None:
+    def on_save_as(self, _evt=None) -> bool:
+        """Save the loaded image to a chosen path. Returns True on a successful
+        save, False if the user cancelled the dialog or the save failed."""
         state = radio_backend.get_state()
         if not state.loaded:
             self.announce.announce("No radio image is open.")
-            return
+            return False
         with wx.FileDialog(
             self, "Save radio image as",
             wildcard="Radio images (*.img)|*.img",
             style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT,
         ) as dlg:
             if dlg.ShowModal() != wx.ID_OK:
-                return
+                return False
             path = dlg.GetPath()
         ok, message = radio_backend.save_image(path)
         self.announce.announce(message, assertive=not ok)
         if ok:
             self.SetTitle(f"{state.radio.VENDOR} {state.radio.MODEL} — VRP")
+        return ok
+
+    def _confirm_discard_or_save(self) -> bool:
+        """Guard a destructive step (close, Exit, Open, Download) against
+        discarding unsaved channel edits.
+
+        Returns True if it's safe to proceed — no image loaded, no unsaved
+        changes, the user chose *Don't save*, or a Save succeeded. Returns False
+        to abort — the user chose Cancel, or the Save they asked for failed. On
+        abort, focus returns to the grid so the screen reader lands somewhere
+        sensible. The dialog is a native, focus-trapped Yes/No/Cancel message
+        dialog (Escape = Cancel), read reliably by NVDA/VoiceOver.
+        """
+        state = radio_backend.get_state()
+        if not state.loaded or not state.is_modified:
+            return True
+        name = (
+            os.path.basename(state.image_path) if state.image_path
+            else "the current radio"
+        )
+        dlg = wx.MessageDialog(
+            self,
+            f"Save changes to {name} before continuing? "
+            f"Your unsaved channel edits will be lost otherwise.",
+            "Unsaved changes",
+            wx.YES_NO | wx.CANCEL | wx.ICON_WARNING,
+        )
+        dlg.SetYesNoCancelLabels("Save", "Don't save", "Cancel")
+        choice = dlg.ShowModal()
+        dlg.Destroy()
+        if choice == wx.ID_CANCEL:
+            self.grid.SetFocus()
+            return False
+        if choice == wx.ID_NO:
+            return True  # discard unsaved changes
+        # Yes → Save; veto the destructive step if the save doesn't succeed.
+        saved = self.on_save()
+        if not saved:
+            self.grid.SetFocus()
+        return saved
 
     def on_close_image(self, _evt=None) -> None:
         if not radio_backend.get_state().loaded:
             self.announce.announce("No radio image is open.")
+            return
+        if not self._confirm_discard_or_save():
             return
         radio_backend.unload()
         self._load_into_grid()
@@ -1262,6 +1343,14 @@ class MainWindow(wx.Frame):
 
     def on_exit(self, _evt=None) -> None:
         self.Close()
+
+    def on_close_window(self, event: wx.CloseEvent) -> None:
+        """EVT_CLOSE handler (window close button and File ▸ Exit). Prompt to
+        save unsaved edits; veto the close if the user cancels or a save fails."""
+        if event.CanVeto() and not self._confirm_discard_or_save():
+            event.Veto()
+            return
+        self.Destroy()
 
     def on_import_file(self, _evt=None) -> None:
         """File > Import — import channels from another radio image file."""
@@ -1298,8 +1387,12 @@ class MainWindow(wx.Frame):
             return
         self._import_results(src, count)
 
-    def _import_results(self, src_radio, count: int) -> None:
-        """Shared import flow: pick destination, import, refresh grid, focus."""
+    def _import_results(self, src_radio, count: int, numbers=None) -> None:
+        """Shared import flow: pick destination, import, refresh grid, focus.
+
+        ``numbers`` optionally restricts the import to specific source channel
+        numbers (the rows checked in the results picker); None imports all.
+        """
         from chirp_backend import memory_ops
         from vrp.query_dialogs import ImportDestinationDialog
 
@@ -1315,7 +1408,9 @@ class MainWindow(wx.Frame):
             self.grid.SetFocus()
             return
 
-        ok, message, affected = memory_ops.import_memories(src_radio, dest, overwrite)
+        ok, message, affected = memory_ops.import_memories(
+            src_radio, dest, overwrite, numbers=numbers
+        )
         if ok:
             self._load_into_grid()
             target = affected[0] if affected else dest
@@ -1332,6 +1427,126 @@ class MainWindow(wx.Frame):
             if mem is None or getattr(mem, "empty", True):
                 return n
         return low
+
+    def on_repeaterbook(self, _evt=None) -> None:
+        """Radio ▸ Query Source ▸ RepeaterBook.
+
+        Gathers the query (country/state + filters) in RepeaterBookQueryDialog,
+        runs the fetch on a background thread, and imports the chosen results
+        into the loaded radio. The results picker's "Back to search" button
+        re-opens the query dialog (prefilled) via _open_repeaterbook_query, so
+        query → results loops until Import or Cancel. Requires a loaded radio
+        (results import into it) — gated in the menu and guarded here.
+        """
+        if not radio_backend.get_state().loaded:
+            self.announce.announce(
+                "Open or download a radio first; RepeaterBook results import "
+                "into it.",
+                assertive=True,
+            )
+            return
+        self._open_repeaterbook_query()
+
+    def _open_repeaterbook_query(self, prefill: dict | None = None) -> None:
+        """Show the query form (optionally prefilled) and kick off the fetch."""
+        from vrp.query_dialogs import RepeaterBookQueryDialog
+
+        dlg = RepeaterBookQueryDialog(self, initial=prefill)
+        ok = dlg.ShowModal() == wx.ID_OK
+        params = dlg.get_params() if ok else None
+        form = dlg.get_form() if ok else None
+        dlg.Destroy()
+        if not ok:
+            self.grid.SetFocus()
+            return
+        self._rb_last_form = form  # remembered so results ▸ Back can prefill
+        self._run_repeaterbook_query(params)
+
+    def _run_repeaterbook_query(self, params: dict) -> None:
+        """Start the background RepeaterBook fetch behind a progress dialog."""
+        from chirp_backend import repeaterbook
+        from vrp.serial_dialogs import CloneProgressDialog
+
+        progress = CloneProgressDialog(
+            self, "Querying RepeaterBook", allow_cancel=True
+        )
+        self.Disable()
+        progress.Show()
+        throttle = {"t": 0.0, "decade": -1}
+
+        def progress_cb(msg, percent):  # background thread
+            now = time.monotonic()
+            pct = int(percent or 0)
+            speak = (now - throttle["t"] >= 1.0) or (pct // 10 != throttle["decade"])
+            if speak:
+                throttle["t"] = now
+                throttle["decade"] = pct // 10
+            wx.CallAfter(self._on_query_progress, progress, msg, pct, speak)
+
+        def worker():
+            ok, message, result = repeaterbook.fetch(params, progress_cb)
+            wx.CallAfter(
+                self._on_repeaterbook_done, progress, result, ok, message
+            )
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _on_query_progress(self, progress, msg: str, percent: int, speak: bool) -> None:
+        progress.update(percent, 100, msg)
+        if speak and msg:
+            self.announce.announce(msg)
+
+    def _on_repeaterbook_done(self, progress, result, ok: bool, message: str) -> None:
+        from chirp_backend import repeaterbook
+
+        cancelled = progress.is_cancelled()
+        progress.Destroy()
+        self.Enable()
+        self.grid.SetFocus()
+
+        if cancelled:
+            self.announce.announce("RepeaterBook query cancelled.")
+            return
+        if not ok:
+            self.announce.announce(message, assertive=True)
+            self._show_error("RepeaterBook query failed", message)
+            return
+        count = repeaterbook.result_count(result) if result else 0
+        if count <= 0:
+            # A successful query with no matches — not an error.
+            self.announce.announce(message)
+            return
+        self.announce.announce(f"RepeaterBook: {message}")
+        self._pick_and_import_repeaters(result)
+
+    def _pick_and_import_repeaters(self, result) -> None:
+        """Let the user check which fetched repeaters to import, then import.
+
+        Shows the multi-select results picker; the checked source channel
+        numbers flow into the shared _import_results (destination + overwrite).
+        """
+        from chirp_backend import repeaterbook
+        from vrp.query_dialogs import RepeaterBookResultsDialog
+
+        lines = repeaterbook.result_lines(result)
+        dlg = RepeaterBookResultsDialog(self, lines)
+        code = dlg.ShowModal()
+        selected = dlg.get_selected_numbers() if code == wx.ID_OK else []
+        dlg.Destroy()
+        if code == wx.ID_BACKWARD:
+            # Back to the search form, prefilled with the last query, and re-run.
+            self._open_repeaterbook_query(prefill=getattr(self, "_rb_last_form", None))
+            return
+        if code != wx.ID_OK:
+            self.grid.SetFocus()
+            return
+        if not selected:
+            self.announce.announce(
+                "No repeaters selected; nothing imported.", assertive=True
+            )
+            self.grid.SetFocus()
+            return
+        self._import_results(result, len(selected), numbers=selected)
 
     def on_export_csv(self, _evt=None) -> None:
         """File > Export — write the loaded radio's channels to a CSV file."""
@@ -1406,6 +1621,11 @@ class MainWindow(wx.Frame):
     def on_download(self, _evt=None) -> None:
         """Radio > Download from Radio."""
         from vrp.serial_dialogs import DownloadDialog, show_radio_prompts
+
+        # A successful download replaces the working image — guard unsaved edits.
+        if not self._confirm_discard_or_save():
+            self.grid.SetFocus()
+            return
 
         models = radio_backend.list_radio_models()
         dlg = DownloadDialog(self, radio_backend.list_serial_ports, models,
@@ -1571,102 +1791,6 @@ class MainWindow(wx.Frame):
         elif applied:
             self.announce.announce("No settings were changed.")
         self.grid.SetFocus()
-
-    # -- query sources ------------------------------------------------
-
-    def on_query_source(self, key: str) -> None:
-        """Radio > Query Source > <name>.
-
-        Opens QueryParamsDialog to gather any source-specific parameters, then
-        runs the fetch on a background thread and imports results via
-        _import_results (shared with Import from File). Requires a loaded radio —
-        gated in the menu and guarded here.
-        """
-        from chirp_backend import query
-        from vrp.query_dialogs import QueryParamsDialog
-
-        if not radio_backend.get_state().loaded:
-            self.announce.announce(
-                "Open or download a radio first; query results import into it.",
-                assertive=True,
-            )
-            return
-        source = query.get_source(key)
-        if source is None:
-            return
-        dlg = QueryParamsDialog(self, source)
-        ok = dlg.ShowModal() == wx.ID_OK
-        params = dlg.get_params() if ok else None
-        dlg.Destroy()
-        if not ok:
-            self.grid.SetFocus()
-            return
-        self._run_query(key, source, params)
-
-    def _run_query(self, key: str, source: dict, params: dict | None) -> None:
-        """Start the background fetch for a query source (ported from app.py)."""
-        from chirp_backend import query
-        from vrp.serial_dialogs import CloneProgressDialog
-
-        radio_result = query.make_source_radio(key)
-        if radio_result is None:
-            self.announce.announce(
-                f"Could not load source {source['label']}.", assertive=True
-            )
-            self.grid.SetFocus()
-            return
-
-        progress = CloneProgressDialog(
-            self, f"Querying {source['label']}", allow_cancel=True
-        )
-        self.Disable()
-        progress.Show()
-        throttle = {"t": 0.0, "decade": -1}
-
-        def progress_cb(msg, percent):  # background thread
-            now = time.monotonic()
-            pct = int(percent or 0)
-            speak = (now - throttle["t"] >= 1.0) or (pct // 10 != throttle["decade"])
-            if speak:
-                throttle["t"] = now
-                throttle["decade"] = pct // 10
-            wx.CallAfter(self._on_query_progress, progress, msg, pct, speak)
-
-        def worker():
-            ok, message = query.run_fetch(radio_result, params or {}, progress_cb)
-            wx.CallAfter(
-                self._on_query_done, source, progress, radio_result, ok, message
-            )
-
-        threading.Thread(target=worker, daemon=True).start()
-
-    def _on_query_progress(
-        self, progress, msg: str, percent: int, speak: bool
-    ) -> None:
-        progress.update(percent, 100, msg)
-        if speak and msg:
-            self.announce.announce(msg)
-
-    def _on_query_done(
-        self, source: dict, progress, radio_result, ok: bool, message: str
-    ) -> None:
-        from chirp_backend import query
-
-        cancelled = progress.is_cancelled()
-        progress.Destroy()
-        self.Enable()
-        self.grid.SetFocus()
-
-        if cancelled:
-            self.announce.announce("Query cancelled.")
-            return
-        if not ok:
-            self.announce.announce(message, assertive=True)
-            wx.MessageBox(message, "Query failed", wx.OK | wx.ICON_ERROR, self)
-            return
-        self.announce.announce(f"{source['label']}: {message}")
-        if query.result_count(radio_result) > 0:
-            self._import_results(radio_result, query.result_count(radio_result))
 
     def on_radio_info(self, _evt=None) -> None:
         """Radio > Radio Info — plain-text summary of the loaded radio.

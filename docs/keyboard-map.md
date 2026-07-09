@@ -43,7 +43,6 @@ arrow keys move across top-level menus; NVDA reads it like any native app menu.
 | Radio | Upload to Radio | `Ctrl+Shift+U` | needs a loaded radio |
 | Radio | Favorite radios… | — | manage starred radios (no loaded radio needed); used by Download's Favorites toggle; has a **Radio details…** button |
 | Radio | Radio Info… | — | needs a loaded radio; opens a read-only, navigable, copyable edit box |
-| Radio | Query Source ▸ … | — | needs a loaded radio; one item per registered source |
 | Radio | Settings… | `Ctrl+Shift+P` | needs a loaded radio |
 | Channels | Edit channel… | `Ctrl+E` | needs a loaded radio; all fields (also `Enter` / double-click on the grid) |
 | Channels | Edit cell… | `F2` | needs a loaded radio; edits the focused cell (the column at the Left/Right cursor) |
@@ -71,6 +70,17 @@ How many to show is set by **File ▸ Preferences ▸ Recently opened files to
 show** (a 0–9 chooser): **0 removes the submenu entirely**, 1–9 shows that
 many. Recent entries are menu-only (no Ctrl shortcut); a file that no longer
 exists is announced and dropped from the list when chosen.
+
+**Unsaved-changes guard.** Any step that would discard the working image —
+**Exit** / the window close button, **Open** (or Open Recent) over a modified
+image, **Close Image**, and **Download from Radio** — first checks whether the
+loaded image has unsaved channel edits. If so, a native, focus-trapped
+**Save / Don't save / Cancel** dialog appears (title "Unsaved changes",
+`Escape` = Cancel). *Save* saves (falling back to Save As for a never-saved
+download) then proceeds; *Don't save* discards and proceeds; *Cancel* (or a
+failed/cancelled save) aborts and returns focus to the grid. A clean, unedited
+image is never prompted. "Unsaved changes: Yes/No" is also shown in **Radio ▸
+Radio Info**.
 
 ## Channel grid navigation and selection
 
@@ -172,6 +182,10 @@ Copy to…, Sort…, Arrange (compact). Only the chosen operation's parameters s
 (shift mode, destination, sort column/order). Destructive/reordering ops show a
 native confirm dialog stating the range and count. After an op the grid
 refreshes, focus lands on the result channel, and the result is announced.
+**Delete and shift up** requires a **contiguous** run (no gaps): a gappy
+advanced list like `1-3,5` is rejected with a spoken error and no change, since
+the shift distance is only well-defined for a solid range (use plain Delete, or
+one run at a time).
 
 ### Find
 
@@ -232,17 +246,29 @@ intentionally not implemented — Export to CSV is the accessible equivalent.
 
 ### Query sources
 
-Radio ▸ Query Source ▸ (a source) opens a native param dialog (with the source's
-attribution + a descriptive Terms-of-Service link), then fetches on a background
-thread with the shared progress dialog (status announced). On success it
-announces the result count and opens an import dialog: a destination channel
-(defaults to the first empty channel) + Overwrite/Skip for occupied channels.
-Import adapts each memory for the target radio (CHIRP import_logic) and announces
-the counts. Reached via the menu (Alt → R → Q → source); no Ctrl shortcut (too
-many sources). Disabled until a radio is loaded. Wired now: AMSAT, SatNOGS,
-DMR-MARC (city/state/country) and mapy73.pl (network choice). Still deferred:
-RepeaterBook (dynamic country→state cascade), RadioReference (credentials/login),
-and przemienniki.net/.eu (band/mode code mapping + coordinates).
+**RepeaterBook** is wired: **Radio ▸ Query Source ▸ RepeaterBook…** (menu-only,
+no Ctrl shortcut; disabled until a radio is loaded — results import into it).
+The dialog gathers country/state plus optional filters (search text, open-only,
+mode, and **band** — a group of native checkboxes, one per amateur band
+10 m…23 cm, RT-Systems style; leave all clear for any). Band filtering is
+client-side (CHIRP's `included_band`), so it narrows the results shown without
+needing server support. The fetch runs on a background thread behind a
+cancellable progress dialog. Results then appear in a **multi-select picker** (`RepeaterBookResults
+Dialog`, a `wx.ListBox` with `LB_MULTIPLE`): arrow through the repeaters, press
+**Space** to include/exclude each (all start included), with **Select all** /
+**Unselect all** buttons and a **Back to search** button that returns to the
+query dialog with the previous inputs preserved (query → results loops until
+Import or Cancel). The checked rows flow through the shared
+`ImportDestinationDialog` + `memory_ops.import_memories` (its `numbers=`
+argument limits the import to the checked source channels). A checkbox list
+(`wx.CheckListBox`) was avoided — its per-item checkboxes read unreliably under
+NVDA; a multi-select ListBox announces each row and its selected state. It currently pulls from **CHIRP's mirror**
+(`data.chirpmyradio.com/rb/`, generic CHIRP User-Agent, no credential) — the
+direct RepeaterBook API is a localized swap in
+`chirp_backend/repeaterbook.py` once RepeaterBook issues VRP a User-Agent.
+
+The earlier Phase 7 sources (AMSAT, SatNOGS, DMR-MARC, mapy73.pl) were removed;
+**RadioReference** will be added back purpose-built after RepeaterBook.
 
 ### Banks
 
