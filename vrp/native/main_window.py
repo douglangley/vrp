@@ -305,6 +305,13 @@ class MainWindow(wx.Frame):
         m.AppendSeparator()
         self._add(m, "settings", "&Settings…\tCtrl+Shift+P", self.on_settings, needs_radio=True)
         self._add(m, "radio_info", "Radio &Info…", self.on_radio_info, needs_radio=True)
+        m.AppendSeparator()
+        # Query Source submenu (online repeater directories). Gated on a loaded
+        # radio — results import into it. RadioReference will slot in here later.
+        query = wx.Menu()
+        self._add(query, "query_repeaterbook", "&RepeaterBook…",
+                  self.on_repeaterbook, needs_radio=True)
+        m.AppendSubMenu(query, "&Query Source")
         return m
 
     def _build_channels_menu(self) -> wx.Menu:
@@ -1414,6 +1421,89 @@ class MainWindow(wx.Frame):
             if mem is None or getattr(mem, "empty", True):
                 return n
         return low
+
+    def on_repeaterbook(self, _evt=None) -> None:
+        """Radio ▸ Query Source ▸ RepeaterBook.
+
+        Gathers the query (country/state + filters) in RepeaterBookQueryDialog,
+        runs the fetch on a background thread, and imports the results into the
+        loaded radio via the shared _import_results flow. Requires a loaded
+        radio (results import into it) — gated in the menu and guarded here.
+        """
+        from vrp.query_dialogs import RepeaterBookQueryDialog
+
+        if not radio_backend.get_state().loaded:
+            self.announce.announce(
+                "Open or download a radio first; RepeaterBook results import "
+                "into it.",
+                assertive=True,
+            )
+            return
+        dlg = RepeaterBookQueryDialog(self)
+        ok = dlg.ShowModal() == wx.ID_OK
+        params = dlg.get_params() if ok else None
+        dlg.Destroy()
+        if not ok:
+            self.grid.SetFocus()
+            return
+        self._run_repeaterbook_query(params)
+
+    def _run_repeaterbook_query(self, params: dict) -> None:
+        """Start the background RepeaterBook fetch behind a progress dialog."""
+        from chirp_backend import repeaterbook
+        from vrp.serial_dialogs import CloneProgressDialog
+
+        progress = CloneProgressDialog(
+            self, "Querying RepeaterBook", allow_cancel=True
+        )
+        self.Disable()
+        progress.Show()
+        throttle = {"t": 0.0, "decade": -1}
+
+        def progress_cb(msg, percent):  # background thread
+            now = time.monotonic()
+            pct = int(percent or 0)
+            speak = (now - throttle["t"] >= 1.0) or (pct // 10 != throttle["decade"])
+            if speak:
+                throttle["t"] = now
+                throttle["decade"] = pct // 10
+            wx.CallAfter(self._on_query_progress, progress, msg, pct, speak)
+
+        def worker():
+            ok, message, result = repeaterbook.fetch(params, progress_cb)
+            wx.CallAfter(
+                self._on_repeaterbook_done, progress, result, ok, message
+            )
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _on_query_progress(self, progress, msg: str, percent: int, speak: bool) -> None:
+        progress.update(percent, 100, msg)
+        if speak and msg:
+            self.announce.announce(msg)
+
+    def _on_repeaterbook_done(self, progress, result, ok: bool, message: str) -> None:
+        from chirp_backend import repeaterbook
+
+        cancelled = progress.is_cancelled()
+        progress.Destroy()
+        self.Enable()
+        self.grid.SetFocus()
+
+        if cancelled:
+            self.announce.announce("RepeaterBook query cancelled.")
+            return
+        if not ok:
+            self.announce.announce(message, assertive=True)
+            self._show_error("RepeaterBook query failed", message)
+            return
+        count = repeaterbook.result_count(result) if result else 0
+        if count <= 0:
+            # A successful query with no matches — not an error.
+            self.announce.announce(message)
+            return
+        self.announce.announce(f"RepeaterBook: {message}")
+        self._import_results(result, count)
 
     def on_export_csv(self, _evt=None) -> None:
         """File > Export — write the loaded radio's channels to a CSV file."""

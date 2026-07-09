@@ -246,12 +246,18 @@ intentionally not implemented — Export to CSV is the accessible equivalent.
 
 ### Query sources
 
-Online query sources (RepeaterBook, RadioReference, etc.) are **not currently
-wired**. The earlier Phase 7 sources (AMSAT, SatNOGS, DMR-MARC, mapy73.pl) were
-removed; RepeaterBook (pending API access) and RadioReference will be added back
-purpose-built. The shared import destination dialog (`ImportDestinationDialog`)
-and `memory_ops.import_memories` remain — they back Import from File and will
-back a future query import.
+**RepeaterBook** is wired: **Radio ▸ Query Source ▸ RepeaterBook…** (menu-only,
+no Ctrl shortcut; disabled until a radio is loaded — results import into it).
+The dialog gathers country/state plus optional filters (search text, open-only,
+mode); the fetch runs on a background thread behind a cancellable progress
+dialog, then flows through the shared `ImportDestinationDialog` +
+`memory_ops.import_memories`. It currently pulls from **CHIRP's mirror**
+(`data.chirpmyradio.com/rb/`, generic CHIRP User-Agent, no credential) — the
+direct RepeaterBook API is a localized swap in
+`chirp_backend/repeaterbook.py` once RepeaterBook issues VRP a User-Agent.
+
+The earlier Phase 7 sources (AMSAT, SatNOGS, DMR-MARC, mapy73.pl) were removed;
+**RadioReference** will be added back purpose-built after RepeaterBook.
 
 ### Banks
 

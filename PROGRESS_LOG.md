@@ -6,6 +6,55 @@ architecture, keyboard map, and CHIRP feature-coverage checklist.
 
 ---
 
+## 2026-07-09 — RepeaterBook query source (via CHIRP's mirror)
+
+Added RepeaterBook back as a purpose-built query source (Phase 7). It fetches
+through **CHIRP's mirror** — `https://data.chirpmyradio.com/rb/<state>.xz`, the
+generic `CHIRP/<ver>` User-Agent — so it needs **no RepeaterBook credential or
+custom User-Agent** and works today, while we wait for RepeaterBook to issue VRP
+its own per-application User-Agent.
+
+**Why the mirror:** CHIRP's own RepeaterBook driver never queries RepeaterBook's
+API directly; it downloads pre-built, state/country-cached JSON dumps from
+CHIRP's server. There is no RepeaterBook-issued User-Agent anywhere in CHIRP to
+borrow — CHIRP satisfies RepeaterBook's UA policy server-side, on the mirror.
+
+**Backend** — `chirp_backend/repeaterbook.py` wraps CHIRP's tested
+`chirp.sources.repeaterbook.RepeaterBook`:
+- `countries()` / `states(country)` / `modes()` re-export CHIRP's geography
+  lists (single source of truth). Only US/Canada/Mexico are queried per-state;
+  every other country is fetched whole (`states()` → `[]`).
+- `build_params(...)` guarantees every key `do_fetch` pops with no default
+  (`lat`/`lon`/`dist`/`openonly`/`cached`/`state`) is present. Proximity search
+  is off in v1 (no lat/lon UI).
+- `fetch(params, progress_cb, radio=None)` runs `do_fetch` on the caller's
+  thread, adapts CHIRP's `QueryStatus` to a progress callback, and returns
+  `(ok, message, result_radio)`. Installs the same guarded gettext `_` shim as
+  `radio._ensure_chirp` (do_fetch calls `_('No results!')`) without loading the
+  552 drivers. `radio=` is injectable for tests.
+- **Direct-API seam:** the source is a named subclass `VRPRepeaterBook`; when
+  RepeaterBook grants a UA, set `USER_AGENT` and override `get_data` to hit their
+  endpoint. Everything above `get_data` (filtering, `item_to_memory`) is reused.
+
+**UI** — `RepeaterBookQueryDialog` (`vrp/query_dialogs.py`): country/state
+cascade (state disabled, not hidden, for whole-country fetches), search text,
+open-only checkbox, mode CheckListBox. Every control has a label + `SetName`;
+real modal, Escape = Cancel. Wired as **Radio ▸ Query Source ▸ RepeaterBook…**
+(re-created submenu, gated on a loaded radio). `on_repeaterbook` →
+`_run_repeaterbook_query` (background thread + `CloneProgressDialog`) →
+`_on_repeaterbook_done` → shared `_import_results` (`ImportDestinationDialog` +
+`memory_ops.import_memories`). Re-added the `_on_query_progress` helper removed
+with the old query code.
+
+**Verified:** `uv run python -m pytest` → **246 passed** (+17: 14 backend, 3
+dialog). Live end-to-end drive: loaded a real UV-5R image, fetched 22
+Portland-area open-FM repeaters from the mirror, imported 21 (2 overwritten, 1
+skipped; CHIRP's import_logic correctly rejected a 927 MHz repeater the UV-5R
+can't hold), channel 0 read back `145.2300 MHz 'COUNCIL'`, `is_modified` set.
+Menu wiring smoke-checked headless (item present, gated, disabled with no radio).
+**Owed:** NVDA pass on the query dialog + progress; the direct RepeaterBook API
+once they issue VRP a User-Agent.
+
 ## 2026-07-05 — Code cleanup & debug pass (code-cleanup.md, phases 1–5)
 
 Worked through `code-cleanup.md` (a phased source-review plan). 10 commits on

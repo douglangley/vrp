@@ -56,7 +56,7 @@ update (`git pull` ./chirp) in case new dialogs appear.
 | Download from Radio              | 4         | ☑ (verified on real hardware — Baofeng UV-5R Mini, COM4, 2026-06-23) |
 | Upload to Radio                  | 4         | ☑ (verified on real hardware — Baofeng UV-5R Mini, COM4, 2026-06-24) |
 | Query framework + import         | 7         | ☐ (removed 2026-07-05; import-destination dialog kept for Import from File) |
-| Query: RepeaterBook              | 7         | ☐ (to be added purpose-built once API access is granted) |
+| Query: RepeaterBook              | 7         | ◐ (wired via CHIRP's mirror — Radio ▸ Query Source ▸ RepeaterBook; direct API pending VRP User-Agent) |
 | Query: RadioReference            | 7         | ☐ (to be added purpose-built after RepeaterBook) |
 | Auto edits toggle                | 8         | ☑ (offset always-on; mode/step/tone via Preferences ▸ Apply band-plan defaults; duplex intentionally manual) |
 | Select bandplan                  | 8         | ☐      |

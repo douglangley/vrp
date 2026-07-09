@@ -42,8 +42,14 @@ Query sources (Phase 7):
   `chirp_backend/query.py` framework and `QueryParamsDialog` are gone; the shared
   `ImportDestinationDialog` + `memory_ops.import_memories` stay (they back Import
   from File and will back a future query import). Recoverable from git history.
-- ☐ RepeaterBook — to be added back **purpose-built** once the developer grants
-  API access (needs a country→state cascade + the API key/param form).
+- ◐ RepeaterBook — **wired via CHIRP's mirror** (2026-07-09). Radio ▸ Query
+  Source ▸ RepeaterBook…: country→state cascade + filter/open-only/mode form,
+  background fetch, shared import flow. Backend `chirp_backend/repeaterbook.py`
+  wraps CHIRP's tested source, which pulls pre-built dumps from
+  `data.chirpmyradio.com/rb/` with the generic CHIRP User-Agent (no credential).
+  **Owed:** the direct RepeaterBook API — a localized `VRPRepeaterBook.get_data`
+  override + `USER_AGENT`, once RepeaterBook issues VRP a per-app User-Agent;
+  and an NVDA pass on the query dialog + progress.
 - ☐ RadioReference — purpose-built after RepeaterBook (credentials/login form).
 
 Smaller deferred items (chirp-feature-coverage.md "☐"/"◐" rows):
