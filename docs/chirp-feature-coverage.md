@@ -24,7 +24,7 @@ update (`git pull` ./chirp) in case new dialogs appear.
 | Open Recent            | config    | ☑      |
 | Save / Save As         | 1         | ☑      |
 | Import (from image)    | 8         | ☑      |
-| Export (to CSV)        | 8         | ☑      |
+| Export (to CSV)        | 8         | ☑ (whole image via File ▸ Export; a selected subset via the row context menu + Bulk operations dialog) |
 | Load Module            | 8         | ☐      |
 | Print / Print Preview  | 8         | ✗ (intentional — covered by Export to CSV; native print is inaccessible) |
 | Close Image / Exit     | 1 / 0     | ☑      |

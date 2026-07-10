@@ -30,6 +30,7 @@ OPERATIONS = [
     ("copy_to", "Copy to…"),
     ("sort", "Sort…"),
     ("arrange", "Arrange (compact, remove empty)"),
+    ("export_csv", "Export to CSV…"),
 ]
 
 

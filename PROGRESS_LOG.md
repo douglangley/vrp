@@ -6,6 +6,35 @@ architecture, keyboard map, and CHIRP feature-coverage checklist.
 
 ---
 
+## 2026-07-10 — Export a channel *selection* to CSV
+
+VRP already had File ▸ Export to CSV (whole image). Added **subset export** so a
+user can send someone just the relevant portion of their memories for import:
+
+- **Backend** (`chirp_backend/radio.py`): `export_to_csv(path, numbers=None)`
+  grew an optional `numbers` arg. `None` keeps the old whole-image behavior;
+  an iterable of channel numbers exports only those, after de-duping, sorting,
+  and dropping out-of-range slots (so a repeated or bogus selection can't error
+  or double-export). Empty slots in the requested set are skipped as before; an
+  all-empty selection returns "No channels to export." and writes no file.
+- **Row context menu** (`main_window.on_grid_context_menu`): new "Export
+  selected channels to CSV…" (labelled "Export channel N to CSV…" for one),
+  next to Copy/Cut → new `on_export_selected_csv` handler.
+- **Bulk operations dialog** (`vrp/ops_dialog.py`): new `("export_csv", "Export
+  to CSV…")` operation — uses the dialog's existing From/To + advanced-list
+  selection, no extra params. `on_organize` intercepts it before the
+  confirm/undo/refresh path (it's read-only) and routes to the shared exporter.
+- **Shared** `MainWindow._do_csv_export(numbers=None)` — prompts (native save
+  dialog + overwrite prompt), calls the backend, announces the count/error, and
+  returns focus to the grid. File ▸ Export, the context menu, and the Bulk
+  dialog all funnel through it; File ▸ Export is unchanged (numbers=None).
+
+Tests: `tests/test_export_csv.py` (+5 — export-all, subset, de-dupe/skip-empty/
+out-of-range, empty-selection message + no file written, no-radio guard),
+verified by reading the exported CSV's Location column back. Full suite **270
+passed**. **Owed: NVDA pass on the new context-menu item + the Bulk dialog's
+Export operation.**
+
 ## 2026-07-09 — RepeaterBook band filter
 
 A state query returns far too many repeaters for a given radio (Oregon open FM =

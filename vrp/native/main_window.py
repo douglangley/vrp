@@ -545,6 +545,11 @@ class MainWindow(wx.Frame):
         else:
             disabled = menu.Append(wx.ID_ANY, "&Paste\tCtrl+V")
             disabled.Enable(False)  # nothing on the clipboard yet
+        add(
+            "E&xport selected channels to CSV…" if sel > 1
+            else f"E&xport channel {number} to CSV…",
+            self.on_export_selected_csv,
+        )
         menu.AppendSeparator()
         add("Move &up\tCtrl+Shift+Up", self.on_move_up)
         add("Move &down\tCtrl+Shift+Down", self.on_move_down)
@@ -964,6 +969,11 @@ class MainWindow(wx.Frame):
             op = dlg.get_operation()
 
         key = op["op"]
+        if key == "export_csv":
+            # Not a memory mutation: no confirm, undo, or grid refresh — just
+            # write the chosen channels out to a separate CSV file.
+            self._do_csv_export(numbers)
+            return
         confirm = self._op_confirm_message(key, op, numbers)
         if confirm and not self._confirm(confirm):
             return
@@ -1549,12 +1559,33 @@ class MainWindow(wx.Frame):
         self._import_results(result, len(selected), numbers=selected)
 
     def on_export_csv(self, _evt=None) -> None:
-        """File > Export — write the loaded radio's channels to a CSV file."""
+        """File > Export — write the loaded radio's whole set of channels to a
+        CSV file."""
+        self._do_csv_export()
+
+    def on_export_selected_csv(self, _evt=None) -> None:
+        """Export just the selected (or focused) channels to CSV — reachable
+        from the row context menu and the Bulk operations dialog. Lets a user
+        send only the relevant portion of their memories to someone else for
+        import."""
+        self._do_csv_export(self.grid.selected_channel_numbers())
+
+    def _do_csv_export(self, numbers=None) -> None:
+        """Prompt for a path and export channels to CSV. ``numbers`` restricts
+        the export to that selection; ``None`` exports the whole image. Shared
+        by File > Export, the context menu, and the Bulk operations dialog."""
         if not radio_backend.get_state().loaded:
             self.announce.announce("No radio image is open.")
             return
+        if numbers is not None and not numbers:
+            self.announce.announce("No channel selected.", assertive=True)
+            return
+        title = (
+            "Export channels to CSV file" if numbers is None
+            else f"Export {len(numbers)} selected channel(s) to CSV file"
+        )
         with wx.FileDialog(
-            self, "Export channels to CSV file",
+            self, title,
             wildcard="CSV files (*.csv)|*.csv|All files (*.*)|*.*",
             style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT,
         ) as dlg:
@@ -1564,7 +1595,7 @@ class MainWindow(wx.Frame):
         if not os.path.splitext(path)[1]:
             path += ".csv"
 
-        ok, message, _count = radio_backend.export_to_csv(path)
+        ok, message, _count = radio_backend.export_to_csv(path, numbers)
         self.announce.announce(message, assertive=not ok)
         if not ok:
             wx.MessageBox(message, "Export", wx.OK | wx.ICON_ERROR, self)

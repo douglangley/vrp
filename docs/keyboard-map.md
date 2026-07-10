@@ -106,7 +106,7 @@ speaks `"<value>, <column>"` through its supplemental (prism) speech.
 | `Ctrl+E` / `Enter` | Edit the focused channel — **all** fields (full dialog) |
 | `F2` | Edit the **focused cell** in a single-field dialog — the column at the Left/Right cursor (Windows and macOS). The row-header or a read-only column falls back to the full dialog. On platforms without the cell cursor (GTK), F2 first asks which field via a picker, then edits it |
 | `Del` | Delete the selected channel(s) (Channels-menu accelerator) |
-| `Applications` key / `Shift+F10` | Open the row context menu (Edit channel / Edit cell / Delete / Copy / Cut / Paste / Move up/down / Move to / Bulk operations / Go to / Banks). The generic Windows DataViewCtrl raises this for the Applications key and a right-click natively; VRP wires `Shift+F10` itself (`ChannelGrid._on_grid_key`) since the control doesn't |
+| `Applications` key / `Shift+F10` | Open the row context menu (Edit channel / Edit cell / Delete / Copy / Cut / Paste / Export to CSV / Move up/down / Move to / Bulk operations / Go to / Banks). The generic Windows DataViewCtrl raises this for the Applications key and a right-click natively; VRP wires `Shift+F10` itself (`ChannelGrid._on_grid_key`) since the control doesn't |
 
 ## Reorganizing channels
 
@@ -178,7 +178,9 @@ activate" hint); immutable fields are disabled and labeled "(read only)".
 per-row checkboxes. Selection is a contiguous From/To range by default, with an
 optional advanced field that takes a channel list like `1-5,8,10-12`. Pick one
 operation: Delete, Delete and shift up, Insert blank, Move up/down, Move to…,
-Copy to…, Sort…, Arrange (compact). Only the chosen operation's parameters show
+Copy to…, Sort…, Arrange (compact), Export to CSV… (writes just the selected
+channels to a separate CSV file — no confirm, nothing on the image changes).
+Only the chosen operation's parameters show
 (shift mode, destination, sort column/order). Destructive/reordering ops show a
 native confirm dialog stating the range and count. After an op the grid
 refreshes, focus lands on the result channel, and the result is announced.
@@ -239,7 +241,11 @@ import-destination dialog + import op (adapts each memory via CHIRP import_logic
 overwrite/skip, announces counts, focuses the first imported channel). File ▸
 Export to CSV… writes the loaded radio's non-empty channels to a CSV via CHIRP's
 generic_csv driver (native save dialog with overwrite prompt; announces count +
-file). Radio ▸ Radio Info… shows the loaded radio's specs in a read-only,
+file). You can also export **just a selection**: the row context menu's "Export
+selected channels to CSV…" and the Bulk operations dialog's "Export to CSV…"
+operation write only the chosen channels (skipping empty slots), so you can send
+someone the relevant portion of your memories for import. Radio ▸ Radio Info…
+shows the loaded radio's specs in a read-only,
 navigable, copyable edit box (`vrp/info_dialog.py`). All three are menu-only (no
 Ctrl shortcut) and disabled until a radio is loaded. Native printing is
 intentionally not implemented — Export to CSV is the accessible equivalent.
