@@ -106,7 +106,7 @@ speaks `"<value>, <column>"` through its supplemental (prism) speech.
 | `Ctrl+E` / `Enter` | Edit the focused channel — **all** fields (full dialog) |
 | `F2` | Edit the **focused cell** in a single-field dialog — the column at the Left/Right cursor (Windows and macOS). The row-header or a read-only column falls back to the full dialog. On platforms without the cell cursor (GTK), F2 first asks which field via a picker, then edits it |
 | `Del` | Delete the selected channel(s) (Channels-menu accelerator) |
-| `Applications` key / `Shift+F10` | Open the row context menu (Edit channel / Edit cell / Delete / Copy / Cut / Paste / Move up/down / Move to / Bulk operations / Go to / Banks). The generic Windows DataViewCtrl raises this for the Applications key and a right-click natively; VRP wires `Shift+F10` itself (`ChannelGrid._on_grid_key`) since the control doesn't |
+| `Applications` key / `Shift+F10` | Open the row context menu (Edit channel / Edit cell / Delete / Copy / Cut / Paste / Export to CSV / Move up/down / Move to / Sort selected by [Name / Receive frequency / Transmit frequency] when 2+ are selected / Bulk operations / Go to / Banks). The generic Windows DataViewCtrl raises this for the Applications key and a right-click natively; VRP wires `Shift+F10` itself (`ChannelGrid._on_grid_key`) since the control doesn't |
 
 ## Reorganizing channels
 
@@ -178,7 +178,9 @@ activate" hint); immutable fields are disabled and labeled "(read only)".
 per-row checkboxes. Selection is a contiguous From/To range by default, with an
 optional advanced field that takes a channel list like `1-5,8,10-12`. Pick one
 operation: Delete, Delete and shift up, Insert blank, Move up/down, Move to…,
-Copy to…, Sort…, Arrange (compact). Only the chosen operation's parameters show
+Copy to…, Sort…, Arrange (compact), Export to CSV… (writes just the selected
+channels to a separate CSV file — no confirm, nothing on the image changes).
+Only the chosen operation's parameters show
 (shift mode, destination, sort column/order). Destructive/reordering ops show a
 native confirm dialog stating the range and count. After an op the grid
 refreshes, focus lands on the result channel, and the result is announced.
@@ -186,6 +188,16 @@ refreshes, focus lands on the result channel, and the result is announced.
 advanced list like `1-3,5` is rejected with a spoken error and no change, since
 the shift distance is only well-defined for a solid range (use plain Delete, or
 one run at a time).
+
+**Sort** works on any selection, contiguous or not. The sort keys include the
+grid columns plus a synthetic **Transmit frequency** (computed from frequency +
+duplex + offset). A non-contiguous selection like `1,3,5` is handled safely: the
+target slots are the selected numbers in ascending order, and the sorted
+channel *contents* are written back into those same slots in order (frequencies
+sort numerically, names case-insensitively; the in-between channels are left
+alone). The row context menu also has a quick **Sort selected channels by ▸
+Name / Receive frequency / Transmit frequency** submenu (ascending) that appears
+when two or more channels are selected.
 
 ### Find
 
@@ -239,7 +251,11 @@ import-destination dialog + import op (adapts each memory via CHIRP import_logic
 overwrite/skip, announces counts, focuses the first imported channel). File ▸
 Export to CSV… writes the loaded radio's non-empty channels to a CSV via CHIRP's
 generic_csv driver (native save dialog with overwrite prompt; announces count +
-file). Radio ▸ Radio Info… shows the loaded radio's specs in a read-only,
+file). You can also export **just a selection**: the row context menu's "Export
+selected channels to CSV…" and the Bulk operations dialog's "Export to CSV…"
+operation write only the chosen channels (skipping empty slots), so you can send
+someone the relevant portion of your memories for import. Radio ▸ Radio Info…
+shows the loaded radio's specs in a read-only,
 navigable, copyable edit box (`vrp/info_dialog.py`). All three are menu-only (no
 Ctrl shortcut) and disabled until a radio is loaded. Native printing is
 intentionally not implemented — Export to CSV is the accessible equivalent.
@@ -266,6 +282,20 @@ NVDA; a multi-select ListBox announces each row and its selected state. It curre
 (`data.chirpmyradio.com/rb/`, generic CHIRP User-Agent, no credential) — the
 direct RepeaterBook API is a localized swap in
 `chirp_backend/repeaterbook.py` once RepeaterBook issues VRP a User-Agent.
+
+**Frequency lists** (CHIRP stock configs) is wired directly beneath it: **Radio ▸
+Query Source ▸ Frequency lists…** (menu-only, disabled until a radio is loaded).
+It imports one of CHIRP's ~20 curated CSV lists (NOAA weather, US/CA FRS+GMRS,
+MURS, Marine VHF, aviation, railroad, EU PMR/LPD, …) into the loaded radio — a
+*local* import, no network. A filterable `FrequencyListDialog` (type-ahead
+`RadioListView` + a **Details…** button that previews the list's channels in the
+read-only `InfoDialog`) chooses the list; the whole list then imports through the
+same `ImportDestinationDialog` (start channel + overwrite/skip) +
+`memory_ops.import_memories`. The files are read from the pinned CHIRP tree
+(`chirp/stock_configs`) — no copy into the VRP repo; the frozen build bundles
+that one subdir via a targeted `--add-data` (see `chirp_backend/stock_configs.py`
+and `build.py`). Unlike CHIRP, which *opens* a stock config as its own document,
+VRP imports it into the working radio directly.
 
 The earlier Phase 7 sources (AMSAT, SatNOGS, DMR-MARC, mapy73.pl) were removed;
 **RadioReference** will be added back purpose-built after RepeaterBook.

@@ -348,10 +348,13 @@ def open_image_as_source(path: str) -> tuple:
         return None, f"Could not open image: {e}"
 
 
-def export_to_csv(path: str) -> tuple:
-    """Write the loaded radio's non-empty channels to a CSV file (a separate
-    file — does NOT change the working image's saved state). Returns
-    (ok, message, count)."""
+def export_to_csv(path: str, numbers=None) -> tuple:
+    """Write channels to a CSV file (a separate file — does NOT change the
+    working image's saved state). With ``numbers`` (an iterable of channel
+    numbers) only those channels are exported, so a user can send just the
+    relevant portion of their memories; with ``numbers=None`` the whole image's
+    non-empty channels are exported. Empty slots in the requested set are
+    skipped. Returns (ok, message, count)."""
     with _state_lock:
         if not _state.loaded:
             return False, "No radio loaded", 0
@@ -363,8 +366,14 @@ def export_to_csv(path: str) -> tuple:
     try:
         features = radio.get_features()
         lo, hi = features.memory_bounds
+        if numbers is None:
+            wanted = range(lo, hi + 1)
+        else:
+            # De-dupe, sort, and keep only in-range slots so an out-of-bounds or
+            # repeated selection can't error or double-export a channel.
+            wanted = sorted({n for n in numbers if lo <= n <= hi})
         rows = []
-        for n in range(lo, hi + 1):
+        for n in wanted:
             mem = radio.get_memory(n)
             if not getattr(mem, "empty", True):
                 rows.append(mem)

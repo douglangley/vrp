@@ -325,6 +325,66 @@ class TestSortRange:
         assert ok
         assert stub_radio.get_memory(0).name == "Zebra"
 
+    def test_sort_non_contiguous_uses_selected_slots(self, stub_radio):
+        # Values from scattered slots 0,2,4 are sorted and written back into
+        # those same slots in ascending order; the in-between slots are untouched.
+        _fill(stub_radio, (0, "Zebra"), (2, "Alpha"), (4, "Mike"), (1, "Keep1"), (3, "Keep3"))
+        from chirp_backend.memory_ops import sort_range
+        ok, msg, affected = sort_range([0, 2, 4], attr="name")
+        assert ok
+        assert affected == [0, 2, 4]
+        assert stub_radio.get_memory(0).name == "Alpha"
+        assert stub_radio.get_memory(2).name == "Mike"
+        assert stub_radio.get_memory(4).name == "Zebra"
+        # Untouched neighbours.
+        assert stub_radio.get_memory(1).name == "Keep1"
+        assert stub_radio.get_memory(3).name == "Keep3"
+
+    def test_sort_by_freq_is_numeric(self, stub_radio):
+        # A string sort would order 99 MHz after 146 MHz ('9' > '1'); numeric
+        # sort must place 99 MHz first.
+        from chirp_backend.memory_ops import sort_range
+        stub_radio.set_memory(StubMemory(0, freq=146_000_000, name="mid"))
+        stub_radio.set_memory(StubMemory(1, freq=99_000_000, name="low"))
+        stub_radio.set_memory(StubMemory(2, freq=440_000_000, name="high"))
+        ok, msg, affected = sort_range([0, 1, 2], attr="freq")
+        assert ok
+        assert stub_radio.get_memory(0).freq == 99_000_000
+        assert stub_radio.get_memory(1).freq == 146_000_000
+        assert stub_radio.get_memory(2).freq == 440_000_000
+        assert "receive frequency" in msg
+
+    def test_sort_by_transmit_frequency(self, stub_radio):
+        # tx = freq (+/-) offset by duplex; split -> offset is the tx freq.
+        from chirp_backend.memory_ops import sort_range
+        m0 = StubMemory(0, freq=146_000_000, name="plus")   # tx 146.6
+        m0.duplex, m0.offset = "+", 600_000
+        m1 = StubMemory(1, freq=145_000_000, name="simplex")  # tx 145.0
+        m1.duplex, m1.offset = "", 0
+        m2 = StubMemory(2, freq=147_000_000, name="minus")  # tx 146.4
+        m2.duplex, m2.offset = "-", 600_000
+        for m in (m0, m1, m2):
+            stub_radio.set_memory(m)
+        ok, msg, affected = sort_range([0, 1, 2], attr="txfreq")
+        assert ok
+        # Ascending tx order: 145.0 (simplex), 146.4 (minus), 146.6 (plus).
+        assert stub_radio.get_memory(0).name == "simplex"
+        assert stub_radio.get_memory(1).name == "minus"
+        assert stub_radio.get_memory(2).name == "plus"
+        assert "transmit frequency" in msg
+
+    def test_tx_frequency_helper(self):
+        from chirp_backend.memory_ops import tx_frequency
+        m = StubMemory(0, freq=146_000_000)
+        m.duplex, m.offset = "+", 600_000
+        assert tx_frequency(m) == 146_600_000
+        m.duplex = "-"
+        assert tx_frequency(m) == 145_400_000
+        m.duplex, m.offset = "split", 446_000_000
+        assert tx_frequency(m) == 446_000_000
+        m.duplex, m.offset = "", 600_000
+        assert tx_frequency(m) == 146_000_000
+
 
 # ---------------------------------------------------------------------------
 # Tests: find

@@ -6,6 +6,120 @@ architecture, keyboard map, and CHIRP feature-coverage checklist.
 
 ---
 
+## 2026-07-10 — Import from frequency lists (CHIRP stock configs)
+
+Added **Radio ▸ Query Source ▸ Frequency lists…** (directly under RepeaterBook)
+to import one of CHIRP's ~20 curated stock-config CSV lists (NOAA weather,
+US/CA FRS+GMRS, MURS, Marine VHF, aviation, railroad, EU PMR/LPD, …) into the
+loaded radio. Plan:
+`docs/superpowers/plans/2026-07-10-stock-configs-frequency-lists.md`.
+
+**Key insight:** VRP already had the whole import pipeline —
+`radio.open_image_as_source` opens a stock CSV as a source radio (they're plain
+generic_csv), and `_import_results` already prompts for the start channel +
+overwrite/skip via `ImportDestinationDialog`. So this is mostly wiring; the only
+new UI is a *which-list* chooser. Unlike CHIRP (which *opens* a stock config as
+its own document, then you copy from it), VRP imports it into the working radio.
+
+- **`chirp_backend/stock_configs.py` (new).** `stock_configs_dir()` resolves the
+  CSV dir — `sys._MEIPASS/chirp/stock_configs` when frozen, else the pinned CHIRP
+  tree (`<chirp pkg>/stock_configs`); `list_configs()` → sorted
+  `(display_name, path)` (`.csv` stripped, dotfiles/backers skipped);
+  `describe_config()` → a screen-reader-friendly channel-count + sample-rows
+  summary for the Details view.
+- **`FrequencyListDialog` (`vrp/query_dialogs.py`).** Filter box + type-ahead
+  `RadioListView` (SysListView32 on Windows / NSTableView elsewhere) + a
+  **Details…** button (opens the read-only `InfoDialog`) + Import/Cancel. Labels
+  created before controls (wxMSW MSAA rule), Escape = Cancel, focus opens on the
+  filter, Down-arrow drops into the list, Import disabled when the filter matches
+  nothing.
+- **`MainWindow.on_frequency_lists` + menu.** Gated on a loaded radio; opens the
+  chooser, then `open_image_as_source` → count → shared `_import_results` (focus
+  lands on the first imported channel, result announced).
+- **Packaging (`build.py` only).** One targeted `--add-data` bundles
+  `chirp/chirp/stock_configs` → `chirp/stock_configs` (the frozen resolver path).
+  **No copy into the VRP repo and no run-win/run-mac changes** — source runs read
+  the pinned CHIRP tree directly (the run scripts already clone + check out CHIRP
+  at `CHIRP_COMMIT`). `ensure_chirp_on_pin()` runs first, so the bundled CSVs
+  always match the tested pin.
+
+**Verified:** `tests/test_stock_configs.py` (+7: discovery/sort/`.csv`-strip,
+describe count+freq+truncation, frozen `_MEIPASS` resolution, end-to-end import
+into a loaded UV-5R) and `tests/test_frequency_list_dialog.py` (+6: populate,
+filter narrows, no-match disables Import, Import label, Details gating,
+label-before-control). Full suite **286 passed**. Driven end-to-end against the
+real UV-5R image: filtered to "US NOAA Weather Alert", Details read "10
+channel(s)…", imported all 10 into ch 20+ (`162.550 'WX1PA7'` at ch 20). The
+`--add-data` flag is well-formed (`SRC;DEST`); a **frozen build smoke** (verify
+the CSVs land in `dist/vrp/_internal/chirp/stock_configs` and import there) is
+owed alongside the **NVDA pass** on the chooser dialog. Possible follow-ups:
+user-supplied lists + per-channel multi-select.
+
+## 2026-07-10 — Sort selected channels (context menu + Transmit frequency), non-contiguous-safe
+
+Extended sort so a multi-channel selection can be reordered by **name, receive
+frequency, or transmit frequency**, from both the Bulk operations dialog and a
+new row context-menu submenu.
+
+- **Non-contiguous handled correctly.** `memory_ops.sort_range` already targeted
+  `sorted(numbers)` as the destination slots and wrote the sorted *contents*
+  back into them in order, so a scattered selection like `1,3,5` lands its
+  values in the right ascending slots (neighbours untouched). Added a guard test
+  proving it (`test_sort_non_contiguous_uses_selected_slots`).
+- **Numeric frequency sort (bug fix).** The old sort keyed **every** attribute as
+  a lowercased string, so sorting by `freq` ordered 99 MHz *after* 146 MHz
+  (`'9' > '1'`). Added `_NUMERIC_SORT_ATTRS` (`freq`/`offset`/`number`/`txfreq`)
+  so those sort numerically.
+- **Transmit frequency.** New `memory_ops.tx_frequency(mem)` computes tx the way
+  CHIRP does (split → offset; `-`/`+` → freq ∓/± offset; simplex/off → freq), and
+  `sort_range` accepts the synthetic `attr="txfreq"`. Not a stored column, so
+  `on_organize` appends `("txfreq", "Transmit frequency")` to the Bulk dialog's
+  sort choices.
+- **Context menu.** `on_grid_context_menu` gains a **"Sort N selected channels
+  by ▸ Name / Receive frequency / Transmit frequency"** submenu (ascending),
+  shown only when 2+ channels are selected → new `MainWindow._sort_selected`
+  (validates ≥2 selected, sorts, `refresh_numbers` in place — no rows shift —
+  reselects the block, focuses the first, announces the result). The Bulk dialog
+  keeps its ascending/descending control.
+- Sort message now reads "…by receive/transmit frequency" via `_SORT_LABELS`.
+
+**Verified:** unit tests `tests/test_memory_ops.py` (+4: non-contiguous, numeric
+freq, txfreq ordering, `tx_frequency` helper); full suite **274 passed**. Driven
+end-to-end against the real UV-5R image: the Bulk dialog emits
+`{'op':'sort','attr':'txfreq'}` for "Transmit frequency", and an unsorted
+non-contiguous selection `[4,0,2]` sorted by tx freq lands simplex/minus/plus
+(145.0 / 146.4 / 146.6 MHz tx) into slots 0/2/4. **Owed: NVDA pass on the new
+context-menu Sort submenu.**
+
+## 2026-07-10 — Export a channel *selection* to CSV
+
+VRP already had File ▸ Export to CSV (whole image). Added **subset export** so a
+user can send someone just the relevant portion of their memories for import:
+
+- **Backend** (`chirp_backend/radio.py`): `export_to_csv(path, numbers=None)`
+  grew an optional `numbers` arg. `None` keeps the old whole-image behavior;
+  an iterable of channel numbers exports only those, after de-duping, sorting,
+  and dropping out-of-range slots (so a repeated or bogus selection can't error
+  or double-export). Empty slots in the requested set are skipped as before; an
+  all-empty selection returns "No channels to export." and writes no file.
+- **Row context menu** (`main_window.on_grid_context_menu`): new "Export
+  selected channels to CSV…" (labelled "Export channel N to CSV…" for one),
+  next to Copy/Cut → new `on_export_selected_csv` handler.
+- **Bulk operations dialog** (`vrp/ops_dialog.py`): new `("export_csv", "Export
+  to CSV…")` operation — uses the dialog's existing From/To + advanced-list
+  selection, no extra params. `on_organize` intercepts it before the
+  confirm/undo/refresh path (it's read-only) and routes to the shared exporter.
+- **Shared** `MainWindow._do_csv_export(numbers=None)` — prompts (native save
+  dialog + overwrite prompt), calls the backend, announces the count/error, and
+  returns focus to the grid. File ▸ Export, the context menu, and the Bulk
+  dialog all funnel through it; File ▸ Export is unchanged (numbers=None).
+
+Tests: `tests/test_export_csv.py` (+5 — export-all, subset, de-dupe/skip-empty/
+out-of-range, empty-selection message + no file written, no-radio guard),
+verified by reading the exported CSV's Location column back. Full suite **270
+passed**. **Owed: NVDA pass on the new context-menu item + the Bulk dialog's
+Export operation.**
+
 ## 2026-07-09 — RepeaterBook band filter
 
 A state query returns far too many repeaters for a given radio (Oregon open FM =

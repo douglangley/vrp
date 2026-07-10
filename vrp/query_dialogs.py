@@ -225,6 +225,126 @@ class RepeaterBookQueryDialog(wx.Dialog):
         )
 
 
+class FrequencyListDialog(wx.Dialog):
+    """Choose one of CHIRP's stock frequency lists to import.
+
+    A filter box + a type-ahead ``RadioListView`` (native SysListView32 on
+    Windows for NVDA, NSTableView/GtkTreeView elsewhere) + an optional Details
+    button that shows the list's channels in the read-only ``InfoDialog``. The
+    import itself (start channel, overwrite/skip) is the shared
+    ``ImportDestinationDialog``, run by the caller after this returns.
+
+    Accessibility: each control's StaticText label is created immediately BEFORE
+    the control (wxMSW names a native control from the preceding static text; see
+    RepeaterBookQueryDialog). Real modal, Escape = Cancel, focus opens on the
+    filter, Down-arrow from the filter drops into the list. ``get_selection``
+    returns the chosen ``(display_name, path)`` or ``None``.
+    """
+
+    def __init__(self, parent, configs, *, describe_fn=None) -> None:
+        super().__init__(
+            parent, title="Import from frequency list",
+            style=wx.DEFAULT_DIALOG_STYLE | wx.RESIZE_BORDER,
+        )
+        from vrp.serial_dialogs import RadioListView
+
+        self._configs = list(configs)  # [(display_name, path), …]
+        self._filtered = list(self._configs)
+        self._describe_fn = describe_fn
+        outer = wx.BoxSizer(wx.VERTICAL)
+
+        # LABEL BEFORE CONTROL — load-bearing for the screen-reader name on
+        # Windows (see RepeaterBookQueryDialog for the full rationale).
+        outer.Add(wx.StaticText(self, label="Filter:"), 0, wx.LEFT | wx.TOP, 8)
+        self.filter = wx.TextCtrl(self)
+        self.filter.SetName("Frequency list filter")
+        outer.Add(self.filter, 0, wx.EXPAND | wx.LEFT | wx.RIGHT, 8)
+
+        outer.Add(
+            wx.StaticText(self, label="Frequency list:"), 0, wx.LEFT | wx.TOP, 8
+        )
+        self.list = RadioListView(
+            self, name="Frequency list", on_select=self._changed, size=(360, 240)
+        )
+        self.list.Set([name for name, _ in self._filtered])
+        outer.Add(self.list, 1, wx.EXPAND | wx.LEFT | wx.RIGHT, 8)
+
+        self.count = wx.StaticText(self, label=self._count_label(len(self._filtered)))
+        self.count.SetName("Frequency list count")
+        outer.Add(self.count, 0, wx.ALL, 8)
+
+        # Bottom row: [Details…] .... [Import] [Cancel].
+        bottom = wx.BoxSizer(wx.HORIZONTAL)
+        if self._describe_fn is not None:
+            self.details_btn = wx.Button(self, label="&Details…")
+            self.details_btn.Bind(wx.EVT_BUTTON, self._on_details)
+            bottom.Add(self.details_btn, 0, wx.ALIGN_CENTER_VERTICAL)
+        bottom.AddStretchSpacer()
+        std = self.CreateStdDialogButtonSizer(wx.OK | wx.CANCEL)
+        ok = self.FindWindowById(wx.ID_OK)
+        if ok:
+            ok.SetLabel("Import")
+        bottom.Add(std, 0, wx.ALIGN_CENTER_VERTICAL)
+        outer.Add(bottom, 0, wx.EXPAND | wx.ALL, 8)
+
+        self.SetSizerAndFit(outer)
+        self.SetEscapeId(wx.ID_CANCEL)
+
+        self.filter.Bind(wx.EVT_TEXT, lambda _e: self._apply_filter())
+        self.filter.Bind(wx.EVT_KEY_DOWN, self._on_filter_key)
+        self._update_ok()
+        self.filter.SetFocus()
+
+    @staticmethod
+    def _count_label(n: int) -> str:
+        return "1 list matches" if n == 1 else f"{n} lists match"
+
+    def _apply_filter(self) -> None:
+        text = self.filter.GetValue().strip().lower()
+        self._filtered = [
+            c for c in self._configs if text in c[0].lower()
+        ] if text else list(self._configs)
+        self.list.Set([name for name, _ in self._filtered])  # selects row 0
+        self.count.SetLabel(self._count_label(len(self._filtered)))
+        self._update_ok()
+
+    def _on_filter_key(self, event) -> None:
+        # Down-arrow from the filter drops into the list without clearing it.
+        if event.GetKeyCode() == wx.WXK_DOWN and self._filtered:
+            self.list.SetFocus()
+            if self.list.GetSelection() == wx.NOT_FOUND:
+                self.list.SetSelection(0)
+        else:
+            event.Skip()
+
+    def _changed(self) -> None:
+        self._update_ok()
+
+    def _update_ok(self) -> None:
+        ok = self.FindWindowById(wx.ID_OK)
+        if ok:
+            ok.Enable(bool(self._filtered))
+
+    def get_selection(self):
+        """The chosen ``(display_name, path)``, or ``None``."""
+        i = self.list.GetSelection()
+        return self._filtered[i] if 0 <= i < len(self._filtered) else None
+
+    def _on_details(self, _evt=None) -> None:
+        from vrp.info_dialog import InfoDialog
+
+        sel = self.get_selection()
+        if sel is None or self._describe_fn is None:
+            return
+        name, path = sel
+        text = self._describe_fn(path) or "No information is available."
+        dlg = InfoDialog(self, f"Frequency list — {name}", text,
+                         name="Frequency list details")
+        dlg.ShowModal()
+        dlg.Destroy()
+        self.list.SetFocus()
+
+
 class RepeaterBookResultsDialog(wx.Dialog):
     """Pick which fetched repeaters to import.
 

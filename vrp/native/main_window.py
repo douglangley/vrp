@@ -311,6 +311,8 @@ class MainWindow(wx.Frame):
         query = wx.Menu()
         self._add(query, "query_repeaterbook", "&RepeaterBook…",
                   self.on_repeaterbook, needs_radio=True)
+        self._add(query, "query_freqlists", "&Frequency lists…",
+                  self.on_frequency_lists, needs_radio=True)
         m.AppendSubMenu(query, "&Query Source")
         return m
 
@@ -545,10 +547,31 @@ class MainWindow(wx.Frame):
         else:
             disabled = menu.Append(wx.ID_ANY, "&Paste\tCtrl+V")
             disabled.Enable(False)  # nothing on the clipboard yet
+        add(
+            "E&xport selected channels to CSV…" if sel > 1
+            else f"E&xport channel {number} to CSV…",
+            self.on_export_selected_csv,
+        )
         menu.AppendSeparator()
         add("Move &up\tCtrl+Shift+Up", self.on_move_up)
         add("Move &down\tCtrl+Shift+Down", self.on_move_down)
         add("&Move to channel…\tCtrl+Shift+M", self.on_move_to)
+        # Sort the selected channels in place (values redistributed into the
+        # same slots in order — safe for a non-contiguous selection). Only
+        # meaningful with two or more selected.
+        if sel > 1:
+            sort_menu = wx.Menu()
+
+            def add_sort(label, attr):
+                item = sort_menu.Append(wx.ID_ANY, label)
+                self.grid.Bind(
+                    wx.EVT_MENU, lambda _e, a=attr: self._sort_selected(a), item
+                )
+
+            add_sort("&Name (A to Z)", "name")
+            add_sort("&Receive frequency (low to high)", "freq")
+            add_sort("&Transmit frequency (low to high)", "txfreq")
+            menu.AppendSubMenu(sort_menu, f"&Sort {sel} selected channels by")
         add("Bulk &operations…", self.on_organize)
         menu.AppendSeparator()
         add("&Go to channel…\tCtrl+G", self.on_goto)
@@ -944,6 +967,31 @@ class MainWindow(wx.Frame):
         else:
             self.announce.announce(message, assertive=True)
 
+    def _sort_selected(self, attr: str, reverse: bool = False) -> None:
+        """Sort the selected channels in place by ``attr`` ('name', 'freq', or
+        the synthetic 'txfreq'). Reachable from the row context menu's Sort
+        submenu. The selection may be non-contiguous — ``sort_range`` writes the
+        sorted contents back into the same slots in order."""
+        from chirp_backend import memory_ops as mo
+
+        if not radio_backend.get_state().loaded:
+            self.announce.announce("No radio image is open.", assertive=True)
+            return
+        numbers = self.grid.selected_channel_numbers()
+        if len(numbers) < 2:
+            self.announce.announce("Select two or more channels to sort.", assertive=True)
+            return
+        ok, message, affected = mo.sort_range(numbers, attr, reverse)
+        if not ok:
+            self.announce.announce(message, assertive=True)
+            return
+        # Sort changes cell values in place; no rows shift, so a targeted
+        # refresh keeps the screen-reader focus steadier than a full rebuild.
+        self.grid.refresh_numbers(affected)
+        self.grid.select_channels(affected)
+        self.grid.focus_channel(affected[0])
+        self.announce.announce(f"{message} {self._now_at_phrase(affected)}")
+
     def on_organize(self, _evt=None) -> None:
         """Open the Bulk operations dialog; dispatch the chosen operation."""
         from chirp_backend import memory_ops as mo
@@ -957,6 +1005,9 @@ class MainWindow(wx.Frame):
         low, high = state.memory_bounds
         default_from = self.grid.focused_channel() or low
         columns = [(c["name"], c["label"]) for c in grid_model.column_meta(state)]
+        # Transmit frequency is not a stored column (it's computed from freq +
+        # duplex + offset), but users want to sort by it, so offer it too.
+        columns.append(("txfreq", "Transmit frequency"))
         with ChannelOperationsDialog(self, low, high, default_from, columns) as dlg:
             if dlg.ShowModal() != wx.ID_OK:
                 return
@@ -964,6 +1015,11 @@ class MainWindow(wx.Frame):
             op = dlg.get_operation()
 
         key = op["op"]
+        if key == "export_csv":
+            # Not a memory mutation: no confirm, undo, or grid refresh — just
+            # write the chosen channels out to a separate CSV file.
+            self._do_csv_export(numbers)
+            return
         confirm = self._op_confirm_message(key, op, numbers)
         if confirm and not self._confirm(confirm):
             return
@@ -1428,6 +1484,60 @@ class MainWindow(wx.Frame):
                 return n
         return low
 
+    def on_frequency_lists(self, _evt=None) -> None:
+        """Radio ▸ Query Source ▸ Frequency lists.
+
+        Import one of CHIRP's stock frequency lists (NOAA weather, FRS/GMRS,
+        MURS, Marine VHF, …) into the loaded radio. A local import — the chosen
+        CSV is opened as a source and run through the shared import flow, which
+        prompts for the starting channel and overwrite/skip. Requires a loaded
+        radio (imported channels go into it)."""
+        from chirp_backend import stock_configs
+
+        if not radio_backend.get_state().loaded:
+            self.announce.announce(
+                "Open or download a radio first; imported channels go into it.",
+                assertive=True,
+            )
+            return
+        configs = stock_configs.list_configs()
+        if not configs:
+            self.announce.announce("No frequency lists are available.", assertive=True)
+            return
+        from vrp.query_dialogs import FrequencyListDialog
+
+        dlg = FrequencyListDialog(
+            self, configs, describe_fn=stock_configs.describe_config
+        )
+        proceed = dlg.ShowModal() == wx.ID_OK
+        selection = dlg.get_selection() if proceed else None
+        dlg.Destroy()
+        if not selection:
+            self.grid.SetFocus()
+            return
+
+        name, path = selection
+        src, message = radio_backend.open_image_as_source(path)
+        if src is None:
+            self.announce.announce(message, assertive=True)
+            wx.MessageBox(message, "Import", wx.OK | wx.ICON_ERROR, self)
+            self.grid.SetFocus()
+            return
+
+        lo, hi = src.get_features().memory_bounds
+        count = 0
+        for n in range(lo, hi + 1):
+            try:
+                if not getattr(src.get_memory(n), "empty", True):
+                    count += 1
+            except Exception:  # noqa: BLE001
+                continue
+        if count == 0:
+            self.announce.announce(f"{name} has no channels to import.")
+            self.grid.SetFocus()
+            return
+        self._import_results(src, count)
+
     def on_repeaterbook(self, _evt=None) -> None:
         """Radio ▸ Query Source ▸ RepeaterBook.
 
@@ -1549,12 +1659,33 @@ class MainWindow(wx.Frame):
         self._import_results(result, len(selected), numbers=selected)
 
     def on_export_csv(self, _evt=None) -> None:
-        """File > Export — write the loaded radio's channels to a CSV file."""
+        """File > Export — write the loaded radio's whole set of channels to a
+        CSV file."""
+        self._do_csv_export()
+
+    def on_export_selected_csv(self, _evt=None) -> None:
+        """Export just the selected (or focused) channels to CSV — reachable
+        from the row context menu and the Bulk operations dialog. Lets a user
+        send only the relevant portion of their memories to someone else for
+        import."""
+        self._do_csv_export(self.grid.selected_channel_numbers())
+
+    def _do_csv_export(self, numbers=None) -> None:
+        """Prompt for a path and export channels to CSV. ``numbers`` restricts
+        the export to that selection; ``None`` exports the whole image. Shared
+        by File > Export, the context menu, and the Bulk operations dialog."""
         if not radio_backend.get_state().loaded:
             self.announce.announce("No radio image is open.")
             return
+        if numbers is not None and not numbers:
+            self.announce.announce("No channel selected.", assertive=True)
+            return
+        title = (
+            "Export channels to CSV file" if numbers is None
+            else f"Export {len(numbers)} selected channel(s) to CSV file"
+        )
         with wx.FileDialog(
-            self, "Export channels to CSV file",
+            self, title,
             wildcard="CSV files (*.csv)|*.csv|All files (*.*)|*.*",
             style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT,
         ) as dlg:
@@ -1564,7 +1695,7 @@ class MainWindow(wx.Frame):
         if not os.path.splitext(path)[1]:
             path += ".csv"
 
-        ok, message, _count = radio_backend.export_to_csv(path)
+        ok, message, _count = radio_backend.export_to_csv(path, numbers)
         self.announce.announce(message, assertive=not ok)
         if not ok:
             wx.MessageBox(message, "Export", wx.OK | wx.ICON_ERROR, self)

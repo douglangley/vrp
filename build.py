@@ -196,6 +196,19 @@ def build(onefile: bool) -> int:
         # ---- lark (used by chirp.bitwise_grammar) — needs its .lark grammar files
         "--collect-data=lark",
 
+        # ---- CHIRP stock configs (the "Frequency lists" import) ----
+        # The ~20 curated CSV lists in chirp/chirp/stock_configs are DATA, not
+        # .py, so --collect-submodules doesn't grab them. Bundle just that one
+        # subdir (the targeted --add-data the "NOT --collect-data=chirp" note
+        # above anticipates) to <root>/chirp/stock_configs, which is exactly
+        # where chirp_backend.stock_configs.stock_configs_dir() looks when frozen
+        # (sys._MEIPASS/chirp/stock_configs). ensure_chirp_on_pin() ran first, so
+        # these match the tested CHIRP_COMMIT.
+        "--add-data=%s%schirp/stock_configs" % (
+            os.path.join(PROJECT_ROOT, "chirp", "chirp", "stock_configs"),
+            os.pathsep,
+        ),
+
         # NOTE: the native UI renders no HTML, so there are no templates/ or
         # static/ assets to bundle (the webview UI that needed them was removed —
         # see CLAUDE.md / PROGRESS_LOG.md "2026-06-29").
