@@ -35,7 +35,7 @@ update (`git pull` ./chirp) in case new dialogs appear.
 |---------------------------------|-----------|--------|
 | Copy to / Move to (bulk)        | 3         | ☑      |
 | Delete / Delete + shift         | 3         | ☑      |
-| Insert / Move / Sort / Arrange  | 3         | ☑      |
+| Insert / Move / Sort / Arrange  | 3         | ☑ (Sort: any column + synthetic Transmit frequency, non-contiguous-safe; also a quick Sort submenu in the row context menu) |
 | Cut / Paste (clipboard)         | 3         | ☑      |
 | Undo / Redo (channel ops)       | —         | ☑      |
 | Find / Find Next                | 3         | ☑      |

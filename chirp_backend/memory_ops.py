@@ -877,15 +877,45 @@ def paste_block(
 # Sort and arrange
 # ---------------------------------------------------------------------------
 
+# Attributes that must sort numerically, not as strings — a string sort would
+# order "99000000" (99 MHz) after "146000000" (146 MHz) because '9' > '1'.
+_NUMERIC_SORT_ATTRS = {"freq", "offset", "number", "txfreq"}
+
+# Human labels for the sort message (falls back to the raw attr name).
+_SORT_LABELS = {
+    "freq": "receive frequency",
+    "txfreq": "transmit frequency",
+    "name": "name",
+}
+
+
+def tx_frequency(mem) -> int:
+    """The channel's transmit frequency in Hz, computed the way CHIRP does
+    (see chirp_common validation): split -> the offset field IS the tx freq;
+    '-'/'+' -> rx -/+ the offset; simplex or tx-off -> the rx frequency."""
+    duplex = getattr(mem, "duplex", "")
+    if duplex == "split":
+        return mem.offset
+    if duplex == "-":
+        return mem.freq - mem.offset
+    if duplex == "+":
+        return mem.freq + mem.offset
+    return mem.freq
+
+
 @undo.records
 def sort_range(numbers: list[int], attr: str, reverse: bool = False) -> OpResult:
     """
-    Sort a contiguous range of channels by a Memory attribute.
+    Sort the SELECTED channels by a Memory attribute, in place.
 
-    attr must be a valid chirp_common.Memory field name:
-      'freq', 'name', 'tmode', 'mode', 'duplex', 'skip', etc.
+    ``numbers`` need not be contiguous: the target slots are ``sorted(numbers)``
+    and the sorted memory *contents* are written back into those slots in order,
+    so a scattered selection like ``1,3,5`` still ends up with its values in the
+    correct ascending slot. Frequencies (``freq``/``offset``/``txfreq``) sort
+    numerically; the synthetic ``txfreq`` sorts by computed transmit frequency;
+    everything else sorts case-insensitively as text. None/missing sorts last.
 
-    Mirrors CHIRP's _do_sort_memories().
+    Mirrors CHIRP's _do_sort_memories() (extended with numeric + txfreq keys).
     """
     try:
         radio = _get_radio()
@@ -893,12 +923,15 @@ def sort_range(numbers: list[int], attr: str, reverse: bool = False) -> OpResult
 
         mems = [_get_mem(radio, n).dupe() for n in numbers_sorted]
 
-        # Sort by attr; treat None/empty as sorts-last
+        numeric = attr in _NUMERIC_SORT_ATTRS
+
         def sort_key(m):
+            if attr == "txfreq":
+                return (0, tx_frequency(m))
             val = getattr(m, attr, None)
             if val is None:
-                return (1, "")
-            return (0, str(val).lower())
+                return (1, 0 if numeric else "")
+            return (0, val if numeric else str(val).lower())
 
         mems.sort(key=sort_key, reverse=reverse)
 
@@ -910,9 +943,10 @@ def sort_range(numbers: list[int], attr: str, reverse: bool = False) -> OpResult
         invalidate_cache(numbers_sorted)
 
         direction = "descending" if reverse else "ascending"
+        label = _SORT_LABELS.get(attr, attr)
         return (
             True,
-            f"Sorted {len(numbers_sorted)} channel(s) by {attr} ({direction})",
+            f"Sorted {len(numbers_sorted)} channel(s) by {label} ({direction})",
             numbers_sorted,
         )
 

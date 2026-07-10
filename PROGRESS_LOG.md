@@ -6,6 +6,42 @@ architecture, keyboard map, and CHIRP feature-coverage checklist.
 
 ---
 
+## 2026-07-10 — Sort selected channels (context menu + Transmit frequency), non-contiguous-safe
+
+Extended sort so a multi-channel selection can be reordered by **name, receive
+frequency, or transmit frequency**, from both the Bulk operations dialog and a
+new row context-menu submenu.
+
+- **Non-contiguous handled correctly.** `memory_ops.sort_range` already targeted
+  `sorted(numbers)` as the destination slots and wrote the sorted *contents*
+  back into them in order, so a scattered selection like `1,3,5` lands its
+  values in the right ascending slots (neighbours untouched). Added a guard test
+  proving it (`test_sort_non_contiguous_uses_selected_slots`).
+- **Numeric frequency sort (bug fix).** The old sort keyed **every** attribute as
+  a lowercased string, so sorting by `freq` ordered 99 MHz *after* 146 MHz
+  (`'9' > '1'`). Added `_NUMERIC_SORT_ATTRS` (`freq`/`offset`/`number`/`txfreq`)
+  so those sort numerically.
+- **Transmit frequency.** New `memory_ops.tx_frequency(mem)` computes tx the way
+  CHIRP does (split → offset; `-`/`+` → freq ∓/± offset; simplex/off → freq), and
+  `sort_range` accepts the synthetic `attr="txfreq"`. Not a stored column, so
+  `on_organize` appends `("txfreq", "Transmit frequency")` to the Bulk dialog's
+  sort choices.
+- **Context menu.** `on_grid_context_menu` gains a **"Sort N selected channels
+  by ▸ Name / Receive frequency / Transmit frequency"** submenu (ascending),
+  shown only when 2+ channels are selected → new `MainWindow._sort_selected`
+  (validates ≥2 selected, sorts, `refresh_numbers` in place — no rows shift —
+  reselects the block, focuses the first, announces the result). The Bulk dialog
+  keeps its ascending/descending control.
+- Sort message now reads "…by receive/transmit frequency" via `_SORT_LABELS`.
+
+**Verified:** unit tests `tests/test_memory_ops.py` (+4: non-contiguous, numeric
+freq, txfreq ordering, `tx_frequency` helper); full suite **274 passed**. Driven
+end-to-end against the real UV-5R image: the Bulk dialog emits
+`{'op':'sort','attr':'txfreq'}` for "Transmit frequency", and an unsorted
+non-contiguous selection `[4,0,2]` sorted by tx freq lands simplex/minus/plus
+(145.0 / 146.4 / 146.6 MHz tx) into slots 0/2/4. **Owed: NVDA pass on the new
+context-menu Sort submenu.**
+
 ## 2026-07-10 — Export a channel *selection* to CSV
 
 VRP already had File ▸ Export to CSV (whole image). Added **subset export** so a

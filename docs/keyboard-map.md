@@ -106,7 +106,7 @@ speaks `"<value>, <column>"` through its supplemental (prism) speech.
 | `Ctrl+E` / `Enter` | Edit the focused channel — **all** fields (full dialog) |
 | `F2` | Edit the **focused cell** in a single-field dialog — the column at the Left/Right cursor (Windows and macOS). The row-header or a read-only column falls back to the full dialog. On platforms without the cell cursor (GTK), F2 first asks which field via a picker, then edits it |
 | `Del` | Delete the selected channel(s) (Channels-menu accelerator) |
-| `Applications` key / `Shift+F10` | Open the row context menu (Edit channel / Edit cell / Delete / Copy / Cut / Paste / Export to CSV / Move up/down / Move to / Bulk operations / Go to / Banks). The generic Windows DataViewCtrl raises this for the Applications key and a right-click natively; VRP wires `Shift+F10` itself (`ChannelGrid._on_grid_key`) since the control doesn't |
+| `Applications` key / `Shift+F10` | Open the row context menu (Edit channel / Edit cell / Delete / Copy / Cut / Paste / Export to CSV / Move up/down / Move to / Sort selected by [Name / Receive frequency / Transmit frequency] when 2+ are selected / Bulk operations / Go to / Banks). The generic Windows DataViewCtrl raises this for the Applications key and a right-click natively; VRP wires `Shift+F10` itself (`ChannelGrid._on_grid_key`) since the control doesn't |
 
 ## Reorganizing channels
 
@@ -188,6 +188,16 @@ refreshes, focus lands on the result channel, and the result is announced.
 advanced list like `1-3,5` is rejected with a spoken error and no change, since
 the shift distance is only well-defined for a solid range (use plain Delete, or
 one run at a time).
+
+**Sort** works on any selection, contiguous or not. The sort keys include the
+grid columns plus a synthetic **Transmit frequency** (computed from frequency +
+duplex + offset). A non-contiguous selection like `1,3,5` is handled safely: the
+target slots are the selected numbers in ascending order, and the sorted
+channel *contents* are written back into those same slots in order (frequencies
+sort numerically, names case-insensitively; the in-between channels are left
+alone). The row context menu also has a quick **Sort selected channels by ▸
+Name / Receive frequency / Transmit frequency** submenu (ascending) that appears
+when two or more channels are selected.
 
 ### Find
 

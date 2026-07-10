@@ -554,6 +554,22 @@ class MainWindow(wx.Frame):
         add("Move &up\tCtrl+Shift+Up", self.on_move_up)
         add("Move &down\tCtrl+Shift+Down", self.on_move_down)
         add("&Move to channel…\tCtrl+Shift+M", self.on_move_to)
+        # Sort the selected channels in place (values redistributed into the
+        # same slots in order — safe for a non-contiguous selection). Only
+        # meaningful with two or more selected.
+        if sel > 1:
+            sort_menu = wx.Menu()
+
+            def add_sort(label, attr):
+                item = sort_menu.Append(wx.ID_ANY, label)
+                self.grid.Bind(
+                    wx.EVT_MENU, lambda _e, a=attr: self._sort_selected(a), item
+                )
+
+            add_sort("&Name (A to Z)", "name")
+            add_sort("&Receive frequency (low to high)", "freq")
+            add_sort("&Transmit frequency (low to high)", "txfreq")
+            menu.AppendSubMenu(sort_menu, f"&Sort {sel} selected channels by")
         add("Bulk &operations…", self.on_organize)
         menu.AppendSeparator()
         add("&Go to channel…\tCtrl+G", self.on_goto)
@@ -949,6 +965,31 @@ class MainWindow(wx.Frame):
         else:
             self.announce.announce(message, assertive=True)
 
+    def _sort_selected(self, attr: str, reverse: bool = False) -> None:
+        """Sort the selected channels in place by ``attr`` ('name', 'freq', or
+        the synthetic 'txfreq'). Reachable from the row context menu's Sort
+        submenu. The selection may be non-contiguous — ``sort_range`` writes the
+        sorted contents back into the same slots in order."""
+        from chirp_backend import memory_ops as mo
+
+        if not radio_backend.get_state().loaded:
+            self.announce.announce("No radio image is open.", assertive=True)
+            return
+        numbers = self.grid.selected_channel_numbers()
+        if len(numbers) < 2:
+            self.announce.announce("Select two or more channels to sort.", assertive=True)
+            return
+        ok, message, affected = mo.sort_range(numbers, attr, reverse)
+        if not ok:
+            self.announce.announce(message, assertive=True)
+            return
+        # Sort changes cell values in place; no rows shift, so a targeted
+        # refresh keeps the screen-reader focus steadier than a full rebuild.
+        self.grid.refresh_numbers(affected)
+        self.grid.select_channels(affected)
+        self.grid.focus_channel(affected[0])
+        self.announce.announce(f"{message} {self._now_at_phrase(affected)}")
+
     def on_organize(self, _evt=None) -> None:
         """Open the Bulk operations dialog; dispatch the chosen operation."""
         from chirp_backend import memory_ops as mo
@@ -962,6 +1003,9 @@ class MainWindow(wx.Frame):
         low, high = state.memory_bounds
         default_from = self.grid.focused_channel() or low
         columns = [(c["name"], c["label"]) for c in grid_model.column_meta(state)]
+        # Transmit frequency is not a stored column (it's computed from freq +
+        # duplex + offset), but users want to sort by it, so offer it too.
+        columns.append(("txfreq", "Transmit frequency"))
         with ChannelOperationsDialog(self, low, high, default_from, columns) as dlg:
             if dlg.ShowModal() != wx.ID_OK:
                 return
