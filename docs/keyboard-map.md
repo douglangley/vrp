@@ -283,6 +283,20 @@ NVDA; a multi-select ListBox announces each row and its selected state. It curre
 direct RepeaterBook API is a localized swap in
 `chirp_backend/repeaterbook.py` once RepeaterBook issues VRP a User-Agent.
 
+**Frequency lists** (CHIRP stock configs) is wired directly beneath it: **Radio ▸
+Query Source ▸ Frequency lists…** (menu-only, disabled until a radio is loaded).
+It imports one of CHIRP's ~20 curated CSV lists (NOAA weather, US/CA FRS+GMRS,
+MURS, Marine VHF, aviation, railroad, EU PMR/LPD, …) into the loaded radio — a
+*local* import, no network. A filterable `FrequencyListDialog` (type-ahead
+`RadioListView` + a **Details…** button that previews the list's channels in the
+read-only `InfoDialog`) chooses the list; the whole list then imports through the
+same `ImportDestinationDialog` (start channel + overwrite/skip) +
+`memory_ops.import_memories`. The files are read from the pinned CHIRP tree
+(`chirp/stock_configs`) — no copy into the VRP repo; the frozen build bundles
+that one subdir via a targeted `--add-data` (see `chirp_backend/stock_configs.py`
+and `build.py`). Unlike CHIRP, which *opens* a stock config as its own document,
+VRP imports it into the working radio directly.
+
 The earlier Phase 7 sources (AMSAT, SatNOGS, DMR-MARC, mapy73.pl) were removed;
 **RadioReference** will be added back purpose-built after RepeaterBook.
 

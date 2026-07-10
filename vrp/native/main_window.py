@@ -311,6 +311,8 @@ class MainWindow(wx.Frame):
         query = wx.Menu()
         self._add(query, "query_repeaterbook", "&RepeaterBook…",
                   self.on_repeaterbook, needs_radio=True)
+        self._add(query, "query_freqlists", "&Frequency lists…",
+                  self.on_frequency_lists, needs_radio=True)
         m.AppendSubMenu(query, "&Query Source")
         return m
 
@@ -1481,6 +1483,60 @@ class MainWindow(wx.Frame):
             if mem is None or getattr(mem, "empty", True):
                 return n
         return low
+
+    def on_frequency_lists(self, _evt=None) -> None:
+        """Radio ▸ Query Source ▸ Frequency lists.
+
+        Import one of CHIRP's stock frequency lists (NOAA weather, FRS/GMRS,
+        MURS, Marine VHF, …) into the loaded radio. A local import — the chosen
+        CSV is opened as a source and run through the shared import flow, which
+        prompts for the starting channel and overwrite/skip. Requires a loaded
+        radio (imported channels go into it)."""
+        from chirp_backend import stock_configs
+
+        if not radio_backend.get_state().loaded:
+            self.announce.announce(
+                "Open or download a radio first; imported channels go into it.",
+                assertive=True,
+            )
+            return
+        configs = stock_configs.list_configs()
+        if not configs:
+            self.announce.announce("No frequency lists are available.", assertive=True)
+            return
+        from vrp.query_dialogs import FrequencyListDialog
+
+        dlg = FrequencyListDialog(
+            self, configs, describe_fn=stock_configs.describe_config
+        )
+        proceed = dlg.ShowModal() == wx.ID_OK
+        selection = dlg.get_selection() if proceed else None
+        dlg.Destroy()
+        if not selection:
+            self.grid.SetFocus()
+            return
+
+        name, path = selection
+        src, message = radio_backend.open_image_as_source(path)
+        if src is None:
+            self.announce.announce(message, assertive=True)
+            wx.MessageBox(message, "Import", wx.OK | wx.ICON_ERROR, self)
+            self.grid.SetFocus()
+            return
+
+        lo, hi = src.get_features().memory_bounds
+        count = 0
+        for n in range(lo, hi + 1):
+            try:
+                if not getattr(src.get_memory(n), "empty", True):
+                    count += 1
+            except Exception:  # noqa: BLE001
+                continue
+        if count == 0:
+            self.announce.announce(f"{name} has no channels to import.")
+            self.grid.SetFocus()
+            return
+        self._import_results(src, count)
 
     def on_repeaterbook(self, _evt=None) -> None:
         """Radio ▸ Query Source ▸ RepeaterBook.

@@ -6,6 +6,55 @@ architecture, keyboard map, and CHIRP feature-coverage checklist.
 
 ---
 
+## 2026-07-10 — Import from frequency lists (CHIRP stock configs)
+
+Added **Radio ▸ Query Source ▸ Frequency lists…** (directly under RepeaterBook)
+to import one of CHIRP's ~20 curated stock-config CSV lists (NOAA weather,
+US/CA FRS+GMRS, MURS, Marine VHF, aviation, railroad, EU PMR/LPD, …) into the
+loaded radio. Plan:
+`docs/superpowers/plans/2026-07-10-stock-configs-frequency-lists.md`.
+
+**Key insight:** VRP already had the whole import pipeline —
+`radio.open_image_as_source` opens a stock CSV as a source radio (they're plain
+generic_csv), and `_import_results` already prompts for the start channel +
+overwrite/skip via `ImportDestinationDialog`. So this is mostly wiring; the only
+new UI is a *which-list* chooser. Unlike CHIRP (which *opens* a stock config as
+its own document, then you copy from it), VRP imports it into the working radio.
+
+- **`chirp_backend/stock_configs.py` (new).** `stock_configs_dir()` resolves the
+  CSV dir — `sys._MEIPASS/chirp/stock_configs` when frozen, else the pinned CHIRP
+  tree (`<chirp pkg>/stock_configs`); `list_configs()` → sorted
+  `(display_name, path)` (`.csv` stripped, dotfiles/backers skipped);
+  `describe_config()` → a screen-reader-friendly channel-count + sample-rows
+  summary for the Details view.
+- **`FrequencyListDialog` (`vrp/query_dialogs.py`).** Filter box + type-ahead
+  `RadioListView` (SysListView32 on Windows / NSTableView elsewhere) + a
+  **Details…** button (opens the read-only `InfoDialog`) + Import/Cancel. Labels
+  created before controls (wxMSW MSAA rule), Escape = Cancel, focus opens on the
+  filter, Down-arrow drops into the list, Import disabled when the filter matches
+  nothing.
+- **`MainWindow.on_frequency_lists` + menu.** Gated on a loaded radio; opens the
+  chooser, then `open_image_as_source` → count → shared `_import_results` (focus
+  lands on the first imported channel, result announced).
+- **Packaging (`build.py` only).** One targeted `--add-data` bundles
+  `chirp/chirp/stock_configs` → `chirp/stock_configs` (the frozen resolver path).
+  **No copy into the VRP repo and no run-win/run-mac changes** — source runs read
+  the pinned CHIRP tree directly (the run scripts already clone + check out CHIRP
+  at `CHIRP_COMMIT`). `ensure_chirp_on_pin()` runs first, so the bundled CSVs
+  always match the tested pin.
+
+**Verified:** `tests/test_stock_configs.py` (+7: discovery/sort/`.csv`-strip,
+describe count+freq+truncation, frozen `_MEIPASS` resolution, end-to-end import
+into a loaded UV-5R) and `tests/test_frequency_list_dialog.py` (+6: populate,
+filter narrows, no-match disables Import, Import label, Details gating,
+label-before-control). Full suite **286 passed**. Driven end-to-end against the
+real UV-5R image: filtered to "US NOAA Weather Alert", Details read "10
+channel(s)…", imported all 10 into ch 20+ (`162.550 'WX1PA7'` at ch 20). The
+`--add-data` flag is well-formed (`SRC;DEST`); a **frozen build smoke** (verify
+the CSVs land in `dist/vrp/_internal/chirp/stock_configs` and import there) is
+owed alongside the **NVDA pass** on the chooser dialog. Possible follow-ups:
+user-supplied lists + per-channel multi-select.
+
 ## 2026-07-10 — Sort selected channels (context menu + Transmit frequency), non-contiguous-safe
 
 Extended sort so a multi-channel selection can be reordered by **name, receive

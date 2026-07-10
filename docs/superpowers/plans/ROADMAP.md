@@ -50,13 +50,23 @@ Query sources (Phase 7):
   **Owed:** the direct RepeaterBook API — a localized `VRPRepeaterBook.get_data`
   override + `USER_AGENT`, once RepeaterBook issues VRP a per-app User-Agent;
   and an NVDA pass on the query dialog + progress.
+- ☑ **Frequency lists (CHIRP stock configs)** — done 2026-07-10. Radio ▸ Query
+  Source ▸ Frequency lists… imports one of CHIRP's ~20 curated CSV lists into the
+  loaded radio via a filterable chooser + the shared import flow. Read from the
+  pinned CHIRP tree; frozen build bundles them with a targeted `--add-data` (no
+  repo copy, no run-script change). Plan:
+  [2026-07-10-stock-configs-frequency-lists.md](2026-07-10-stock-configs-frequency-lists.md).
+  Owed: NVDA pass on the chooser dialog + import. Possible follow-ups:
+  user-supplied lists (a user stock-config dir + reveal) and per-channel
+  multi-select within a list (`_import_results` already takes `numbers=`).
 - ☐ RadioReference — purpose-built after RepeaterBook (credentials/login form).
 
 Smaller deferred items (chirp-feature-coverage.md "☐"/"◐" rows):
 - ☐ Bank renaming + "channels in a bank" overview (Phase 6.1).
 - ☑ Cut/Paste clipboard (done 2026-06-27 — native grid row clipboard).
-- ☐ File menu: New (empty image), New Window, Open Stock Config, Load
-  Module — all need a model-picker UX decision first.
+- ☐ File menu: New (empty image), New Window, Load Module — all need a
+  model-picker UX decision first. (Open Stock Config is covered as an import —
+  see Frequency lists above.)
 - ☐ View menu: font size / large font, language.
 - ☑ Auto edits + band plan (done 2026-06-28): offset suggestion (always on,
   magnitude only), opt-in "Apply band-plan defaults" (mode/step/tone), and the

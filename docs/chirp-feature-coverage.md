@@ -20,7 +20,7 @@ update (`git pull` ./chirp) in case new dialogs appear.
 | New (empty image)      | 1         | ☐      |
 | New Window             | 8         | ☐      |
 | Open Image File        | 1         | ☑      |
-| Open Stock Config      | 1         | ☐      |
+| Open Stock Config      | 1         | ☑ (as an **import**: Radio ▸ Query Source ▸ Frequency lists… imports a CHIRP stock config into the loaded radio, rather than opening it as its own document) |
 | Open Recent            | config    | ☑      |
 | Save / Save As         | 1         | ☑      |
 | Import (from image)    | 8         | ☑      |
@@ -58,6 +58,7 @@ update (`git pull` ./chirp) in case new dialogs appear.
 | Query framework + import         | 7         | ☐ (removed 2026-07-05; import-destination dialog kept for Import from File) |
 | Query: RepeaterBook              | 7         | ◐ (wired via CHIRP's mirror — Radio ▸ Query Source ▸ RepeaterBook; direct API pending VRP User-Agent) |
 | Query: RadioReference            | 7         | ☐ (to be added purpose-built after RepeaterBook) |
+| Import: Frequency lists (stock configs) | 7   | ☑ (Radio ▸ Query Source ▸ Frequency lists… — filterable chooser, imports a CHIRP stock config into the loaded radio; `chirp_backend/stock_configs.py`) |
 | Auto edits toggle                | 8         | ☑ (offset always-on; mode/step/tone via Preferences ▸ Apply band-plan defaults; duplex intentionally manual) |
 | Select bandplan                  | 8         | ☐      |
 
