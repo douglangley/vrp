@@ -40,11 +40,14 @@ Notes:
   - chirp.drivers is loaded by dynamic `__import__` / importlib.import_module
     (see chirp/directory.py), so PyInstaller's static analysis can't discover the
     driver modules on its own — --collect-submodules pulls them in explicitly.
-    chirp.sources is deliberately NOT collected: VRP stopped importing it when
-    the online query sources were removed (2026-07-05), so collecting it would
-    bundle dead modules and drag in `requests` (which nothing VRP runs imports).
-    A future purpose-built RepeaterBook will be a static import PyInstaller
-    follows on its own.
+    NOTE: bundling them is NOT sufficient to make them work — see
+    chirp_backend.radio._ensure_driver_modules() and the "registered ZERO
+    drivers" PROGRESS_LOG entry (2026-07-15).
+    chirp.sources needs no --collect-submodules: chirp_backend/repeaterbook.py
+    imports `from chirp.sources import repeaterbook` statically (inside
+    functions, which PyInstaller's modulegraph still follows), and that pulls in
+    `requests`/certifi with it. Verified frozen by tools/spike_frozen_audit.py —
+    a LIVE fetch of 40 Delaware repeaters over HTTPS from the frozen .exe.
   - prism (speech) IS bundled, and must be. It is not "supplemental" on the
     desktop: the native UI has no ARIA live region (that died with the webview
     UI), and on Windows the generic DataViewCtrl announces no per-cell cursor,
@@ -201,13 +204,18 @@ def build(onefile: bool) -> int:
         "--exclude-module=numpy",
 
         # ---- CHIRP library (drivers loaded by dynamic import) ----
+        # Bundling the driver modules is necessary but NOT sufficient: CHIRP
+        # discovers them by globbing *.py off disk, which finds nothing in a
+        # frozen build. chirp_backend.radio._ensure_driver_modules() repairs
+        # that at runtime — without it, zero drivers register and the app can
+        # neither open an image nor list a radio. See PROGRESS_LOG 2026-07-15.
         "--collect-submodules=chirp.drivers",
-        # NOTE: chirp.sources is deliberately NOT collected. VRP stopped importing
-        # it when the online query sources were removed (2026-07-05), so
-        # collecting it would bundle dead modules and pull in `requests` (which
-        # nothing VRP runs imports). When RepeaterBook returns it will be a static
-        # `from chirp.sources import repeaterbook`, which PyInstaller discovers on
-        # its own — no collect directive needed.
+        # NOTE: chirp.sources needs no collect directive. RepeaterBook came back
+        # on 2026-07-09 and chirp_backend/repeaterbook.py imports it statically
+        # (`from chirp.sources import repeaterbook`, inside functions — which
+        # modulegraph still follows), pulling in requests/certifi with it.
+        # Verified frozen: a live 40-repeater fetch over HTTPS from the .exe
+        # (tools/spike_frozen_audit.py).
         # NOTE: deliberately NOT --collect-data=chirp. CHIRP is an editable
         # install rooted at the repo, so --collect-data=chirp sweeps in the
         # whole working tree — .git/ (~3.8 MB), tests/ radio .img images

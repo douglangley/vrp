@@ -31,11 +31,10 @@ dependencies = [
     "chirp",
     # CHIRP library dependencies. pyserial (the clone pipe) and lark
     # (chirp.bitwise_grammar) are used on every run. requests is declared by
-    # CHIRP itself (chirp/setup.py) and is only reached through chirp.sources
-    # (RepeaterBook et al.) — nothing VRP runs imports it, so it is NOT in the
-    # frozen app (build.py no longer collects chirp.sources). Kept here so the
-    # dev/source environment matches CHIRP's requirements and RepeaterBook works
-    # when it returns.
+    # CHIRP itself (chirp/setup.py) and is reached through chirp.sources —
+    # which VRP DOES use again: RepeaterBook returned on 2026-07-09
+    # (chirp_backend/repeaterbook.py). It is therefore bundled in the frozen app
+    # too, via that static import; verified by a live fetch from the .exe.
     "pyserial>=3.5",
     "lark>=1.1.0",
     "requests>=2.28.0",

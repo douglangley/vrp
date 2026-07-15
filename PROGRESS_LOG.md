@@ -59,9 +59,45 @@ the bug, the suite says so instead of going quietly green.
 **Why it was never caught:** nothing had ever opened an image in a frozen build.
 The frozen smoke owed since 2026-07-10 was "do the stock_config CSVs land", and
 today's release verification went as far as "the window appears". Both were
-true, and both were shallow. **Owed:** open an image in the real windowed
-`vrp.exe` (the spike proves the code path, not the GUI), and a frozen
-**Download-dialog** check that the model list is populated.
+true, and both were shallow.
+
+### Follow-up: the rest of the frozen surface was audited (it's clean)
+
+The developer asked the right question — drivers were one instance of a *class*
+of bug ("CHIRP finds things dynamically or via the filesystem; PyInstaller can't
+see it; it fails only when frozen"), so what else is broken? Serial and
+RepeaterBook especially. Rather than reason about it,
+**`tools/spike_frozen_audit.py`** exercises every CHIRP subsystem VRP uses
+through VRP's real `chirp_backend` entry points, inside a frozen console build
+with build.py's actual flags. **14/14 pass:**
+
+drivers (552) · radio model list (552 — the Download dialog) · describe_model ·
+serial port enumeration (pyserial's platform backend imports) · band plans
+(offset suggestion) · stock configs (20 lists, data files present) · opening a
+stock config via the generic_csv driver · RepeaterBook import + geography ·
+RepeaterBook cache dir (`chirp_platform.config_file`) · **a LIVE RepeaterBook
+fetch over HTTPS from the frozen .exe (40 Delaware repeaters — proves requests
+*and* TLS/certifi work frozen)** · load image · settings editor · banks editor ·
+export to CSV.
+
+So the driver glob was the only instance. Two findings from the audit:
+
+- **`build.py`/`pyproject.toml` comments were stale and actively misleading.**
+  Both claimed `chirp.sources` is unused and `requests` therefore absent from
+  the frozen app — untrue since RepeaterBook returned on 2026-07-09.
+  `chirp_backend/repeaterbook.py` imports it statically (inside functions, which
+  modulegraph still follows), so requests/certifi are bundled. Comments
+  corrected.
+- **A latent CHIRP frozen bug VRP doesn't hit:** `chirp/platform.py`
+  `executable_path()` does `str(sys.executable, encoding)` under
+  `we_are_frozen()` — a Python-2-ism that would `TypeError` on py3. Only
+  `find_resource()` calls it (for `share/` assets), which VRP never uses. Left
+  alone; noted in case a future feature reaches for CHIRP resources.
+
+**Owed:** open an image in the real windowed `vrp.exe` (the spikes prove the
+code path, not the GUI) and a serial **clone** against real hardware — port
+*enumeration* is verified frozen, but opening a port and running a download
+needs the radio.
 
 ## 2026-07-15 — The speech preference is wired up (it was dead code)
 
