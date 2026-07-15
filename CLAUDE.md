@@ -291,10 +291,20 @@ uv sync --extra build
 uv run python build.py --installer
 Output: dist/vrp/ (the app folder) + dist/vrp-<version>-setup.exe (the installer)
 
-**`--portable`** zips the onedir into `dist/VRP-<version>-win64.zip` (top-level
-folder named `VRP-<version>/`, not `vrp/`, so side-by-side unzips stay separate)
-— a no-install build to hand to a few testers: unzip, run `vrp.exe`. Combinable
-with `--installer`; incompatible with `--onefile` (which is already one file).
+**`--portable`** zips the frozen app into `dist/VRP-<version>-<platform>.zip`
+(top-level folder named `VRP-<version>/`, not `vrp/`, so side-by-side unzips stay
+separate) — a no-install build to hand to a few testers. Incompatible with
+`--onefile` (already one file). Platform-aware, and the difference is NOT just
+the filename:
+- **Windows** (`-win64.zip`): zips `dist/vrp/` with `zipfile`. Verified.
+- **macOS** (`-macos-<arch>.zip`): zips **`dist/vrp.app`** (PyInstaller's
+  `--windowed` emits both it and the raw folder) using **`ditto`**, never
+  `zipfile` — zipfile follows symlinks instead of storing them and `extractall`
+  drops the executable bit, either of which leaves a bundle that won't launch.
+  The arch is in the name because a Mac build only runs on the arch it was built
+  for. **Not yet run on a Mac** (written on Windows); naming/routing is
+  unit-tested in `tests/test_build_artifact_name.py`.
+- **`--installer` is Windows-only** (Inno Setup) and errors out elsewhere.
 It also ships CHIRP's test images in a top-level **`sample-images/`** folder
 (beside `vrp.exe`, NOT in `_internal/` — a tester must be able to find them from
 a File-Open dialog) so the app can be exercised with no radio; they come from

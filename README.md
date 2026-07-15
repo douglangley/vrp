@@ -350,6 +350,36 @@ radio and no cable**, and they come from `./chirp` at the enforced
 0.5 MB compressed. `--no-samples` omits them. The Inno Setup installer never
 includes them (it wraps `dist/vrp/` only) — a real user has their own radio.
 
+### Building on macOS
+
+`build.py --portable` works on a Mac too, and adapts:
+
+```bash
+uv sync --extra build
+uv run python build.py --portable      # -> dist/VRP-<version>-macos-<arch>.zip
+```
+
+- It zips **`dist/vrp.app`**, not `dist/vrp/`. PyInstaller's `--windowed` emits
+  both; the `.app` is the one a Mac user can double-click.
+- It zips with **`ditto`**, not Python's `zipfile`. A `.app` relies on symlinks
+  and the executable bit; `zipfile` follows symlinks instead of storing them and
+  `extractall()` doesn't restore permissions, so a zipfile-packed bundle won't
+  launch. `ditto` is macOS's own tool and preserves both.
+- The name carries the **architecture** (`macos-arm64` / `macos-x86_64`): a Mac
+  build only runs on the arch it was built for, unlike the Windows one.
+- **`--installer` is Windows-only** (it's Inno Setup) and errors out on macOS.
+- The `.app` is **unsigned and unnotarized**, so Gatekeeper blocks it on first
+  launch — harder than Windows SmartScreen does. Testers must right-click the
+  app and choose **Open**, or run
+  `xattr -dr com.apple.quarantine /path/to/VRP-<version>/vrp.app`. Put that in
+  the release notes. Signing needs a paid Apple Developer ID; not done yet.
+
+> The macOS packaging path has **not been run on a Mac yet** — it was written on
+> Windows. The naming/routing logic is unit-tested
+> (`tests/test_build_artifact_name.py`) and every failure mode is loud rather
+> than silent, but the first real run is unverified. The Windows path is
+> unaffected and verified.
+
 Why onedir over onefile: onefile re-extracts the whole interpreter + wxPython +
 552 drivers to a temp dir on *every* launch (multi-second cold start) and is a
 frequent Defender/SmartScreen false-positive trigger; onedir launches instantly.

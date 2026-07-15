@@ -13,13 +13,17 @@ Usage:
                                    (installer.iss) with Inno Setup. This is how
                                    the app is meant to ship.
   python build.py --portable       Build onedir, then zip it as
-                                   dist/VRP-<version>-win64.zip — a no-install
-                                   build to hand to testers: unzip anywhere, run
-                                   vrp.exe from the folder. Includes CHIRP's test
+                                   dist/VRP-<version>-<platform>.zip — a
+                                   no-install build to hand to testers: unzip
+                                   anywhere and run it from the folder.
+                                   Windows: -win64.zip holding vrp.exe +
+                                   _internal/. macOS: -macos-<arch>.zip holding
+                                   vrp.app, zipped with ditto (zipfile would
+                                   break the bundle). Includes CHIRP's test
                                    images in a top-level sample-images/ folder so
                                    a tester with no radio can still open a real
                                    image (--no-samples omits them). Combinable
-                                   with --installer.
+                                   with --installer (Windows only).
   python build.py --no-chirp-sync  Verify ./chirp matches the CHIRP_COMMIT pin
                                    but don't auto-checkout it (abort on mismatch
                                    instead of fixing the clone).
@@ -73,6 +77,7 @@ Notes:
 
 import argparse
 import os
+import platform
 import re
 import shutil
 import subprocess
@@ -297,27 +302,72 @@ def _chirp_pin_short() -> str:
         return "unknown"
 
 
-def build_portable(version: str, include_samples: bool = True) -> int:
-    """Zip the dist/vrp/ onedir folder into dist/VRP-<version>-win64.zip.
+def artifact_suffix() -> str:
+    """Platform/arch tag for the portable zip's filename.
 
-    The no-install distribution: the tester unzips it and runs vrp.exe from the
-    folder. The zip's single top-level directory is named for the release
-    (VRP-20260715.1/), not "vrp/", so unzipping two releases side by side
-    doesn't merge them and the folder on disk says which build it is —
-    PyInstaller's onedir doesn't care what its folder is called, only that
-    vrp.exe and _internal/ stay together inside it.
+    macOS builds are architecture-bound in a way the Windows one isn't (an
+    arm64 build will not run on an Intel Mac), so the arch is part of the name
+    - otherwise two Macs produce identically-named, incompatible artifacts.
+    """
+    if sys.platform == "darwin":
+        return f"macos-{platform.machine()}"      # macos-arm64 / macos-x86_64
+    if sys.platform.startswith("win"):
+        return "win64"
+    return f"{sys.platform}-{platform.machine()}"
+
+
+def _sample_files() -> list:
+    """CHIRP's test images (absolute paths), or [] if the tree isn't there."""
+    images_dir = os.path.join(PROJECT_ROOT, "chirp", "tests", "images")
+    if not os.path.isdir(images_dir):
+        print(f"! No sample images at {images_dir} - skipping them.")
+        return []
+    return [
+        os.path.join(images_dir, name)
+        for name in sorted(os.listdir(images_dir))
+        if os.path.isfile(os.path.join(images_dir, name))
+    ]
+
+
+def build_portable(version: str, include_samples: bool = True) -> int:
+    """Zip the frozen app into dist/VRP-<version>-<platform>.zip.
+
+    The no-install distribution: the tester unzips it and runs the app straight
+    out of the folder. The zip's single top-level directory is named for the
+    release (VRP-20260715.3/), not "vrp/", so unzipping two releases side by
+    side doesn't merge them and the folder on disk says which build it is.
 
     ``include_samples`` also drops CHIRP's test images into a top-level
-    ``sample-images/`` folder beside vrp.exe, so a tester with no radio (or no
+    ``sample-images/`` folder beside the app, so a tester with no radio (or no
     cable to hand) can still open a real image and exercise the grid. They go at
-    the TOP level deliberately, not into _internal/ — that is app plumbing a
-    user should never have to open, and a File-Open dialog needs somewhere
-    obvious to point at. They come from ./chirp at the enforced CHIRP_COMMIT
-    pin, so they always match the bundled driver set.
+    the TOP level deliberately, not inside the app's internals - that is
+    plumbing a user should never have to open, and a File-Open dialog needs
+    somewhere obvious to point at. They come from ./chirp at the enforced
+    CHIRP_COMMIT pin, so they always match the bundled driver set.
 
     Samples are on by default for the portable build because that IS the tester
     build; the Inno Setup installer never includes them (it wraps dist/vrp/
     only), since a real user has their own radio.
+
+    Windows and macOS need genuinely different packaging, not just a different
+    filename - see _build_portable_macos.
+    """
+    top = f"{RELEASE_PREFIX}-{version}"
+    zip_path = os.path.join(
+        PROJECT_ROOT, "dist", f"{top}-{artifact_suffix()}.zip"
+    )
+    if sys.platform == "darwin":
+        return _build_portable_macos(top, zip_path, include_samples)
+    return _build_portable_zipfile(top, zip_path, include_samples)
+
+
+def _build_portable_zipfile(top: str, zip_path: str, include_samples: bool) -> int:
+    """Windows/Linux: zip the dist/vrp/ onedir folder with zipfile.
+
+    PyInstaller's onedir doesn't care what its folder is called, only that the
+    executable and _internal/ stay together inside it - so re-rooting every
+    entry under a release-named top folder is safe here. It is NOT safe for a
+    macOS .app; see _build_portable_macos.
     """
     onedir = os.path.join(PROJECT_ROOT, "dist", APP_NAME)
     if not os.path.isdir(onedir):
@@ -325,8 +375,6 @@ def build_portable(version: str, include_samples: bool = True) -> int:
         print("Run the onedir build first (python build.py, no --onefile).")
         return 1
 
-    top = f"{RELEASE_PREFIX}-{version}"
-    zip_path = os.path.join(PROJECT_ROOT, "dist", f"{top}-win64.zip")
     print("\nCreating the portable zip...")
     if os.path.exists(zip_path):
         os.remove(zip_path)  # rebuilding the same release replaces it
@@ -343,16 +391,13 @@ def build_portable(version: str, include_samples: bool = True) -> int:
 
         samples = 0
         if include_samples:
-            images_dir = os.path.join(PROJECT_ROOT, "chirp", "tests", "images")
-            if not os.path.isdir(images_dir):
-                print(f"! No sample images at {images_dir} — skipping them.")
-            else:
-                for name in sorted(os.listdir(images_dir)):
-                    full = os.path.join(images_dir, name)
-                    if not os.path.isfile(full):
-                        continue
-                    zf.write(full, os.path.join(top, SAMPLES_DIRNAME, name))
-                    samples += 1
+            for full in _sample_files():
+                zf.write(
+                    full,
+                    os.path.join(top, SAMPLES_DIRNAME, os.path.basename(full)),
+                )
+                samples += 1
+            if samples:
                 zf.writestr(
                     os.path.join(top, SAMPLES_DIRNAME, "README.txt"),
                     _SAMPLES_README.format(chirp_pin=_chirp_pin_short()),
@@ -363,6 +408,98 @@ def build_portable(version: str, include_samples: bool = True) -> int:
     print(f"Zipped {count} app files ({size_mb:.1f} MB) under {top}{os.sep}")
     if include_samples and samples:
         print(f"  + {samples} files in {top}{os.sep}{SAMPLES_DIRNAME}{os.sep}")
+    print(f"Output: {os.path.relpath(zip_path, PROJECT_ROOT)}")
+    return 0
+
+
+def _build_portable_macos(top: str, zip_path: str, include_samples: bool) -> int:
+    """macOS: stage vrp.app + sample-images, then zip them with ditto.
+
+    Two things make this genuinely different from the Windows path:
+
+    1. **The artifact is dist/vrp.app, not dist/vrp/.** With --windowed,
+       PyInstaller emits BOTH: dist/vrp/ (the raw COLLECT folder) and
+       dist/vrp.app (the bundle). Shipping the folder would hand a Mac user a
+       bare unix binary instead of something they can double-click.
+
+    2. **A .app must not be zipped with Python's zipfile.** zipfile follows
+       symlinks instead of storing them (a bundle's Frameworks/ relies on them)
+       and extractall() does not restore the executable bit - either one leaves
+       a bundle that will not launch. `ditto -c -k --sequesterRsrc
+       --keepParent` is the platform's own tool and preserves symlinks,
+       permissions and resource forks. It is used for the staging copy too, for
+       the same reason.
+
+    Staging (build/portable/VRP-<version>/) exists so sample-images/ can sit
+    BESIDE the .app inside the zip, matching the Windows layout; --keepParent
+    then puts that release-named folder at the zip root.
+
+    NOT YET RUN ON A MAC - written on Windows and unverified. Every failure
+    mode here is loud (missing .app, missing ditto, non-zero ditto exit) rather
+    than silent, so a broken run says so instead of shipping a dead bundle.
+    """
+    app = os.path.join(PROJECT_ROOT, "dist", f"{APP_NAME}.app")
+    if not os.path.isdir(app):
+        print(f"Cannot build the portable zip: {app} not found.")
+        print("Run the onedir build first (python build.py, no --onefile);")
+        print("PyInstaller only produces the .app with --windowed.")
+        return 1
+    if shutil.which("ditto") is None:
+        print("Cannot build the portable zip: `ditto` not found on PATH.")
+        print("It ships with macOS. A .app must not be zipped with zipfile -")
+        print("symlinks and permissions are lost and the bundle won't launch.")
+        return 1
+
+    staging_root = os.path.join(PROJECT_ROOT, "build", "portable")
+    staging = os.path.join(staging_root, top)
+    shutil.rmtree(staging_root, ignore_errors=True)
+    os.makedirs(staging, exist_ok=True)
+
+    print("\nStaging the portable bundle...")
+    # ditto, not copytree - same symlink/permission reasons as the zip step.
+    rc = subprocess.run(["ditto", app, os.path.join(staging, f"{APP_NAME}.app")])
+    if rc.returncode != 0:
+        print(f"ditto failed to copy the .app (exit {rc.returncode}).")
+        return rc.returncode
+
+    samples = 0
+    if include_samples:
+        files = _sample_files()
+        if files:
+            samples_dir = os.path.join(staging, SAMPLES_DIRNAME)
+            os.makedirs(samples_dir, exist_ok=True)
+            for full in files:
+                shutil.copy2(full, samples_dir)  # plain data files
+                samples += 1
+            with open(os.path.join(samples_dir, "README.txt"), "w",
+                      encoding="utf-8") as fh:
+                fh.write(_SAMPLES_README.format(chirp_pin=_chirp_pin_short()))
+            samples += 1
+
+    print("Creating the portable zip with ditto...")
+    if os.path.exists(zip_path):
+        os.remove(zip_path)  # rebuilding the same release replaces it
+    rc = subprocess.run([
+        "ditto", "-c", "-k", "--sequesterRsrc", "--keepParent",
+        staging, zip_path,
+    ])
+    if rc.returncode != 0:
+        print(f"ditto failed to create the zip (exit {rc.returncode}).")
+        return rc.returncode
+    shutil.rmtree(staging_root, ignore_errors=True)
+
+    size_mb = os.path.getsize(zip_path) / (1024 * 1024)
+    print(f"Zipped {APP_NAME}.app ({size_mb:.1f} MB) under {top}/")
+    if samples:
+        print(f"  + {samples} files in {top}/{SAMPLES_DIRNAME}/")
+    print(f"Output: {os.path.relpath(zip_path, PROJECT_ROOT)}")
+    print(
+        "\nNOTE: the .app is unsigned and unnotarized, so Gatekeeper refuses "
+        "it\non first launch (more firmly than Windows SmartScreen does). "
+        "Testers must\nright-click the app and choose Open, or run:\n"
+        f"    xattr -dr com.apple.quarantine /path/to/{top}/{APP_NAME}.app\n"
+        "Say so in the release notes."
+    )
     return 0
 
 
@@ -457,6 +594,12 @@ def main() -> None:
             "--installer wraps the onedir folder, so it can't be combined with "
             "--onefile."
         )
+    if args.installer and not sys.platform.startswith("win"):
+        parser.error(
+            "--installer builds a Windows installer with Inno Setup and only "
+            "works on Windows. On macOS use --portable, which produces a "
+            "zipped .app."
+        )
     if args.portable and args.onefile:
         parser.error(
             "--portable zips the onedir folder, so it can't be combined with "
@@ -479,6 +622,11 @@ def main() -> None:
     suffix = ".exe" if os.name == "nt" else ""
     if args.onefile:
         print(f"Output: dist{os.sep}{APP_NAME}{suffix}")
+    elif sys.platform == "darwin":
+        # --windowed on macOS emits BOTH the raw folder and the .app bundle;
+        # the .app is the one to ship (--portable zips it).
+        print(f"Output: dist{os.sep}{APP_NAME}.app  "
+              f"(and the raw folder dist{os.sep}{APP_NAME}{os.sep})")
     else:
         print(f"Output: dist{os.sep}{APP_NAME}{os.sep}{APP_NAME}{suffix}")
 

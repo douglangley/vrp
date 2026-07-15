@@ -6,6 +6,54 @@ architecture, keyboard map, and CHIRP feature-coverage checklist.
 
 ---
 
+## 2026-07-15 — `--portable` builds a real macOS artifact (ready for a Mac run)
+
+Prep for cutting a Mac release from the developer's Mac. `build_portable` was
+Windows-shaped in ways that go beyond the filename, and would have produced a
+broken or misleading artifact:
+
+1. **Hardcoded `-win64.zip`.** A Mac build would have been published as
+   "win64" — actively wrong once both are on the releases page. Now
+   `artifact_suffix()`: `win64`, or `macos-<arch>`. The **arch is in the Mac
+   name** because a Mac build only runs on the arch it was built for (an arm64
+   build won't start on an Intel Mac), unlike the Windows one.
+2. **It would have zipped the wrong artifact.** With `--windowed`, PyInstaller
+   emits BOTH `dist/vrp/` (raw COLLECT folder) and `dist/vrp.app` (the bundle).
+   `build_portable` zipped `dist/vrp/`, which hands a Mac tester a bare unix
+   binary instead of something double-clickable.
+3. **A `.app` must not be zipped with `zipfile`** — the one that would really
+   have bitten. `zipfile` follows symlinks instead of storing them (a bundle's
+   `Frameworks/` relies on them) and `extractall()` doesn't restore the
+   executable bit; either leaves a bundle that won't launch. macOS's own
+   **`ditto -c -k --sequesterRsrc --keepParent`** preserves symlinks,
+   permissions and resource forks, and is used for the staging copy too.
+
+Split into `_build_portable_zipfile` (Windows/Linux) and
+`_build_portable_macos`, chosen by platform. Staging
+(`build/portable/VRP-<version>/`) lets `sample-images/` sit beside the .app
+inside the zip, matching the Windows layout. `--installer` now errors out off
+Windows instead of failing obscurely on a missing ISCC.exe. The macOS path also
+prints the Gatekeeper warning: the .app is unsigned/unnotarized, so testers need
+right-click ▸ Open or `xattr -dr com.apple.quarantine`, and the release notes
+must say so.
+
+**Verified what could be verified from Windows:** the Windows path is unchanged
+— rebuilt the zip and diffed the entry list against the *published* `.3`
+artifact: **477 entries, identical**. Naming/routing is unit-tested
+(`tests/test_build_artifact_name.py`, +7: win64, macos-arm64/x86_64, the two
+never collide, a Mac suffix never says "win", and — the point — a `.app` is
+never routed to the zipfile packer). Suite **346 passed**.
+
+**NOT verified: the macOS packaging itself.** It was written on Windows and has
+never run on a Mac. Every failure mode is loud (missing .app, missing `ditto`,
+non-zero `ditto` exit) rather than silent. Relevant good news: the frozen driver
+repair was written for this — `import_drivers()`'s frozen branch is **win32-only**,
+so a frozen Mac build hits the same broken glob, and `_ensure_driver_modules()`
+imports the modules itself rather than relying on that branch. And prism ships
+macOS wheels with a `libprism.dylib` that `--collect-binaries=prism` collects the
+same way. **Owed:** the first real Mac run, and the VoiceOver pass on the grid
+(never done on hardware) — a Mac release is first contact for that.
+
 ## 2026-07-15 — Portable zip ships CHIRP's test images (sample-images/)
 
 `build.py --portable` now drops CHIRP's 360 test images (one saved memory image
