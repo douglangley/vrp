@@ -102,9 +102,17 @@ class MainWindow(wx.Frame):
         # Announcer calls set_status(message) with ONE argument, which maps to
         # SetStatusText(message) — the no-index form writes field 0 only, so
         # the attribution in field 1 is never touched.
+        #
+        # speech_enabled honours the "speak_messages" preference (default ON).
+        # This is the wiring that was missing: the pref existed but the Announcer
+        # was built with speech unconditionally on, so the checkbox did nothing.
+        # The cell cursor below deliberately bypasses the pref.
+        from vrp.config import get_config as _get_config
+
         self.announce = Announcer(
             set_status=self.SetStatusText,
             speak=lambda m, interrupt=False: self._speaker.speak(m, interrupt=interrupt),
+            speech_enabled=bool(_get_config().get("speak_messages", True)),
         )
 
         # ChannelGrid binds these to its inner native list itself, re-binding when
@@ -129,11 +137,9 @@ class MainWindow(wx.Frame):
         # so nothing eats them), and prism speaks the moved-to cell. So F2 edits
         # the cell you arrowed to, identical to Windows. Left None on GTK/other,
         # where the cursor is untested — on_edit_cell falls back to the picker.
-        cell_announce = None
-        if sys.platform in ("win32", "darwin"):
-            def cell_announce(text):
-                LOG.debug("cell-cursor announce: %r", text)  # visible with --debug
-                self.announce.announce(text, assertive=True)
+        cell_announce = (
+            self._announce_cell if sys.platform in ("win32", "darwin") else None
+        )
         self.grid = ChannelGrid(
             self,
             on_activate=self.on_edit_channel,
@@ -186,6 +192,24 @@ class MainWindow(wx.Frame):
         # assertive=True additionally tells prism to interrupt/flush whatever
         # is still speaking, so "Ready" is heard either way.
         wx.CallLater(750, self.announce.announce, "Ready", assertive=True)
+
+    def _announce_cell(self, text: str) -> None:
+        """Voice the grid's Left/Right cell cursor ("<value>, <column>").
+
+        ``always_speak``: this is the ONLY announcement of which cell the cursor
+        is on — wx's generic DataViewCtrl announces no per-cell cursor on
+        Windows — so it deliberately ignores the ``speak_messages`` preference.
+        Gating it would make Left/Right navigation silent, which is precisely
+        what that preference must never be able to cause. It cannot double up
+        with the screen reader, because nothing else speaks it.
+
+        ``assertive`` so quick arrowing speaks the latest cell rather than
+        queueing behind stale ones. Passed to ChannelGrid as its ``announce``
+        callback on Windows/macOS only (None elsewhere, where F2 falls back to
+        the column picker).
+        """
+        LOG.debug("cell-cursor announce: %r", text)  # visible with --debug
+        self.announce.announce(text, assertive=True, always_speak=True)
 
     # -- menu construction --------------------------------------------
 
@@ -1714,7 +1738,7 @@ class MainWindow(wx.Frame):
 
         cfg = get_config()
         current = {
-            "speak_status_messages": bool(cfg.get("speak_status_messages", False)),
+            "speak_messages": bool(cfg.get("speak_messages", True)),
             "recent_files_count": cfg.recent_count(),
             "bandplan_region": cfg.get("bandplan_region", bandplan.DEFAULT_REGION),
             "auto_band_defaults": bool(cfg.get("auto_band_defaults", False)),
@@ -1727,11 +1751,15 @@ class MainWindow(wx.Frame):
         values = dlg.get_values()
         dlg.Destroy()
 
-        cfg.set("speak_status_messages", values["speak_status_messages"])
+        cfg.set("speak_messages", values["speak_messages"])
         cfg.set_recent_count(values["recent_files_count"])
         cfg.set("bandplan_region", values["bandplan_region"])
         cfg.set("auto_band_defaults", values["auto_band_defaults"])
         bandplan.set_region(values["bandplan_region"])  # takes effect immediately
+        # Apply the speech pref immediately too, so the confirmation below is
+        # itself spoken/silent according to what the user just chose — the
+        # setting demonstrates itself rather than waiting for a restart.
+        self.announce.set_speech_enabled(values["speak_messages"])
         self._refresh_recent_menu()
         self.announce.announce("Preferences saved.")
         self.grid.SetFocus()

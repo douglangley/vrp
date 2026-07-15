@@ -8,9 +8,12 @@ Prefs that take effect immediately:
 - Apply band-plan defaults — when on, entering a frequency in the editor also
   fills mode/tuning step/tone from the band plan (the offset is suggested
   regardless). Default OFF. The +/- duplex direction is always left to the user.
-- Speak status messages aloud — gates the prism supplemental speech. Default
-  OFF: the screen reader already reads the live region, so this is opt-in extra
-  speech (the label says so to avoid double-speak confusion).
+- Speak announcements aloud — gates prism speech for operation results, errors
+  and progress. Default ON: there is no live region any more and NVDA does not
+  read the status bar spontaneously, so with this off those messages are only
+  ever seen, not heard. Grid cell navigation always speaks regardless (it has no
+  other voice) — the label says so, since a user who turns this off should not
+  expect Left/Right to go quiet.
 
 Pure value collector (get_values()); the app applies + persists on OK.
 """
@@ -75,14 +78,20 @@ class PreferencesDialog(wx.Dialog):
         self.auto_defaults.SetValue(bool(current.get("auto_band_defaults", False)))
         outer.Add(self.auto_defaults, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 12)
 
+        # A CheckBox self-labels under MSAA (its own label IS its accessible
+        # name), so the explanation goes IN the label rather than in a trailing
+        # StaticText — which wxMSW would try to attach to the next control.
         self.speak = wx.CheckBox(
             self,
-            label="Speak status messages aloud (in addition to your screen reader)",
+            label="Speak announcements aloud — operation results, errors and "
+                  "progress (moving around the channel grid always speaks)",
         )
         self.speak.SetName(
-            "Speak status messages aloud, in addition to your screen reader"
+            "Speak announcements aloud: operation results, errors and progress. "
+            "Moving around the channel grid always speaks regardless of this "
+            "setting."
         )
-        self.speak.SetValue(bool(current.get("speak_status_messages", False)))
+        self.speak.SetValue(bool(current.get("speak_messages", True)))
         outer.Add(self.speak, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 12)
 
         outer.Add(self.CreateStdDialogButtonSizer(wx.OK | wx.CANCEL), 0,
@@ -95,5 +104,5 @@ class PreferencesDialog(wx.Dialog):
             "recent_files_count": self.recent_count.GetSelection(),  # index == value (0..9)
             "bandplan_region": self._region_codes[self.region.GetSelection()],
             "auto_band_defaults": self.auto_defaults.GetValue(),
-            "speak_status_messages": self.speak.GetValue(),
+            "speak_messages": self.speak.GetValue(),
         }

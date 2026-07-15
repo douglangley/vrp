@@ -143,7 +143,11 @@ handler, needs_radio=...)` in the right `_build_*_menu`, add the same combo to
    must be announced. Call `self.announce.announce('Message here')` (a
    `vrp.native.announce.Announcer`) — it writes the status bar and, if prism
    speech is available, speaks it too. Pass `assertive=True` for errors so they
-   interrupt any speech in progress. The announcer is a fallback, not the primary
+   interrupt any speech in progress. Speech obeys the **`speak_messages`**
+   preference (default ON); pass **`always_speak=True`** only for content the
+   screen reader cannot announce itself and that would otherwise be silent —
+   today just the grid's cell cursor. Never gate that kind of content behind a
+   preference (see PROGRESS_LOG "2026-07-15 — The speech preference"). The announcer is a fallback, not the primary
    signal: handlers should still move focus to the result row/field so the screen
    reader reads it directly. Every operation result and error MUST go through the
    announcer path.

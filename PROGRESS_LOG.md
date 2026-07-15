@@ -6,6 +6,63 @@ architecture, keyboard map, and CHIRP feature-coverage checklist.
 
 ---
 
+## 2026-07-15 — The speech preference is wired up (it was dead code)
+
+Follow-up to the prism bundling below, found while investigating it.
+
+**The bug:** `speak_status_messages` (Preferences ▸ "Speak status messages
+aloud", default **OFF**) was shown, read, and written to the config — and
+**never consulted**. `MainWindow.__init__` built the `Announcer` with an
+unconditional `speak=` lambda, so speech was always on whenever prism imported,
+and the checkbox did nothing. The webview `app.py` gated it via
+`self._speak_enabled`; the native rewrite never carried that over. Note that
+`test_announce.py` passed throughout — the defect was in the **wiring**, not the
+`Announcer`, and nothing tested the wiring.
+
+**The trap this set.** The naive fix — consult the pref, keep the default —
+would have been a **silent regression for every existing user**: `Config.set`
+persists the whole dict, so anyone who had ever OK'd Preferences had
+`"speak_status_messages": false` stored (the developer's own config did). Wiring
+the pref up would have honoured those stored `false`s and muted the app on
+upgrade — and it would have looked like the prism fix had failed.
+
+**The resolution: abandon the key, don't migrate it.** A stored `false` records
+**no user choice** — the pref never did anything, so the value is just the
+default that got written out. So `speak_status_messages` is dropped and a new
+`speak_messages` (default **True**) replaces it; leftover old keys are ignored
+and harmless. Default ON because there is no live region any more and NVDA does
+not read the status bar spontaneously: with speech off, an announcement is only
+ever *seen*.
+
+**The cell cursor bypasses the pref.** `Announcer.announce` grew
+`always_speak=True`, used only by the grid's Left/Right cell cursor, which is
+the *only* announcement of which cell you are on (the generic Windows
+DataViewCtrl announces no per-cell cursor). Gating it would recreate the silent-
+navigation bug through a different door — via a preference the user might
+reasonably tick. It can't double-speak precisely because nothing else announces
+it. The checkbox label says so ("…moving around the channel grid always
+speaks"), in the label itself rather than a trailing StaticText — a CheckBox
+self-labels under MSAA, and wxMSW would try to attach a trailing StaticText to
+the *next* control.
+
+- `Announcer`: `speech_enabled` ctor arg + `set_speech_enabled()` (Preferences
+  applies immediately, so the "Preferences saved." confirmation is itself
+  spoken/silent per the choice just made) + `always_speak=`.
+- `main_window`: builds the Announcer from the pref; the cell-cursor closure
+  became a named `_announce_cell` method — more debuggable, and reachable from
+  a test.
+
+**Verified:** suite **334 passed** (+17). Unit tests for the gate; and
+`tests/test_speech_pref_wiring.py` drives a real `MainWindow` for the wiring
+itself (default ON, pref honoured both ways, the abandoned key can't silence the
+app, and announcements-off still leaves the cell cursor speaking).
+**Mutation-checked** — re-introducing each half of the bug fails the matching
+test, so they aren't vacuous. Driven end-to-end from source with an isolated
+`APPDATA`: `speak_messages=true` → `prism: using backend NVDA` logged (an
+announcement passed the gate); `false` → no backend ever acquired (nothing
+spoke). **Owed:** the audible NVDA pass — that the cell cursor is *heard* with
+announcements off is proven at the callback, not at the ear.
+
 ## 2026-07-15 — prism is bundled in the build (the release .exe was silent)
 
 **The bug:** every release build excluded prism, so the frozen app had **no
