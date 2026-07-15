@@ -29,6 +29,66 @@ LOG = logging.getLogger(__name__)
 _chirp_loaded = False
 
 
+def _ensure_driver_modules() -> int:
+    """Make CHIRP's driver modules importable in a frozen build. Returns the
+    number of driver modules known.
+
+    Why this exists: ``chirp/drivers/__init__.py`` builds ``__all__`` by
+    globbing ``*.py`` **off the filesystem**. Frozen, the drivers live inside
+    PyInstaller's PYZ archive and there are no .py files on disk, so ``__all__``
+    comes out **empty** — and ``directory.import_drivers()``'s frozen branch
+    iterates exactly that list, so it imports nothing, the registry stays empty,
+    and every image fails with "Unsupported model". ``--collect-submodules``
+    bundles the modules; nothing ever imports them. Upstream CHIRP rewrites that
+    file to a static list when packaging; we can't, because ./chirp is used
+    unmodified (CLAUDE.md).
+
+    So: when ``__all__`` is empty, rebuild it via ``pkgutil.iter_modules``,
+    which PyInstaller's frozen importer implements (verified: 191 modules ->
+    552 registered drivers), and import the modules here rather than relying on
+    ``import_drivers()``'s branch — that branch is ``win32``-only, and a frozen
+    macOS build would fall through to the same broken glob.
+
+    On a source run ``__all__`` is already populated by the glob, so this is a
+    no-op and CHIRP behaves exactly as upstream intends.
+    """
+    import chirp.drivers
+
+    names = list(getattr(chirp.drivers, "__all__", []) or [])
+    if names:
+        return len(names)  # source run: the glob worked, leave CHIRP alone
+
+    import pkgutil
+
+    names = sorted(
+        m.name
+        for m in pkgutil.iter_modules(chirp.drivers.__path__)
+        if not m.name.startswith("__")
+    )
+    if not names:
+        LOG.error(
+            "No CHIRP driver modules found in the frozen build — no radio will "
+            "be supported. Check --collect-submodules=chirp.drivers in build.py."
+        )
+        return 0
+    chirp.drivers.__all__ = names
+    # Import them ourselves: import_drivers()'s frozen branch only fires on
+    # win32. One bad driver must not abort the rest (upstream tolerates this
+    # too), so failures are logged and skipped.
+    failed = 0
+    for name in names:
+        try:
+            __import__("chirp.drivers.%s" % name)
+        except Exception as exc:  # noqa: BLE001
+            failed += 1
+            LOG.warning("Failed to import driver %s: %s", name, exc)
+    LOG.info(
+        "Frozen build: repopulated chirp.drivers.__all__ with %d modules (%d "
+        "failed to import)", len(names), failed,
+    )
+    return len(names)
+
+
 def _ensure_chirp() -> None:
     global _chirp_loaded
     if _chirp_loaded:
@@ -46,9 +106,16 @@ def _ensure_chirp() -> None:
             builtins._ = lambda s: s  # type: ignore[attr-defined]
 
         from chirp import directory
+
+        # Frozen builds have no driver .py files on disk for CHIRP to glob —
+        # see _ensure_driver_modules. Must run BEFORE import_drivers().
+        _ensure_driver_modules()
         directory.import_drivers()
         _chirp_loaded = True
-        LOG.info("CHIRP drivers loaded successfully")
+        LOG.info(
+            "CHIRP drivers loaded successfully (%d registered)",
+            len(getattr(directory, "DRV_TO_RADIO", {})),
+        )
     except ImportError as e:
         raise RuntimeError(
             "CHIRP library not found. Install it with: pip install -e ./chirp\n"

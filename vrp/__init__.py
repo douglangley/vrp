@@ -20,7 +20,7 @@ __all__ = ["__version__", "describe_version"]
 # Date-based release version: YYYYMMDD.N — see tools/release_version.py, which
 # is what sets this (and the matching pyproject.toml version). Released as
 # VRP-<version>; N starts at 1 each day.
-__version__ = "20260715.2"
+__version__ = "20260715.3"
 
 _DATE_VERSION_RE = _re.compile(r"(\d{4})(\d{2})(\d{2})\.(\d+)")
 

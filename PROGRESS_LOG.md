@@ -6,6 +6,63 @@ architecture, keyboard map, and CHIRP feature-coverage checklist.
 
 ---
 
+## 2026-07-15 — Frozen builds registered ZERO drivers (every release was broken)
+
+**The bug, reported by the developer:** the release .exe fails to open any test
+image — *"Failed to load image: Unsupported model Baofeng UV-5R Mini"*. Not
+image-specific: the frozen app registered **no drivers at all**. Since
+`list_radio_models()` iterates the same `directory.DRV_TO_RADIO`, the Download
+dialog's model list was empty too. **Every VRP release build ever produced could
+neither open an image nor talk to a radio.** Launching was the only thing it did
+— which is exactly as far as our verification had ever gone.
+
+**Root cause (in CHIRP, triggered by how we package it).**
+`chirp/drivers/__init__.py` builds `__all__` by globbing `*.py` **off the
+filesystem**. Frozen, the drivers live inside PyInstaller's PYZ archive and
+there are no .py files on disk, so `__all__` comes out **empty** — and
+`directory.import_drivers()` has a frozen branch (`if sys.platform == 'win32'
+and frozen`) that iterates exactly that list. Empty list → nothing imported →
+nothing registers → "Unsupported model". `--collect-submodules=chirp.drivers`
+faithfully bundles all 191 driver modules; **nothing ever imports them.** CHIRP's
+own comment names the trap: *"This won't be here in the frozen build because we
+convert this file to a static list of driver modules to import."* Upstream
+rewrites that file when packaging. We can't — ./chirp is used unmodified
+(CLAUDE.md) — so the repair has to live on the VRP side.
+
+**The fix — `chirp_backend/radio._ensure_driver_modules()`,** called from
+`_ensure_chirp()` before `import_drivers()`. When `__all__` is empty it rebuilds
+the list via `pkgutil.iter_modules`, which PyInstaller's frozen importer
+implements (191 modules), and imports the modules itself rather than trusting
+`import_drivers()`'s branch — that branch is **win32-only**, so a frozen macOS
+build would fall through to the same broken glob. A bad driver is logged and
+skipped, not fatal. On a source run `__all__` is already populated, so it is a
+no-op and CHIRP behaves exactly as upstream intends.
+
+**Verified (`tools/spike_frozen_drivers.py`, frozen console build with build.py's
+real flags, driving VRP's actual `chirp_backend.radio` path):** before —
+`__all__: 0 entries`, `import_drivers()` → **0 registered**. After —
+`_ensure_chirp()` → **552 registered**; `load_image()` → `ok=True, Loaded
+Baofeng UV-5R Mini`. Suite **339 passed**.
+
+**On the tests — the first version of them was worthless, which is the real
+lesson.** Emptying `__all__` in-process proves nothing: the registry is a
+process-wide global that earlier imports have already filled, so the assertions
+passed with the fix removed. Emptying it on a source run proves nothing either:
+`import_drivers()` only consults `__all__` when frozen; otherwise it globs and
+succeeds regardless. Three of the four first-draft tests were green and blind —
+the same species of test that let this ship. `tests/test_frozen_drivers.py` now
+runs a **subprocess** with `sys.frozen` forced on and `__all__` emptied, and
+carries a **negative control** asserting that *without* the repair that
+interpreter registers 0 drivers — so if the simulation ever stops reproducing
+the bug, the suite says so instead of going quietly green.
+
+**Why it was never caught:** nothing had ever opened an image in a frozen build.
+The frozen smoke owed since 2026-07-10 was "do the stock_config CSVs land", and
+today's release verification went as far as "the window appears". Both were
+true, and both were shallow. **Owed:** open an image in the real windowed
+`vrp.exe` (the spike proves the code path, not the GUI), and a frozen
+**Download-dialog** check that the model list is populated.
+
 ## 2026-07-15 — The speech preference is wired up (it was dead code)
 
 Follow-up to the prism bundling below, found while investigating it.

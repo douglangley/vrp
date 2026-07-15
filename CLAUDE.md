@@ -325,9 +325,18 @@ Notes:
   guards only — prism imports neither (just `cffi`); the "~795 win32more
   modules" scare was a Nuitka `--include-package` artifact, and under
   PyInstaller prism costs ~1 MB. See PROGRESS_LOG "2026-07-15 — prism".
-- `build.py` explicitly `--collect-submodules` for `chirp.drivers` and
-  `chirp.sources` — both are loaded via dynamic `__import__`/
-  `importlib.import_module`, which PyInstaller's static analysis can't follow.
+- `build.py` explicitly `--collect-submodules` for `chirp.drivers` — loaded via
+  dynamic `__import__`, which PyInstaller's static analysis can't follow.
+  **Bundling them is not enough to make them work.** `chirp/drivers/__init__.py`
+  builds `__all__` by globbing `*.py` off the filesystem; frozen, there are no
+  .py files on disk, so `__all__` is empty and `directory.import_drivers()`'s
+  frozen branch registers **zero drivers** — every image becomes "Unsupported
+  model" and the Download list is empty. `chirp_backend.radio.
+  _ensure_driver_modules()` repairs this (rebuilds the list via
+  `pkgutil.iter_modules` and imports the modules) and MUST run before
+  `import_drivers()`. Don't remove it, and never assume a frozen build works
+  because it launches — **open an image in it**. See PROGRESS_LOG "2026-07-15 —
+  Frozen builds registered ZERO drivers".
 - **Every build first enforces the CHIRP pin** (`ensure_chirp_on_pin`): it
   verifies `./chirp` is checked out at the `CHIRP_COMMIT` SHA and, for a clean
   clone, syncs it there automatically, so the frozen app always bundles the exact
