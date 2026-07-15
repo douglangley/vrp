@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Versatile Radio Programmer (VRP) — Getting Started</title>
+<style>
+  :root { color-scheme: light dark; }
+  body {
+    font-family: -apple-system, "Segoe UI", system-ui, sans-serif;
+    line-height: 1.6;
+    max-width: 46rem;
+    margin: 0 auto;
+    padding: 1.5rem 1.25rem 4rem;
+    color: #1a1a1a;
+    background: #fff;
+  }
+  @media (prefers-color-scheme: dark) {
+    body { color: #e6e6e6; background: #161616; }
+    a { color: #6db3f2; }
+    table, th, td { border-color: #444; }
+    thead th { background: #222; }
+    tbody tr:nth-child(even) td { background: #1d1d1d; }
+    code, .kbd { background: #2a2a2a; }
+  }
+  h1 { font-size: 1.9rem; line-height: 1.2; }
+  h2 { font-size: 1.4rem; margin-top: 2.2rem; border-bottom: 2px solid currentColor; padding-bottom: .25rem; }
+  h3 { font-size: 1.1rem; margin-top: 1.5rem; }
+  a { color: #0b5fb0; }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
+  caption { text-align: left; font-weight: 600; margin-bottom: .4rem; }
+  th, td { border: 1px solid #ccc; padding: .45rem .6rem; text-align: left; vertical-align: top; }
+  thead th { background: #f0f0f0; }
+  tbody tr:nth-child(even) td { background: #f7f7f7; }
+  code, .kbd {
+    font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+    background: #f0f0f0; padding: .05rem .35rem; border-radius: .25rem;
+    font-size: .95em; white-space: nowrap;
+  }
+  .attribution { font-style: italic; }
+  .lead { font-size: 1.05rem; }
+  ol li, ul li { margin: .3rem 0; }
+  .table-wrap { overflow-x: auto; }
+  hr { border: none; border-top: 1px solid #ccc; margin: 2.5rem 0 1.5rem; }
+  a.skip {
+    position: absolute; left: -999px;
+  }
+  a.skip:focus { position: static; left: auto; display: inline-block; margin-bottom: 1rem; }
+</style>
+</head>
+<body>
+<a class="skip" href="#content">Skip to main content</a>
+
+<header>
+  <h1>Versatile Radio Programmer (VRP) — Getting Started</h1>
+</header>
+
+<main id="content">
+
+<section aria-labelledby="announce">
+  <h2 id="announce">Announcing a new radio programmer</h2>
+  <p class="lead"><strong>VRP — the Versatile Radio Programmer</strong> — programs
+  over 550 radios, and it is built to be used entirely by ear and entirely from
+  the keyboard.</p>
+  <ul>
+    <li>Available for <strong>Windows</strong> and <strong>macOS</strong>.</li>
+    <li>Tested on Windows with <strong>NVDA</strong>, <strong>JAWS</strong>, and
+    <strong>Narrator</strong>, and on macOS with <strong>VoiceOver</strong>.</li>
+    <li>Built on the <strong>CHIRP</strong> radio programming project.</li>
+  </ul>
+  <p>CHIRP has long been difficult for blind and visually impaired people to use,
+  and making its interface accessible has not been a priority for the project. So
+  VRP takes a different approach. It uses CHIRP's back end for the radio drivers
+  and the radio communications, but the <strong>entire user interface has been
+  rebuilt from scratch</strong> to work with screen readers on both Windows and
+  macOS. Because the driver layer is CHIRP's, when CHIRP adds or fixes a radio,
+  VRP can pick that up and ship it in a new release.</p>
+  <p>This is very much a first version. We have had a small group of testers so
+  far, so you will probably find bugs. We are open to any and all suggestions,
+  and we will do our best to fix problems as they get reported.</p>
+  <p class="attribution">Radio driver support provided by the CHIRP project —
+  chirpmyradio.com.</p>
+</section>
+
+<section aria-labelledby="keys">
+  <h2 id="keys">About the keys in this guide</h2>
+  <p>Windows and macOS use different modifier keys for the same commands:</p>
+  <ul>
+    <li>On <strong>Windows</strong>, menu commands use <span class="kbd">Ctrl</span>
+    (for example, <span class="kbd">Ctrl+S</span> to save).</li>
+    <li>On <strong>macOS</strong>, the same commands use <strong>Command</strong>
+    (for example, <span class="kbd">Command+S</span>).</li>
+  </ul>
+  <p>Everything else — the arrow keys, Space, Tab, Enter, Escape, and the function
+  keys — is the same on both platforms. Where a key genuinely differs, it is
+  called out.</p>
+  <p><strong>Press <span class="kbd">F1</span> at any time</strong> to hear the
+  full list of shortcuts read out of the app itself.</p>
+</section>
+
+<section aria-labelledby="download">
+  <h2 id="download">Downloading from your radio</h2>
+  <ol>
+    <li>Plug your radio data cable into a USB port on the computer, and into the
+    connector on the radio.</li>
+    <li>Start VRP.</li>
+    <li>Go to the <strong>Radio</strong> menu and choose <strong>Download from
+    Radio</strong> (Windows: <span class="kbd">Ctrl+Shift+D</span> — macOS:
+    <span class="kbd">Command+Shift+D</span>).</li>
+    <li>Select the <strong>COM port</strong> (on macOS, the <strong>serial
+    port</strong>) that the radio is connected to.</li>
+    <li>Select your radio model from the list.</li>
+    <li><strong>Tab</strong> to the <strong>Download</strong> button and press it
+    to transfer the data from the radio.</li>
+  </ol>
+
+  <h3>Finding the right port</h3>
+  <p>A computer often has internal ports of its own, so you may need to try more
+  than one. A valid port for a radio cable usually has a name containing one of
+  these:</p>
+  <ul>
+    <li><strong>CH340</strong></li>
+    <li><strong>FTDI</strong></li>
+    <li><strong>PL2303</strong></li>
+    <li><strong>USB com</strong> followed by a number</li>
+  </ul>
+  <p>On macOS, look for a port whose name starts with
+  <code>/dev/cu.usbserial</code> or <code>/dev/cu.SLAB_USBtoUART</code>.</p>
+
+  <h3>Finding your radio in the list</h3>
+  <p>The model list holds around 550 radios, so it has a <strong>filter
+  field</strong>: just start typing part of the model name and the list narrows
+  as you type. Two things make it easier to live with:</p>
+  <ul>
+    <li><strong>Show: All radios / Favorites</strong> — flip the list to just
+    your starred radios. You manage that list from <strong>Radio ▸ Favorite
+    radios</strong>.</li>
+    <li><strong>Radio details</strong> — reports the highlighted model's specs
+    (bands, channel count, features) before you commit to it.</li>
+  </ul>
+  <p>The transfer runs in the background and announces its progress as it goes. A
+  download can be cancelled; an <strong>upload cannot</strong>, because a
+  half-written radio is worse than no radio.</p>
+</section>
+
+<section aria-labelledby="editing">
+  <h2 id="editing">Editing the memory channels</h2>
+  <p>Once you have downloaded from your radio, you land in the channel grid.</p>
+  <div class="table-wrap">
+  <table>
+    <caption>Working with channels</caption>
+    <thead>
+      <tr><th scope="col">What you want</th><th scope="col">Windows</th><th scope="col">macOS</th></tr>
+    </thead>
+    <tbody>
+      <tr><th scope="row">Move between channels</th><td>Up / Down</td><td>Up / Down</td></tr>
+      <tr><th scope="row">Move between the fields of a channel</th><td>Left / Right</td><td>Left / Right</td></tr>
+      <tr><th scope="row">Edit the <strong>one field</strong> you are sitting on</th><td>F2</td><td>F2</td></tr>
+      <tr><th scope="row">Edit the <strong>whole channel</strong> in one dialog</th><td>Enter, or Ctrl+E</td><td>Enter, or Command+E</td></tr>
+      <tr><th scope="row">Go straight to a channel number</th><td>Ctrl+G</td><td>Command+G</td></tr>
+      <tr><th scope="row">Find a channel</th><td>Ctrl+F</td><td>Command+F</td></tr>
+      <tr><th scope="row">Find the next match</th><td>F3</td><td>F3</td></tr>
+      <tr><th scope="row">Delete the selected channel(s)</th><td>Del</td><td>Fn+Delete, or the Channels menu</td></tr>
+      <tr><th scope="row">Undo</th><td>Ctrl+Z</td><td>Command+Z</td></tr>
+      <tr><th scope="row">Redo</th><td>Ctrl+Y, or Ctrl+Shift+Z</td><td>Command+Y, or Command+Shift+Z</td></tr>
+      <tr><th scope="row">Open the menu for the current row</th><td>Applications key, or Shift+F10</td><td>Use the menu bar</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p><strong>Left and Right</strong> move a cell cursor across the row and speak
+  the value and the column name as you go — "146.940, Frequency". This works on
+  both Windows and macOS. VoiceOver users on macOS can also use
+  <span class="kbd">VO+Left</span> / <span class="kbd">VO+Right</span>, which
+  reads the same cells natively.</p>
+  <p><strong>F2 edits the cell you arrowed to</strong>, in a small single-field
+  dialog. <strong>Enter</strong> (or Ctrl+E / Command+E) is different: it opens
+  the <strong>whole channel</strong> in one friendly dialog you move through with
+  <strong>Tab</strong> and <strong>Shift+Tab</strong>. That full dialog is usually
+  the easier way to set up a channel from scratch — an empty channel exposes every
+  field in it, so you can define the channel in one pass.</p>
+  <p>Every dialog in VRP works the same way: <strong>Tab</strong> and
+  <strong>Shift+Tab</strong> move between fields, <strong>Enter</strong> accepts,
+  and <strong>Escape</strong> cancels. If something you typed is not valid, the
+  dialog stays open, tells you why, and puts you on the field that needs
+  fixing.</p>
+
+  <h3>A helping hand with offsets</h3>
+  <p>When you type a <strong>frequency</strong> into the edit dialog, VRP fills in
+  the standard repeater <strong>offset</strong> for that band from CHIRP's band
+  plan and tells you so — for example, 146.94 gives you 0.6 MHz, and 442.5 gives
+  you 5 MHz.</p>
+  <p>It only fills in the <strong>size</strong> of the offset. <strong>You still
+  choose the plus or minus direction</strong> in the Duplex field, and an offset
+  you have already set is never overwritten. Which band plan it uses is set in
+  <strong>File ▸ Preferences ▸ Band plan (region)</strong>.</p>
+</section>
+
+<section aria-labelledby="selecting">
+  <h2 id="selecting">Selecting channels</h2>
+  <div class="table-wrap">
+  <table>
+    <caption>Selecting channels</caption>
+    <thead>
+      <tr><th scope="col">What you want</th><th scope="col">Windows</th><th scope="col">macOS</th></tr>
+    </thead>
+    <tbody>
+      <tr><th scope="row">Select a run of channels</th><td>Shift+Up / Shift+Down</td><td>Shift+Up / Shift+Down</td></tr>
+      <tr><th scope="row">Select or deselect the current channel</th><td>Space (or Ctrl+Space)</td><td>Space</td></tr>
+      <tr><th scope="row">Move the cursor <strong>without</strong> changing the selection</th><td>Ctrl+Up / Ctrl+Down</td><td>Use VoiceOver navigation</td></tr>
+      <tr><th scope="row">Select all channels</th><td>Ctrl+A</td><td>Command+A</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p>To pick out <strong>scattered, non-consecutive channels</strong>: move to a
+  channel you want and press <strong>Space</strong> to select it. To get to the
+  next one without losing what you have already selected, hold <strong>Ctrl</strong>
+  while you arrow (on macOS, use VoiceOver's own navigation, since Ctrl+Up is
+  Mission Control there). Press <strong>Space</strong> again on each channel you
+  want. VRP announces each one — "Selected channel 12, 3 selected" — so you always
+  know where you stand.</p>
+</section>
+
+<section aria-labelledby="moving">
+  <h2 id="moving">Moving channels around</h2>
+  <p>The direct way, once you have a channel or a group selected:</p>
+  <div class="table-wrap">
+  <table>
+    <caption>Moving a selection</caption>
+    <thead>
+      <tr><th scope="col">What you want</th><th scope="col">Windows</th><th scope="col">macOS</th></tr>
+    </thead>
+    <tbody>
+      <tr><th scope="row">Move up one slot</th><td>Ctrl+Shift+Up</td><td>Command+Shift+Up</td></tr>
+      <tr><th scope="row">Move down one slot</th><td>Ctrl+Shift+Down</td><td>Command+Shift+Down</td></tr>
+      <tr><th scope="row">Move to a specific channel</th><td>Ctrl+Shift+M</td><td>Command+Shift+M</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p>The cut-and-paste way, which also works across scattered selections:</p>
+  <ol>
+    <li>Select the channel or channels you want.</li>
+    <li>Press <strong>Ctrl+X</strong> (macOS: Command+X) to cut them.</li>
+    <li>Move to the destination channel.</li>
+    <li>Press <strong>Ctrl+V</strong> (macOS: Command+V) to paste.</li>
+  </ol>
+  <p><strong>Ctrl+C / Command+C</strong> copies instead of moving. Cut is
+  <em>deferred</em> — nothing actually changes until you paste, and only then are
+  the originals cleared.</p>
+  <p>If you paste onto a channel that is <strong>already occupied</strong>, VRP
+  does not silently clobber it. A dialog asks whether you want to
+  <strong>Overwrite</strong> it, <strong>Make room</strong> (shift the existing
+  channels down to insert yours), or <strong>Cancel</strong>.</p>
+  <p>After any move, the moved channels stay selected at their new home, focus
+  lands on the first of them, and the result is announced.</p>
+  <p>Everything here is undoable — <strong>Ctrl+Z / Command+Z</strong> — and VRP
+  tells you what it reversed ("Undone: Deleted channel 5").</p>
+</section>
+
+<section aria-labelledby="bulk">
+  <h2 id="bulk">Doing a lot at once</h2>
+  <p><strong>Ctrl+M</strong> (macOS: Command+M) opens <strong>Bulk
+  operations</strong>, for when you want to work on a range rather than one
+  channel at a time. Pick a From/To range (or type a list like
+  <code>1-5,8,10-12</code> in the advanced field), then choose one operation:
+  delete, delete and shift up, insert blank, move, copy, <strong>sort</strong>,
+  arrange (compact out the gaps), or export to CSV. Anything destructive asks you
+  to confirm first, stating the range and the count.</p>
+  <p><strong>Sorting</strong> is worth knowing about: you can sort a selection by
+  Name, Receive frequency, or Transmit frequency. The row context menu
+  (Applications key or Shift+F10 on Windows) has a quick <strong>Sort selected
+  channels by</strong> submenu when you have two or more channels selected.</p>
+</section>
+
+<section aria-labelledby="saving">
+  <h2 id="saving">Saving and uploading</h2>
+  <ul>
+    <li><strong>Save</strong>: <strong>File ▸ Save</strong> —
+    <span class="kbd">Ctrl+S</span> (macOS: <span class="kbd">Command+S</span>).
+    <strong>Save As</strong> is <span class="kbd">Ctrl+Shift+S</span> (macOS:
+    <span class="kbd">Command+Shift+S</span>).</li>
+    <li><strong>Upload to the radio</strong>: <strong>Radio ▸ Upload to
+    Radio</strong> — <span class="kbd">Ctrl+Shift+U</span> (macOS:
+    <span class="kbd">Command+Shift+U</span>). It confirms first, because it
+    overwrites <strong>all</strong> the channels in the radio.</li>
+    <li><strong>Open a saved image later</strong>: <strong>File ▸ Open Image
+    File</strong> — <span class="kbd">Ctrl+O</span> (macOS:
+    <span class="kbd">Command+O</span>). Recently opened files are listed under
+    <strong>File ▸ Open Recent</strong>.</li>
+  </ul>
+  <p>VRP will not let you lose work by accident. If you try to exit, close, open
+  another image, or download from a radio while you have unsaved channel edits, it
+  stops and asks: <strong>Save</strong>, <strong>Don't save</strong>, or
+  <strong>Cancel</strong>.</p>
+</section>
+
+<section aria-labelledby="explore">
+  <h2 id="explore">Worth exploring next</h2>
+  <ul>
+    <li><strong>Radio ▸ Settings</strong> (Ctrl+Shift+P / Command+Shift+P) — the
+    radio's own settings, laid out as a navigable tree of labelled controls.</li>
+    <li><strong>Channels ▸ Channel banks</strong> (Ctrl+B / Command+B) — assign a
+    channel to the radio's banks, on radios that have them.</li>
+    <li><strong>Radio ▸ Query Source ▸ RepeaterBook</strong> — look up repeaters
+    by country and state, filter by band and mode, then pick the ones you want
+    with Space and import them straight into your radio.</li>
+    <li><strong>Radio ▸ Query Source ▸ Frequency lists</strong> — import one of
+    CHIRP's ready-made lists (NOAA weather, FRS/GMRS, MURS, Marine VHF, aviation,
+    railroad, PMR, and more). No internet needed.</li>
+    <li><strong>File ▸ Import from File</strong> and <strong>File ▸ Export to
+    CSV</strong> — move channels between images, or send someone just the part of
+    your memories they asked for. (There is no print command; Export to CSV is the
+    accessible equivalent.)</li>
+    <li><strong>File ▸ Preferences</strong> — how many recent files to show, which
+    band plan region to use, whether entering a frequency should also fill in
+    mode/step/tone, and whether VRP speaks status messages aloud on top of your
+    screen reader.</li>
+    <li><strong>Radio ▸ Radio Info</strong> — everything VRP knows about the
+    loaded radio, in a read-only box you can arrow through and copy from.</li>
+  </ul>
+</section>
+
+<section aria-labelledby="reference">
+  <h2 id="reference">Full keyboard reference</h2>
+  <div class="table-wrap">
+  <table>
+    <caption>All VRP keyboard commands</caption>
+    <thead>
+      <tr><th scope="col">Command</th><th scope="col">Windows</th><th scope="col">macOS</th></tr>
+    </thead>
+    <tbody>
+      <tr><th scope="row">Show the keyboard shortcuts</th><td>F1</td><td>F1</td></tr>
+      <tr><th scope="row">Open image file</th><td>Ctrl+O</td><td>Command+O</td></tr>
+      <tr><th scope="row">Save</th><td>Ctrl+S</td><td>Command+S</td></tr>
+      <tr><th scope="row">Save as</th><td>Ctrl+Shift+S</td><td>Command+Shift+S</td></tr>
+      <tr><th scope="row">Exit</th><td>Ctrl+Q</td><td>Command+Q</td></tr>
+      <tr><th scope="row">Download from radio</th><td>Ctrl+Shift+D</td><td>Command+Shift+D</td></tr>
+      <tr><th scope="row">Upload to radio</th><td>Ctrl+Shift+U</td><td>Command+Shift+U</td></tr>
+      <tr><th scope="row">Radio settings</th><td>Ctrl+Shift+P</td><td>Command+Shift+P</td></tr>
+      <tr><th scope="row">Edit the focused channel (all fields)</th><td>Ctrl+E, or Enter</td><td>Command+E, or Enter</td></tr>
+      <tr><th scope="row">Edit the focused cell</th><td>F2</td><td>F2</td></tr>
+      <tr><th scope="row">Delete the selected channel(s)</th><td>Del</td><td>Fn+Delete</td></tr>
+      <tr><th scope="row">Undo</th><td>Ctrl+Z</td><td>Command+Z</td></tr>
+      <tr><th scope="row">Redo</th><td>Ctrl+Y, or Ctrl+Shift+Z</td><td>Command+Y, or Command+Shift+Z</td></tr>
+      <tr><th scope="row">Select or deselect the focused channel</th><td>Space, or Ctrl+Space</td><td>Space</td></tr>
+      <tr><th scope="row">Move the cursor without changing the selection</th><td>Ctrl+Up / Ctrl+Down</td><td>VoiceOver navigation</td></tr>
+      <tr><th scope="row">Extend the selection</th><td>Shift+Up / Shift+Down</td><td>Shift+Up / Shift+Down</td></tr>
+      <tr><th scope="row">Select all channels</th><td>Ctrl+A</td><td>Command+A</td></tr>
+      <tr><th scope="row">Copy</th><td>Ctrl+C</td><td>Command+C</td></tr>
+      <tr><th scope="row">Cut</th><td>Ctrl+X</td><td>Command+X</td></tr>
+      <tr><th scope="row">Paste at the focused channel</th><td>Ctrl+V</td><td>Command+V</td></tr>
+      <tr><th scope="row">Go to channel</th><td>Ctrl+G</td><td>Command+G</td></tr>
+      <tr><th scope="row">Channel banks</th><td>Ctrl+B</td><td>Command+B</td></tr>
+      <tr><th scope="row">Move selected channel(s) up</th><td>Ctrl+Shift+Up</td><td>Command+Shift+Up</td></tr>
+      <tr><th scope="row">Move selected channel(s) down</th><td>Ctrl+Shift+Down</td><td>Command+Shift+Down</td></tr>
+      <tr><th scope="row">Move selected channel(s) to a chosen slot</th><td>Ctrl+Shift+M</td><td>Command+Shift+M</td></tr>
+      <tr><th scope="row">Bulk operations</th><td>Ctrl+M</td><td>Command+M</td></tr>
+      <tr><th scope="row">Find a channel</th><td>Ctrl+F</td><td>Command+F</td></tr>
+      <tr><th scope="row">Find next match</th><td>F3</td><td>F3</td></tr>
+      <tr><th scope="row">Row context menu</th><td>Applications key, or Shift+F10</td><td>Use the menu bar</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section aria-labelledby="bugs">
+  <h2 id="bugs">Reporting bugs</h2>
+  <p>We expect you to find things. When you report a bug, it helps enormously to
+  include:</p>
+  <ul>
+    <li>Your <strong>radio model</strong> and the <strong>cable</strong> you are
+    using.</li>
+    <li>Your <strong>operating system</strong> and <strong>screen
+    reader</strong>.</li>
+    <li>The <strong>VRP version</strong>, which is in <strong>Help ▸
+    About</strong> — it reads it out as something like "Release 3 of 15 July
+    2026".</li>
+    <li>What you did, what you heard, and what you expected to hear.</li>
+  </ul>
+</section>
+
+<hr>
+<footer>
+  <p class="attribution">Radio driver support provided by the CHIRP project —
+  chirpmyradio.com.</p>
+</footer>
+
+</main>
+</body>
+</html>

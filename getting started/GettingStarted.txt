@@ -1,0 +1,342 @@
+VERSATILE RADIO PROGRAMMER (VRP) - GETTING STARTED
+==================================================
+
+
+ANNOUNCING A NEW RADIO PROGRAMMER
+---------------------------------
+
+VRP - the Versatile Radio Programmer - programs over 550 radios, and it is
+built to be used entirely by ear and entirely from the keyboard.
+
+  * Available for Windows and macOS.
+  * Tested on Windows with NVDA, JAWS, and Narrator, and on macOS with
+    VoiceOver.
+  * Built on the CHIRP radio programming project.
+
+CHIRP has long been difficult for blind and visually impaired people to use,
+and making its interface accessible has not been a priority for the project.
+So VRP takes a different approach. It uses CHIRP's back end for the radio
+drivers and the radio communications, but the entire user interface has been
+rebuilt from scratch to work with screen readers on both Windows and macOS.
+Because the driver layer is CHIRP's, when CHIRP adds or fixes a radio, VRP can
+pick that up and ship it in a new release.
+
+This is very much a first version. We have had a small group of testers so far,
+so you will probably find bugs. We are open to any and all suggestions, and we
+will do our best to fix problems as they get reported.
+
+Radio driver support provided by the CHIRP project - chirpmyradio.com.
+
+
+ABOUT THE KEYS IN THIS GUIDE
+----------------------------
+
+Windows and macOS use different modifier keys for the same commands:
+
+  * On Windows, menu commands use Ctrl (for example, Ctrl+S to save).
+  * On macOS, the same commands use Command (for example, Command+S).
+
+Everything else - the arrow keys, Space, Tab, Enter, Escape, and the function
+keys - is the same on both platforms. Where a key genuinely differs, it is
+called out.
+
+Press F1 at any time to hear the full list of shortcuts read out of the app
+itself.
+
+
+DOWNLOADING FROM YOUR RADIO
+---------------------------
+
+  1. Plug your radio data cable into a USB port on the computer, and into the
+     connector on the radio.
+  2. Start VRP.
+  3. Go to the Radio menu and choose Download from Radio.
+     Windows: Ctrl+Shift+D. macOS: Command+Shift+D.
+  4. Select the COM port (on macOS, the serial port) that the radio is
+     connected to.
+  5. Select your radio model from the list.
+  6. Tab to the Download button and press it to transfer the data from the
+     radio.
+
+Finding the right port
+~~~~~~~~~~~~~~~~~~~~~~
+
+A computer often has internal ports of its own, so you may need to try more
+than one. A valid port for a radio cable usually has a name containing one of
+these:
+
+  * CH340
+  * FTDI
+  * PL2303
+  * USB com followed by a number
+
+On macOS, look for a port whose name starts with /dev/cu.usbserial or
+/dev/cu.SLAB_USBtoUART.
+
+Finding your radio in the list
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The model list holds around 550 radios, so it has a filter field: just start
+typing part of the model name and the list narrows as you type. Two things make
+it easier to live with:
+
+  * Show: All radios / Favorites - flip the list to just your starred radios.
+    You manage that list from Radio > Favorite radios.
+  * Radio details - reports the highlighted model's specs (bands, channel
+    count, features) before you commit to it.
+
+The transfer runs in the background and announces its progress as it goes. A
+download can be cancelled; an upload cannot, because a half-written radio is
+worse than no radio.
+
+
+EDITING THE MEMORY CHANNELS
+---------------------------
+
+Once you have downloaded from your radio, you land in the channel grid.
+
+  Move between channels
+      Windows: Up / Down          macOS: Up / Down
+  Move between the fields of a channel
+      Windows: Left / Right       macOS: Left / Right
+  Edit the ONE FIELD you are sitting on
+      Windows: F2                 macOS: F2
+  Edit the WHOLE CHANNEL in one dialog
+      Windows: Enter, or Ctrl+E   macOS: Enter, or Command+E
+  Go straight to a channel number
+      Windows: Ctrl+G             macOS: Command+G
+  Find a channel
+      Windows: Ctrl+F             macOS: Command+F
+  Find the next match
+      Windows: F3                 macOS: F3
+  Delete the selected channel(s)
+      Windows: Del                macOS: Fn+Delete, or the Channels menu
+  Undo
+      Windows: Ctrl+Z             macOS: Command+Z
+  Redo
+      Windows: Ctrl+Y or Ctrl+Shift+Z
+                                  macOS: Command+Y or Command+Shift+Z
+  Open the menu for the current row
+      Windows: Applications key, or Shift+F10
+                                  macOS: use the menu bar
+
+Left and Right move a cell cursor across the row and speak the value and the
+column name as you go - "146.940, Frequency". This works on both Windows and
+macOS. VoiceOver users on macOS can also use VO+Left / VO+Right, which reads
+the same cells natively.
+
+F2 edits the cell you arrowed to, in a small single-field dialog. Enter (or
+Ctrl+E / Command+E) is different: it opens the whole channel in one friendly
+dialog you move through with Tab and Shift+Tab. That full dialog is usually the
+easier way to set up a channel from scratch - an empty channel exposes every
+field in it, so you can define the channel in one pass.
+
+Every dialog in VRP works the same way: Tab and Shift+Tab move between fields,
+Enter accepts, and Escape cancels. If something you typed is not valid, the
+dialog stays open, tells you why, and puts you on the field that needs fixing.
+
+A helping hand with offsets
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+When you type a frequency into the edit dialog, VRP fills in the standard
+repeater offset for that band from CHIRP's band plan and tells you so - for
+example, 146.94 gives you 0.6 MHz, and 442.5 gives you 5 MHz.
+
+It only fills in the SIZE of the offset. You still choose the plus or minus
+direction in the Duplex field, and an offset you have already set is never
+overwritten. Which band plan it uses is set in File > Preferences > Band plan
+(region).
+
+
+SELECTING CHANNELS
+------------------
+
+  Select a run of channels
+      Windows: Shift+Up / Shift+Down     macOS: Shift+Up / Shift+Down
+  Select or deselect the current channel
+      Windows: Space (or Ctrl+Space)     macOS: Space
+  Move the cursor WITHOUT changing the selection
+      Windows: Ctrl+Up / Ctrl+Down       macOS: use VoiceOver navigation
+  Select all channels
+      Windows: Ctrl+A                    macOS: Command+A
+
+To pick out scattered, non-consecutive channels: move to a channel you want and
+press Space to select it. To get to the next one without losing what you have
+already selected, hold Ctrl while you arrow (on macOS, use VoiceOver's own
+navigation, since Ctrl+Up is Mission Control there). Press Space again on each
+channel you want. VRP announces each one - "Selected channel 12, 3 selected" -
+so you always know where you stand.
+
+
+MOVING CHANNELS AROUND
+----------------------
+
+The direct way, once you have a channel or a group selected:
+
+  Move up one slot
+      Windows: Ctrl+Shift+Up      macOS: Command+Shift+Up
+  Move down one slot
+      Windows: Ctrl+Shift+Down    macOS: Command+Shift+Down
+  Move to a specific channel
+      Windows: Ctrl+Shift+M       macOS: Command+Shift+M
+
+The cut-and-paste way, which also works across scattered selections:
+
+  1. Select the channel or channels you want.
+  2. Press Ctrl+X (macOS: Command+X) to cut them.
+  3. Move to the destination channel.
+  4. Press Ctrl+V (macOS: Command+V) to paste.
+
+Ctrl+C / Command+C copies instead of moving. Cut is deferred - nothing actually
+changes until you paste, and only then are the originals cleared.
+
+If you paste onto a channel that is already occupied, VRP does not silently
+clobber it. A dialog asks whether you want to Overwrite it, Make room (shift
+the existing channels down to insert yours), or Cancel.
+
+After any move, the moved channels stay selected at their new home, focus lands
+on the first of them, and the result is announced.
+
+Everything here is undoable - Ctrl+Z / Command+Z - and VRP tells you what it
+reversed ("Undone: Deleted channel 5").
+
+
+DOING A LOT AT ONCE
+-------------------
+
+Ctrl+M (macOS: Command+M) opens Bulk operations, for when you want to work on a
+range rather than one channel at a time. Pick a From/To range (or type a list
+like 1-5,8,10-12 in the advanced field), then choose one operation: delete,
+delete and shift up, insert blank, move, copy, sort, arrange (compact out the
+gaps), or export to CSV. Anything destructive asks you to confirm first,
+stating the range and the count.
+
+Sorting is worth knowing about: you can sort a selection by Name, Receive
+frequency, or Transmit frequency. The row context menu (Applications key or
+Shift+F10 on Windows) has a quick "Sort selected channels by" submenu when you
+have two or more channels selected.
+
+
+SAVING AND UPLOADING
+--------------------
+
+  * Save: File > Save - Ctrl+S (macOS: Command+S). Save As is Ctrl+Shift+S
+    (macOS: Command+Shift+S).
+  * Upload to the radio: Radio > Upload to Radio - Ctrl+Shift+U (macOS:
+    Command+Shift+U). It confirms first, because it overwrites ALL the channels
+    in the radio.
+  * Open a saved image later: File > Open Image File - Ctrl+O (macOS:
+    Command+O). Recently opened files are listed under File > Open Recent.
+
+VRP will not let you lose work by accident. If you try to exit, close, open
+another image, or download from a radio while you have unsaved channel edits,
+it stops and asks: Save, Don't save, or Cancel.
+
+
+WORTH EXPLORING NEXT
+--------------------
+
+  * Radio > Settings (Ctrl+Shift+P / Command+Shift+P) - the radio's own
+    settings, laid out as a navigable tree of labelled controls.
+  * Channels > Channel banks (Ctrl+B / Command+B) - assign a channel to the
+    radio's banks, on radios that have them.
+  * Radio > Query Source > RepeaterBook - look up repeaters by country and
+    state, filter by band and mode, then pick the ones you want with Space and
+    import them straight into your radio.
+  * Radio > Query Source > Frequency lists - import one of CHIRP's ready-made
+    lists (NOAA weather, FRS/GMRS, MURS, Marine VHF, aviation, railroad, PMR,
+    and more). No internet needed.
+  * File > Import from File and File > Export to CSV - move channels between
+    images, or send someone just the part of your memories they asked for.
+    (There is no print command; Export to CSV is the accessible equivalent.)
+  * File > Preferences - how many recent files to show, which band plan region
+    to use, whether entering a frequency should also fill in mode/step/tone,
+    and whether VRP speaks status messages aloud on top of your screen reader.
+  * Radio > Radio Info - everything VRP knows about the loaded radio, in a
+    read-only box you can arrow through and copy from.
+
+
+FULL KEYBOARD REFERENCE
+-----------------------
+
+  Show the keyboard shortcuts
+      Windows: F1                 macOS: F1
+  Open image file
+      Windows: Ctrl+O             macOS: Command+O
+  Save
+      Windows: Ctrl+S             macOS: Command+S
+  Save as
+      Windows: Ctrl+Shift+S       macOS: Command+Shift+S
+  Exit
+      Windows: Ctrl+Q             macOS: Command+Q
+  Download from radio
+      Windows: Ctrl+Shift+D       macOS: Command+Shift+D
+  Upload to radio
+      Windows: Ctrl+Shift+U       macOS: Command+Shift+U
+  Radio settings
+      Windows: Ctrl+Shift+P       macOS: Command+Shift+P
+  Edit the focused channel (all fields)
+      Windows: Ctrl+E, or Enter   macOS: Command+E, or Enter
+  Edit the focused cell
+      Windows: F2                 macOS: F2
+  Delete the selected channel(s)
+      Windows: Del                macOS: Fn+Delete
+  Undo
+      Windows: Ctrl+Z             macOS: Command+Z
+  Redo
+      Windows: Ctrl+Y, or Ctrl+Shift+Z
+                                  macOS: Command+Y, or Command+Shift+Z
+  Select or deselect the focused channel
+      Windows: Space, or Ctrl+Space
+                                  macOS: Space
+  Move the cursor without changing the selection
+      Windows: Ctrl+Up / Ctrl+Down
+                                  macOS: VoiceOver navigation
+  Extend the selection
+      Windows: Shift+Up / Shift+Down
+                                  macOS: Shift+Up / Shift+Down
+  Select all channels
+      Windows: Ctrl+A             macOS: Command+A
+  Copy
+      Windows: Ctrl+C             macOS: Command+C
+  Cut
+      Windows: Ctrl+X             macOS: Command+X
+  Paste at the focused channel
+      Windows: Ctrl+V             macOS: Command+V
+  Go to channel
+      Windows: Ctrl+G             macOS: Command+G
+  Channel banks
+      Windows: Ctrl+B             macOS: Command+B
+  Move selected channel(s) up
+      Windows: Ctrl+Shift+Up      macOS: Command+Shift+Up
+  Move selected channel(s) down
+      Windows: Ctrl+Shift+Down    macOS: Command+Shift+Down
+  Move selected channel(s) to a chosen slot
+      Windows: Ctrl+Shift+M       macOS: Command+Shift+M
+  Bulk operations
+      Windows: Ctrl+M             macOS: Command+M
+  Find a channel
+      Windows: Ctrl+F             macOS: Command+F
+  Find next match
+      Windows: F3                 macOS: F3
+  Row context menu
+      Windows: Applications key, or Shift+F10
+                                  macOS: use the menu bar
+
+
+REPORTING BUGS
+--------------
+
+We expect you to find things. When you report a bug, it helps enormously to
+include:
+
+  * Your radio model and the cable you are using.
+  * Your operating system and screen reader.
+  * The VRP version, which is in Help > About - it reads it out as something
+    like "Release 3 of 15 July 2026".
+  * What you did, what you heard, and what you expected to hear.
+
+
+--------------------------------------------------------------------------
+
+Radio driver support provided by the CHIRP project - chirpmyradio.com.
