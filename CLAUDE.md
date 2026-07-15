@@ -310,9 +310,17 @@ Notes:
   Nuitka would compile the 552 dynamically-imported drivers with no size or
   startup win for a wx GUI, so it stays retired. See PROGRESS_LOG "Phase 9" for
   the original Nuitka debugging history.
-- `build.py` excludes `prism`/`win32more`/`numpy` (`--exclude-module`) —
-  prism pulls in the entire win32more Windows-API surface; speech is opt-in
-  and no-ops without it.
+- **`build.py` MUST bundle prism** (`--collect-binaries=prism`). Speech is not
+  supplemental on the desktop: there is no ARIA live region (that died with the
+  webview UI), and on Windows the generic DataViewCtrl announces no per-cell
+  cursor, so VRP's Left/Right cell cursor is voiced **only** through prism — a
+  prism-less build navigates cells silently. prism dlopens a native `prism.dll`
+  from `prism/_native/`, which is package data PyInstaller won't bundle from the
+  import alone; without the flag `import prism` raises `FileNotFoundError` and
+  speech is silently dead. `win32more`/`numpy` stay `--exclude-module`'d as
+  guards only — prism imports neither (just `cffi`); the "~795 win32more
+  modules" scare was a Nuitka `--include-package` artifact, and under
+  PyInstaller prism costs ~1 MB. See PROGRESS_LOG "2026-07-15 — prism".
 - `build.py` explicitly `--collect-submodules` for `chirp.drivers` and
   `chirp.sources` — both are loaded via dynamic `__import__`/
   `importlib.import_module`, which PyInstaller's static analysis can't follow.

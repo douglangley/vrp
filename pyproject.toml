@@ -3,7 +3,7 @@
 # A free, open-source, accessible radio memory channel programmer.
 # Built on the CHIRP radio driver library (GPLv3).
 name = "versatile-radio-programmer"
-version = "20260715.1"
+version = "20260715.2"
 description = "Versatile Radio Programmer (VRP) — accessible radio memory channel programmer"
 requires-python = "==3.11.*"
 

@@ -45,9 +45,19 @@ Notes:
     bundle dead modules and drag in `requests` (which nothing VRP runs imports).
     A future purpose-built RepeaterBook will be a static import PyInstaller
     follows on its own.
-  - prism (supplemental speech) is intentionally NOT bundled: it drags in the
-    entire win32more Windows-API binding surface (~795 modules) plus numpy.
-    Speech is opt-in and OFF by default; vrp/speech.py no-ops without prism.
+  - prism (speech) IS bundled, and must be. It is not "supplemental" on the
+    desktop: the native UI has no ARIA live region (that died with the webview
+    UI), and on Windows the generic DataViewCtrl announces no per-cell cursor,
+    so VRP's own Left/Right cell cursor is voiced ONLY through prism. A
+    prism-less build navigates cells silently -- see the 2026-07-15 PROGRESS_LOG
+    entry. prism ships a native prism.dll in prism/_native/ which it dlopens at
+    import time, so --collect-binaries=prism is required; without it `import
+    prism` raises FileNotFoundError and speech is silently dead.
+    The old "prism drags in ~795 win32more modules plus numpy" note was a
+    NUITKA-era artifact (--include-package=win32more force-included the package
+    regardless of imports). prism imports only cffi -- never win32more, never
+    numpy -- so under PyInstaller, which follows real imports, bundling it costs
+    ~1 MB.
   - UPX is deliberately not used (no --upx-dir): it barely shrinks a wx app,
     slows the build, and is a major antivirus false-positive trigger.
   - Switched from Nuitka (see PROGRESS_LOG.md "Phase 9") because compiling
@@ -172,8 +182,21 @@ def build(onefile: bool) -> int:
         # the real source directory is also on its search path.
         f"--paths={os.path.join(PROJECT_ROOT, 'chirp')}",
 
-        # ---- prism (supplemental speech) is intentionally NOT bundled ----
-        "--exclude-module=prism",
+        # ---- prism (speech) — REQUIRED, not optional ----
+        # prism dlopens a native prism.dll from prism/_native/ (see prism/lib.py
+        # _find_native_dir), which PyInstaller does not bundle on its own: it is
+        # package *data*, not an import. Without this flag `import prism` raises
+        # FileNotFoundError from os.add_dll_directory and the app runs silent —
+        # which on Windows means the Left/Right cell cursor, whose only voice is
+        # prism, announces nothing. Verified frozen: 14 backends, NVDA acquired.
+        "--collect-binaries=prism",
+        # Belt-and-braces only: prism imports neither of these (its sole
+        # third-party import is cffi). win32more is declared by prismatoid's
+        # metadata but never imported, and numpy is not a prismatoid dependency
+        # at all. Kept as explicit guards so a future transitive import can't
+        # silently balloon the build — the ~795-module win32more blowup that
+        # motivated them was a Nuitka --include-package artifact, not something
+        # PyInstaller does. Drop them if prism ever genuinely needs win32more.
         "--exclude-module=win32more",
         "--exclude-module=numpy",
 

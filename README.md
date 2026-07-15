@@ -240,10 +240,14 @@ into `dist/vrp-<version>-setup.exe` (Start-menu shortcut + uninstaller). Use
 `build.bat` wrapper; building is a deliberate release step. Testers and end users
 run from source via `run-win.bat` / `run-mac.sh`.)
 
-`build.py` excludes `prism`/`win32more`/`numpy` (prism pulls in the whole
-win32more Windows-API surface; speech is opt-in and no-ops without it), and
-explicitly collects `chirp.drivers`/`chirp.sources` since CHIRP loads both
-via dynamic import that PyInstaller's static analysis can't follow on its own.
+`build.py` bundles `prism` with `--collect-binaries=prism` — **required**, not
+optional: prism dlopens a native `prism.dll` from `prism/_native/`, which
+PyInstaller doesn't bundle on its own, and without it `import prism` raises
+`FileNotFoundError` and the app runs **silent**. That matters because the
+Windows cell cursor (Left/Right) has no other voice. It costs about 1 MB;
+`win32more`/`numpy` stay excluded as guards but prism imports neither (only
+`cffi`). `build.py` also explicitly collects `chirp.drivers`, since CHIRP loads
+drivers via dynamic import that PyInstaller's static analysis can't follow.
 
 Before building, `build.py` enforces the CHIRP pin: it checks that `./chirp` is
 at the `CHIRP_COMMIT` SHA and syncs a clean clone to it automatically, so the
@@ -351,13 +355,12 @@ Build command is in `build.py`. Key PyInstaller flags required:
 
 ```
 --windowed                       GUI app, no console window
---exclude-module=prism           speech is opt-in/off by default — don't bundle it
---exclude-module=win32more       prism's WebView2/win32 bindings — same reason
---exclude-module=numpy           prism dependency — same reason
+--collect-binaries=prism         prism's native prism.dll — REQUIRED, or speech dies silently
+--exclude-module=win32more       guard only; prism does not import it (Nuitka-era bloat)
+--exclude-module=numpy           guard only; not a prism dependency
 --collect-submodules=chirp.drivers   dynamic __import__ — must be explicit
---collect-submodules=chirp.sources   dynamic importlib.import_module — must be explicit
---collect-data=chirp             stock_configs, locale, etc.
 --collect-data=lark              .lark grammar files (chirp.bitwise_grammar)
+--add-data=...chirp/stock_configs    the "Frequency lists" CSVs (data, not modules)
 ```
 
 wxPython, `wx_accessible_grid`, and pyserial don't need explicit flags —

@@ -6,6 +6,68 @@ architecture, keyboard map, and CHIRP feature-coverage checklist.
 
 ---
 
+## 2026-07-15 — prism is bundled in the build (the release .exe was silent)
+
+**The bug:** every release build excluded prism, so the frozen app had **no
+speech at all** — and on Windows that means the Left/Right **cell cursor
+announces nothing**, because wx's generic DataViewCtrl provides no per-cell
+cursor and VRP's own cursor is voiced *only* through the prism Announcer
+(`main_window.py` `cell_announce` → `announce(..., assertive=True)`). The status
+bar still got the text, but NVDA does not read the status bar spontaneously.
+Selection counts, F2 cell-edit results, and operation summaries were equally
+mute. NVDA's own reading of the focused *row* still worked, so the app wasn't
+unusable — but VRP's signature per-cell layer was gone from every build we
+shipped. Caught by the developer asking why prism wasn't bundled.
+
+**Why it happened — the rationale rotted rather than being wrong.** The
+exclusion dates from the **webview era**, where an ARIA live region did the
+announcing and prism was genuinely supplemental (see the Preferences entry
+below: "gates the *supplemental* prism speech; the live region is always spoken
+by the screen reader"). Two later changes invalidated that and neither revisited
+the build: (1) the webview UI was removed (2026-06-29), taking the live region
+with it; (2) the Left/Right cell cursor was added, whose only Windows voice is
+prism. The log even flagged the risk — "the release `.exe` excludes prism, so
+verify the channel grid reads under NVDA in a built Windows binary" — and listed
+the prism-less frozen-exe smoke as owed. It was never run; VRP-20260715.1
+shipped that untested configuration.
+
+**The stated cost was also a Nuitka-era artifact.** `build.py`/README/CLAUDE.md
+all claimed prism "drags in the entire win32more Windows-API surface (~795
+modules) plus numpy". That was true of **Nuitka's `--include-package=win32more`**,
+which force-included a package regardless of imports. **prism imports only
+`cffi`** — never win32more, never numpy — and PyInstaller follows real imports.
+Measured cost of bundling: **+0.8 MB** (22.1 → 22.9 MB zip).
+
+**The actual fix: `--collect-binaries=prism`.** prism dlopens a native
+`prism.dll` from `prism/_native/` (`prism/lib.py` `_find_native_dir` →
+`os.add_dll_directory` → `ffi.dlopen`). That DLL is package *data*, so removing
+`--exclude-module=prism` alone is **not enough** — PyInstaller bundles the .py
+files and the import then dies in `os.add_dll_directory`, which is guarded only
+against `AttributeError`, with `FileNotFoundError(2)`. `win32more`/`numpy` stay
+excluded as guards, with corrected comments.
+
+**Verified (`tools/spike_frozen_prism.py`, a throwaway console-build spike, kept
+for the next time this is questioned):** frozen *without* the flag → `import
+prism` raises `FileNotFoundError`, 0 win32more modules pulled in. Frozen *with*
+it → import OK, **14 backends**, backend acquired = **NVDA**, `speak()` returns;
+25.4 → 26.5 MB. Then in the real app: `prism.dll` present at
+`_internal/prism/_native/prism.dll`, no win32more/numpy directories, and — from
+a **clean unzip of the shipped zip** — `vrp.exe` runs with `prism.dll` **loaded
+into the live process**, proving the import and dlopen both succeed where they
+previously failed. Suite: **317 passed**. Cut **VRP-20260715.2**.
+
+**Owed:** an audible NVDA confirmation by a human — a loaded process proves the
+machinery initialised, not that the cell cursor is heard. **Follow-up bug found
+while investigating:** the **`speak_status_messages` preference is dead code** —
+`MainWindow.__init__` builds the `Announcer` with an unconditional `speak=`
+lambda, so the pref (default **OFF**) is written and read but never consulted;
+speech is always on when prism is importable. The webview `app.py` gated it via
+`self._speak_enabled`; the native rewrite never carried that over. Do **not**
+naively re-wire it: with prism now the cell cursor's only voice, honouring a
+default-OFF pref would mute cell navigation by default. The default and the
+meaning need a decision first (likely: default ON, and/or the cell cursor
+bypasses the gate).
+
 ## 2026-07-15 — Date-based releases (VRP-YYYYMMDD.N) + portable zip build
 
 Replaced the semantic version (`0.1.0`, never bumped) with a **date-based release
