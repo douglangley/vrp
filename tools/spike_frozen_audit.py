@@ -169,6 +169,28 @@ def main() -> int:
                 raise AssertionError(message)
             return message
 
+        @check("import a frequency list into the loaded radio (full flow)")
+        def _stock_import():
+            # The whole Radio > Query Source > Frequency lists path, frozen:
+            # resolve the CSV, open it as a source, and actually import it into
+            # the loaded radio. Opening a source proved the CSVs are readable;
+            # this proves the feature works.
+            from chirp_backend import memory_ops, stock_configs
+            target = next(
+                (p for n, p in stock_configs.list_configs() if "NOAA" in n), None
+            )
+            if target is None:
+                raise AssertionError("US NOAA Weather Alert list not found")
+            src, message = rb.open_image_as_source(target)
+            if src is None:
+                raise AssertionError(message)
+            ok, msg, affected = memory_ops.import_memories(src, 20, True)
+            if not ok:
+                raise AssertionError(msg)
+            mem = rb.get_memory(affected[0])
+            return (f"{len(affected)} channels imported at {affected[0]}; "
+                    f"ch{affected[0]} = {mem.freq} {mem.name!r}")
+
         @check("radio settings editor")
         def _settings():
             if not rb.has_settings():

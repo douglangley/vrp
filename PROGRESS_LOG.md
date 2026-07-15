@@ -92,16 +92,26 @@ see it; it fails only when frozen"), so what else is broken? Serial and
 RepeaterBook especially. Rather than reason about it,
 **`tools/spike_frozen_audit.py`** exercises every CHIRP subsystem VRP uses
 through VRP's real `chirp_backend` entry points, inside a frozen console build
-with build.py's actual flags. **14/14 pass:**
+with build.py's actual flags. **15/15 pass:**
 
 drivers (552) · radio model list (552 — the Download dialog) · describe_model ·
 serial port enumeration (pyserial's platform backend imports) · band plans
 (offset suggestion) · stock configs (20 lists, data files present) · opening a
-stock config via the generic_csv driver · RepeaterBook import + geography ·
-RepeaterBook cache dir (`chirp_platform.config_file`) · **a LIVE RepeaterBook
-fetch over HTTPS from the frozen .exe (40 Delaware repeaters — proves requests
-*and* TLS/certifi work frozen)** · load image · settings editor · banks editor ·
-export to CSV.
+stock config via the generic_csv driver · **the full Frequency-lists import into
+a loaded radio (10 NOAA channels at ch 20, `162.550 'WX1PA7'` — identical to the
+2026-07-10 source-run result, which finally closes that owed frozen smoke)** ·
+RepeaterBook import + geography · RepeaterBook cache dir
+(`chirp_platform.config_file`) · **a LIVE RepeaterBook fetch over HTTPS from the
+frozen .exe (40 Delaware repeaters — proves requests *and* TLS/certifi work
+frozen)** · load image · settings editor · banks editor · export to CSV.
+
+Note the two correct-but-opposite placements for bundled data, which the
+`sample-images/` work threw into relief: **stock configs belong in
+`_internal/`** (the app resolves them itself via `sys._MEIPASS` and offers them
+in a chooser — a user never browses there), while **sample images belong at the
+top level** (a human opens them through a File dialog and must be able to find
+them). The rule is: data the app resolves → `_internal/`; files a human browses
+→ beside the .exe.
 
 So the driver glob was the only instance. Two findings from the audit:
 
@@ -288,9 +298,11 @@ the portable path end-to-end.
 
 **Also closes the owed frozen-build smoke from 2026-07-10:** the 20 stock-config
 CSVs are present in the frozen tree at `_internal/chirp/stock_configs/`, exactly
-where `stock_configs_dir()` looks under `sys._MEIPASS`. **Still owed:** actually
-*importing* a frequency list from inside the frozen app, and the NVDA pass on the
-About box's new release line.
+where `stock_configs_dir()` looks under `sys._MEIPASS`. The *import* half was
+closed later the same day — see the frozen audit below, which runs the whole
+Frequency-lists flow in a frozen build (10 NOAA channels into ch 20,
+`162.550 'WX1PA7'` — identical to the source-run result). **Still owed:** the
+NVDA pass on the About box's new release line.
 
 ## 2026-07-10 — Import from frequency lists (CHIRP stock configs)
 
