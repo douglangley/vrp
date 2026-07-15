@@ -252,6 +252,37 @@ network — adopting a newer CHIRP is the deliberate, tested step in
 `tools/update_chirp.py`. Pass `--no-chirp-sync` to verify only (abort on a
 mismatch rather than fixing the clone).
 
+## Releases (dates, not version numbers)
+
+VRP releases are named for the day they were cut:
+
+```
+VRP-20260715.1     the first release cut on 15 July 2026
+VRP-20260715.2     a second release the same day
+VRP-20260716.1     the next day's first release
+```
+
+The version string is `YYYYMMDD.N` (`VRP-` prefixes the git tag and the release
+artifacts). `N` starts at 1 each day and increments for each further release that
+day. There is no semantic-version meaning to read into it — **the newest date is
+simply the newest build**, which is all a tester needs to know.
+
+The version lives in `vrp/__init__.py` (`__version__`, what the app and
+`build.py` read) and `pyproject.toml`, which must agree; `tools/release_version.py`
+writes both and a test asserts they match. To cut a release:
+
+```bash
+uv run python tools/release_version.py --bump    # 20260715.1 -> 20260715.2, or a new day -> .1
+uv run python -m pytest
+uv run python build.py --portable                # or --installer
+git commit -am "chore(release): VRP-20260715.2" && git tag VRP-20260715.2
+```
+
+`--show` prints the current version, `--set <version>` forces one, and `--check`
+verifies the two version files agree. The About box shows the exact version plus
+a **speakable** rendering of it ("Release 1 of 15 July 2026") — a screen reader
+reads the bare `20260715.1` as one huge number, which tells the user nothing.
+
 ## Files NOT to Modify
 
 - `chirp/`  — The upstream CHIRP library. Update via `git pull` only.
@@ -297,6 +328,14 @@ The pipeline is two steps: PyInstaller freezes the app into a `dist/vrp/`
 `dist/vrp-<version>-setup.exe` installer. `build.py --installer` runs both. This
 mirrors how upstream CHIRP ships its own PyInstaller build (a real installer with
 a Start-menu shortcut and uninstaller, not a loose self-extracting `.exe`).
+
+**`build.py --portable`** is the no-install alternative: it zips the same onedir
+folder into `dist/VRP-<version>-win64.zip`, whose single top-level directory is
+named for the release (`VRP-20260715.1/`) rather than `vrp/`. A tester unzips it
+anywhere and runs `vrp.exe` from the folder — nothing is installed, and two
+releases unzipped side by side stay separate instead of merging. Handy for
+handing a build to a few people without an installer; `--installer` is still how
+the app is meant to ship broadly. The two are combinable.
 
 Why onedir over onefile: onefile re-extracts the whole interpreter + wxPython +
 552 drivers to a temp dir on *every* launch (multi-second cold start) and is a

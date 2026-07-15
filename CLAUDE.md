@@ -253,6 +253,28 @@ To update:
 After a green bump, commit `CHIRP_COMMIT` (and note the SHA in PROGRESS_LOG.md)
 and rebuild. End users never pull/rebuild — updates ship as new VRP releases.
 
+## Releases (date-based versions)
+
+Releases are named for the day they were cut — **`VRP-YYYYMMDD.N`**
+(`VRP-20260715.1` = first release of 15 July 2026; `.2`, `.3` … for further
+releases the same day; `N` restarts at 1 each day and is never zero-padded, so
+the version is valid PEP 440 and orders correctly). There is no semantic-version
+meaning — newest date = newest build. `tools/release_version.py` owns the scheme:
+
+uv run python tools/release_version.py --bump     # today.1, or today.N+1
+uv run python tools/release_version.py --show / --set <v> / --check
+
+The version lives in **two files that must agree** — `vrp/__init__.py`
+(`__version__`; what the app and `build.py` read) and `pyproject.toml`. `--bump`/
+`--set` write both; `tests/test_release_version.py` asserts they match and that
+the shipped version fits the scheme. Never hand-edit one of them alone.
+
+`vrp.describe_version()` renders a date version speakably ("Release 1 of 15 July
+2026") for the About box — a screen reader reads the bare `20260715.1` as one
+huge number. Keep that line in About if you touch it (a11y rule 3's spirit: the
+release must be *audible*, not merely displayed). Non-date versions pass through
+unchanged.
+
 ## Building
 
 Building a release .exe is a deliberate developer/release step, not something
@@ -264,6 +286,11 @@ ran it by mistake). To cut a release build:
 uv sync --extra build
 uv run python build.py --installer
 Output: dist/vrp/ (the app folder) + dist/vrp-<version>-setup.exe (the installer)
+
+**`--portable`** zips the onedir into `dist/VRP-<version>-win64.zip` (top-level
+folder named `VRP-<version>/`, not `vrp/`, so side-by-side unzips stay separate)
+— a no-install build to hand to a few testers: unzip, run `vrp.exe`. Combinable
+with `--installer`; incompatible with `--onefile` (which is already one file).
 
 `build.py` defaults to **onedir** (a `dist/vrp/` folder), not onefile, because
 onefile re-extracts the whole interpreter + wxPython + 552 drivers to a temp dir

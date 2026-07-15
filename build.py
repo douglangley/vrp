@@ -12,6 +12,11 @@ Usage:
   python build.py --installer      Build onedir, then compile a Windows installer
                                    (installer.iss) with Inno Setup. This is how
                                    the app is meant to ship.
+  python build.py --portable       Build onedir, then zip it as
+                                   dist/VRP-<version>-win64.zip — a no-install
+                                   build to hand to testers: unzip anywhere, run
+                                   vrp.exe from the folder. Combinable with
+                                   --installer.
   python build.py --no-chirp-sync  Verify ./chirp matches the CHIRP_COMMIT pin
                                    but don't auto-checkout it (abort on mismatch
                                    instead of fixing the clone).
@@ -56,8 +61,10 @@ import re
 import shutil
 import subprocess
 import sys
+import zipfile
 
 APP_NAME = "vrp"           # Versatile Radio Programmer short form
+RELEASE_PREFIX = "VRP"     # release/tag name: VRP-<version> (tools/release_version.py)
 DISPLAY_NAME = "Versatile Radio Programmer"
 ENTRY_POINT = "main.py"
 INSTALLER_SCRIPT = "installer.iss"
@@ -223,6 +230,42 @@ def build(onefile: bool) -> int:
     return subprocess.run(cmd).returncode
 
 
+def build_portable(version: str) -> int:
+    """Zip the dist/vrp/ onedir folder into dist/VRP-<version>-win64.zip.
+
+    The no-install distribution: the tester unzips it and runs vrp.exe from the
+    folder. The zip's single top-level directory is named for the release
+    (VRP-20260715.1/), not "vrp/", so unzipping two releases side by side
+    doesn't merge them and the folder on disk says which build it is —
+    PyInstaller's onedir doesn't care what its folder is called, only that
+    vrp.exe and _internal/ stay together inside it.
+    """
+    onedir = os.path.join(PROJECT_ROOT, "dist", APP_NAME)
+    if not os.path.isdir(onedir):
+        print(f"Cannot build the portable zip: {onedir}{os.sep} not found.")
+        print("Run the onedir build first (python build.py, no --onefile).")
+        return 1
+
+    top = f"{RELEASE_PREFIX}-{version}"
+    zip_path = os.path.join(PROJECT_ROOT, "dist", f"{top}-win64.zip")
+    print("\nCreating the portable zip...")
+    if os.path.exists(zip_path):
+        os.remove(zip_path)  # rebuilding the same release replaces it
+
+    count = 0
+    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+        for root, _dirs, files in os.walk(onedir):
+            for name in sorted(files):
+                full = os.path.join(root, name)
+                # Re-root every entry under the release-named top folder.
+                arcname = os.path.join(top, os.path.relpath(full, onedir))
+                zf.write(full, arcname)
+                count += 1
+    size_mb = os.path.getsize(zip_path) / (1024 * 1024)
+    print(f"Zipped {count} files ({size_mb:.1f} MB) under {top}{os.sep}")
+    return 0
+
+
 def _find_iscc() -> str | None:
     """Locate the Inno Setup command-line compiler (ISCC.exe).
 
@@ -288,6 +331,12 @@ def main() -> None:
              "Setup (installer.iss). Incompatible with --onefile.",
     )
     parser.add_argument(
+        "--portable",
+        action="store_true",
+        help="After the onedir build, zip it as dist/VRP-<version>-win64.zip — "
+             "a no-install build to hand to testers. Incompatible with --onefile.",
+    )
+    parser.add_argument(
         "--no-chirp-sync",
         action="store_true",
         help="Don't auto-checkout ./chirp to the CHIRP_COMMIT pin; only verify "
@@ -300,6 +349,11 @@ def main() -> None:
         parser.error(
             "--installer wraps the onedir folder, so it can't be combined with "
             "--onefile."
+        )
+    if args.portable and args.onefile:
+        parser.error(
+            "--portable zips the onedir folder, so it can't be combined with "
+            "--onefile. (A onefile build is already a single portable .exe.)"
         )
 
     version = _read_version()
@@ -320,6 +374,14 @@ def main() -> None:
         print(f"Output: dist{os.sep}{APP_NAME}{suffix}")
     else:
         print(f"Output: dist{os.sep}{APP_NAME}{os.sep}{APP_NAME}{suffix}")
+
+    if args.portable:
+        rc = build_portable(version)
+        if rc != 0:
+            print(f"\nPortable zip failed with exit code {rc}.")
+            sys.exit(rc)
+        print("\nPortable build ready.")
+        print(f"Output: dist{os.sep}{RELEASE_PREFIX}-{version}-win64.zip")
 
     if args.installer:
         rc = build_installer(version)

@@ -26,7 +26,7 @@ import wx
 import wx.adv
 
 from chirp_backend import radio as radio_backend
-from vrp import __version__
+from vrp import __version__, describe_version
 from vrp.native.announce import Announcer
 from vrp.native.channel_grid import ChannelGrid
 from vrp.speech import get_speaker
@@ -1989,11 +1989,17 @@ class MainWindow(wx.Frame):
         The CHIRP attribution ("Radio driver support provided by the CHIRP
         project — chirpmyradio.com.") is a GPLv3 requirement and appears here as
         well as permanently in status-bar field 1.
+
+        Releases are dated (VRP-YYYYMMDD.N), so the description leads with
+        describe_version()'s speakable form ("Release 1 of 15 July 2026") — a
+        screen reader reads the bare version as one huge number. The exact
+        string still goes to SetVersion for copying into a bug report.
         """
         info = wx.adv.AboutDialogInfo()
         info.SetName("Versatile Radio Programmer")
         info.SetVersion(__version__)
         info.SetDescription(
+            f"{describe_version()}.\n\n"
             "An accessible front end to the CHIRP radio programming library.\n\n"
             "Radio driver support provided by the CHIRP project — "
             "chirpmyradio.com."

@@ -411,7 +411,7 @@ wheels = [
 
 [[package]]
 name = "versatile-radio-programmer"
-version = "0.1.0"
+version = "20260715.1"
 source = { virtual = "." }
 dependencies = [
     { name = "chirp" },

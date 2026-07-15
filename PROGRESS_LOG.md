@@ -6,6 +6,57 @@ architecture, keyboard map, and CHIRP feature-coverage checklist.
 
 ---
 
+## 2026-07-15 — Date-based releases (VRP-YYYYMMDD.N) + portable zip build
+
+Replaced the semantic version (`0.1.0`, never bumped) with a **date-based release
+scheme**, and added a no-install portable build to hand to testers.
+
+**The scheme.** `VRP-YYYYMMDD.N` — `VRP-20260715.1` is the first release cut on
+15 July 2026, `.2` the second that day; `N` restarts at 1 each day. Rationale:
+VRP has no compatibility contract to communicate, so a semantic version conveys
+nothing a tester can act on, whereas a date answers "how fresh is this build".
+`N` is never zero-padded, which keeps the version a valid **PEP 440** release
+segment and makes both PEP 440 and integer comparison order releases correctly
+(`20260715.10` > `20260715.9`). Inno Setup's `AppVersion` takes an arbitrary
+string and no `VersionInfoVersion` is set, so the installer needed no change.
+
+- **`tools/release_version.py` (new).** Owns the scheme: `parse_version`
+  (rejects non-scheme *and* date-shaped-but-unreal stamps like `20261332.1`),
+  `next_version` (same day → N+1; any other day, or a non-date current version
+  like `0.1.0` → today`.1`), `tag_for`. CLI: `--show` / `--bump` / `--set` /
+  `--check`.
+- **Two files, one version.** `vrp/__init__.py` (`__version__` — what the app and
+  `build.py` read) and `pyproject.toml` both carry it and must agree; the tool
+  writes both with file-anchored regexes (so a dependency constraint in
+  pyproject can't be mistaken for the project version), and a test asserts they
+  match.
+- **`vrp.describe_version()` + About box (a11y).** A screen reader reads
+  `20260715.1` as one huge number ("twenty million…"), which tells the user
+  nothing — so About now leads with a speakable **"Release 1 of 15 July 2026"**
+  and keeps the exact string in `SetVersion` for copying into a bug report.
+  Non-date versions pass through unchanged for local/dev builds.
+- **`build.py --portable`.** Zips the onedir into
+  `dist/VRP-<version>-win64.zip`, re-rooting every entry under a release-named
+  top folder (`VRP-20260715.1/`, not `vrp/`) so two releases unzipped side by
+  side don't merge and the folder on disk says which build it is. Rejects
+  `--onefile` (already portable), combinable with `--installer`.
+
+**Verified:** `tests/test_release_version.py` (+30: parse accept/reject incl. the
+unreal-date and zero-padding cases, same-day increment, new-day reset, the
+`0.1.0`→date transition, bump-moves-forward, sort order, both-files-agree,
+write round-trip that leaves `wxpython>=4.2.0` untouched, and the speakable
+renderings). Full suite **317 passed**. Cut **VRP-20260715.1** and built it:
+`build.py --portable` → 22.1 MB zip / 114 files, CHIRP pin enforced at
+`906e0393` as always. Then **extracted the zip to a clean directory and ran
+`vrp.exe`** — it launched (window title "Versatile Radio Programmer"), which is
+the portable path end-to-end.
+
+**Also closes the owed frozen-build smoke from 2026-07-10:** the 20 stock-config
+CSVs are present in the frozen tree at `_internal/chirp/stock_configs/`, exactly
+where `stock_configs_dir()` looks under `sys._MEIPASS`. **Still owed:** actually
+*importing* a frequency list from inside the frozen app, and the NVDA pass on the
+About box's new release line.
+
 ## 2026-07-10 — Import from frequency lists (CHIRP stock configs)
 
 Added **Radio ▸ Query Source ▸ Frequency lists…** (directly under RepeaterBook)
