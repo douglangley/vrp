@@ -6,6 +6,29 @@ architecture, keyboard map, and CHIRP feature-coverage checklist.
 
 ---
 
+## 2026-07-15 — Portable zip ships CHIRP's test images (sample-images/)
+
+`build.py --portable` now drops CHIRP's 360 test images (one saved memory image
+per supported model) into a top-level **`sample-images/`** folder in the zip,
+plus a README naming the CHIRP pin they came from. A tester can then open a real
+radio image with **no radio and no cable** — which is exactly how the
+zero-drivers bug above was found, and what anyone debugging the grid/cursor
+needs.
+
+- **Top level, beside `vrp.exe` — deliberately not `_internal/`.** That folder
+  is app plumbing a user should never open, and File ▸ Open Image File needs
+  somewhere obvious to point. This is a *zip*-level addition, not `--add-data`:
+  PyInstaller 6 puts data under the contents directory (`_internal/`), which is
+  the wrong place for something a human must browse to.
+- **Matched to the build.** They come from `./chirp`, which `ensure_chirp_on_pin`
+  has already forced to `CHIRP_COMMIT`, so the images always match the bundled
+  driver set. The README records the pin (`906e03930c7d`).
+- **Cost: ~0.5 MB** (22.9 → 23.4 MB). The images are 10 MB on disk but are
+  mostly sparse memory maps, so they compress hard.
+- **On by default for `--portable` only** (that IS the tester build);
+  `--no-samples` omits them. The Inno Setup installer never gets them — it wraps
+  `dist/vrp/` only, and a real user has their own radio.
+
 ## 2026-07-15 — Frozen builds registered ZERO drivers (every release was broken)
 
 **The bug, reported by the developer:** the release .exe fails to open any test

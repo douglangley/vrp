@@ -15,8 +15,11 @@ Usage:
   python build.py --portable       Build onedir, then zip it as
                                    dist/VRP-<version>-win64.zip — a no-install
                                    build to hand to testers: unzip anywhere, run
-                                   vrp.exe from the folder. Combinable with
-                                   --installer.
+                                   vrp.exe from the folder. Includes CHIRP's test
+                                   images in a top-level sample-images/ folder so
+                                   a tester with no radio can still open a real
+                                   image (--no-samples omits them). Combinable
+                                   with --installer.
   python build.py --no-chirp-sync  Verify ./chirp matches the CHIRP_COMMIT pin
                                    but don't auto-checkout it (abort on mismatch
                                    instead of fixing the clone).
@@ -261,7 +264,40 @@ def build(onefile: bool) -> int:
     return subprocess.run(cmd).returncode
 
 
-def build_portable(version: str) -> int:
+SAMPLES_DIRNAME = "sample-images"
+
+_SAMPLES_README = """\
+Sample radio images
+===================
+
+These let you try VRP with no radio and no cable:
+
+    File > Open Image File...   then pick any .img in this folder.
+
+They are the CHIRP project's test images - one saved memory image per supported
+radio model - bundled from the exact CHIRP commit this build was made against
+({chirp_pin}), so they match the drivers inside this build. Opening and editing
+one only changes your copy here; nothing is written to a radio unless you
+explicitly use Radio > Upload to Radio.
+
+Handy ones to start with:
+    Baofeng_UV-5R_Mini.img
+    Baofeng_UV-5R.img
+    Quansheng_UV-K5.img
+
+Radio driver support provided by the CHIRP project - chirpmyradio.com.
+"""
+
+
+def _chirp_pin_short() -> str:
+    try:
+        with open(CHIRP_PIN_FILE, encoding="utf-8") as fh:
+            return fh.read().strip()[:12]
+    except Exception:  # noqa: BLE001
+        return "unknown"
+
+
+def build_portable(version: str, include_samples: bool = True) -> int:
     """Zip the dist/vrp/ onedir folder into dist/VRP-<version>-win64.zip.
 
     The no-install distribution: the tester unzips it and runs vrp.exe from the
@@ -270,6 +306,18 @@ def build_portable(version: str) -> int:
     doesn't merge them and the folder on disk says which build it is —
     PyInstaller's onedir doesn't care what its folder is called, only that
     vrp.exe and _internal/ stay together inside it.
+
+    ``include_samples`` also drops CHIRP's test images into a top-level
+    ``sample-images/`` folder beside vrp.exe, so a tester with no radio (or no
+    cable to hand) can still open a real image and exercise the grid. They go at
+    the TOP level deliberately, not into _internal/ — that is app plumbing a
+    user should never have to open, and a File-Open dialog needs somewhere
+    obvious to point at. They come from ./chirp at the enforced CHIRP_COMMIT
+    pin, so they always match the bundled driver set.
+
+    Samples are on by default for the portable build because that IS the tester
+    build; the Inno Setup installer never includes them (it wraps dist/vrp/
+    only), since a real user has their own radio.
     """
     onedir = os.path.join(PROJECT_ROOT, "dist", APP_NAME)
     if not os.path.isdir(onedir):
@@ -292,8 +340,29 @@ def build_portable(version: str) -> int:
                 arcname = os.path.join(top, os.path.relpath(full, onedir))
                 zf.write(full, arcname)
                 count += 1
+
+        samples = 0
+        if include_samples:
+            images_dir = os.path.join(PROJECT_ROOT, "chirp", "tests", "images")
+            if not os.path.isdir(images_dir):
+                print(f"! No sample images at {images_dir} — skipping them.")
+            else:
+                for name in sorted(os.listdir(images_dir)):
+                    full = os.path.join(images_dir, name)
+                    if not os.path.isfile(full):
+                        continue
+                    zf.write(full, os.path.join(top, SAMPLES_DIRNAME, name))
+                    samples += 1
+                zf.writestr(
+                    os.path.join(top, SAMPLES_DIRNAME, "README.txt"),
+                    _SAMPLES_README.format(chirp_pin=_chirp_pin_short()),
+                )
+                samples += 1
+
     size_mb = os.path.getsize(zip_path) / (1024 * 1024)
-    print(f"Zipped {count} files ({size_mb:.1f} MB) under {top}{os.sep}")
+    print(f"Zipped {count} app files ({size_mb:.1f} MB) under {top}{os.sep}")
+    if include_samples and samples:
+        print(f"  + {samples} files in {top}{os.sep}{SAMPLES_DIRNAME}{os.sep}")
     return 0
 
 
@@ -368,6 +437,13 @@ def main() -> None:
              "a no-install build to hand to testers. Incompatible with --onefile.",
     )
     parser.add_argument(
+        "--no-samples",
+        action="store_true",
+        help="Omit the sample-images/ folder (CHIRP's test images) from the "
+             "--portable zip. They're included by default so a tester with no "
+             "radio can still open a real image.",
+    )
+    parser.add_argument(
         "--no-chirp-sync",
         action="store_true",
         help="Don't auto-checkout ./chirp to the CHIRP_COMMIT pin; only verify "
@@ -407,7 +483,7 @@ def main() -> None:
         print(f"Output: dist{os.sep}{APP_NAME}{os.sep}{APP_NAME}{suffix}")
 
     if args.portable:
-        rc = build_portable(version)
+        rc = build_portable(version, include_samples=not args.no_samples)
         if rc != 0:
             print(f"\nPortable zip failed with exit code {rc}.")
             sys.exit(rc)

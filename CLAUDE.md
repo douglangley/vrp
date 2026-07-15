@@ -295,6 +295,11 @@ Output: dist/vrp/ (the app folder) + dist/vrp-<version>-setup.exe (the installer
 folder named `VRP-<version>/`, not `vrp/`, so side-by-side unzips stay separate)
 — a no-install build to hand to a few testers: unzip, run `vrp.exe`. Combinable
 with `--installer`; incompatible with `--onefile` (which is already one file).
+It also ships CHIRP's test images in a top-level **`sample-images/`** folder
+(beside `vrp.exe`, NOT in `_internal/` — a tester must be able to find them from
+a File-Open dialog) so the app can be exercised with no radio; they come from
+`./chirp` at the `CHIRP_COMMIT` pin, so they match the bundled drivers. ~0.5 MB
+compressed; `--no-samples` omits them. The installer never includes them.
 
 `build.py` defaults to **onedir** (a `dist/vrp/` folder), not onefile, because
 onefile re-extracts the whole interpreter + wxPython + 552 drivers to a temp dir

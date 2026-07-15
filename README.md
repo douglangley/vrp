@@ -341,6 +341,15 @@ releases unzipped side by side stay separate instead of merging. Handy for
 handing a build to a few people without an installer; `--installer` is still how
 the app is meant to ship broadly. The two are combinable.
 
+The portable zip also carries CHIRP's test images in a top-level
+**`sample-images/`** folder (360 images, one per supported model, plus a
+README) — beside `vrp.exe`, not inside `_internal/`, so File ▸ Open Image File
+has somewhere obvious to point. They let a tester exercise the app with **no
+radio and no cable**, and they come from `./chirp` at the enforced
+`CHIRP_COMMIT` pin, so they always match the bundled drivers. They cost about
+0.5 MB compressed. `--no-samples` omits them. The Inno Setup installer never
+includes them (it wraps `dist/vrp/` only) — a real user has their own radio.
+
 Why onedir over onefile: onefile re-extracts the whole interpreter + wxPython +
 552 drivers to a temp dir on *every* launch (multi-second cold start) and is a
 frequent Defender/SmartScreen false-positive trigger; onedir launches instantly.
