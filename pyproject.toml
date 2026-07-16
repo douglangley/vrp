@@ -48,6 +48,12 @@ dev = [
 build = [
     "pyinstaller>=6.10.0",
 ]
+# Experimental, macOS-only alternate packaging path — see setup.py. The
+# project's primary, tested packager remains PyInstaller (build.py); this
+# extra is separate so `uv sync --extra build` is unaffected.
+py2app = [
+    "py2app>=0.28; sys_platform == 'darwin'",
+]
 
 [project.scripts]
 vrp = "main:main"

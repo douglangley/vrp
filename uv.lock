@@ -170,6 +170,19 @@ wheels = [
 ]
 
 [[package]]
+name = "modulegraph"
+version = "0.19.7"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "altgraph" },
+    { name = "setuptools" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/20/fa/c471f46fa1696309b806d6c663d599525925a5c13cf1371a02587a265109/modulegraph-0.19.7.tar.gz", hash = "sha256:9ad8a81148ba1d90ade66617a153786f7d7cf6a88de83ee28e251183122c2a57", size = 88618, upload-time = "2025-11-22T08:22:43.858Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/f1/c1/3eff0be83439f0408866eaacd4106c9d19b762cba66bcf0d0a523a6f6620/modulegraph-0.19.7-py2.py3-none-any.whl", hash = "sha256:139f89042c9912777ba4bbf1d5496591c6ad780110ea3082c11e8737cf82cacc", size = 35151, upload-time = "2025-11-22T08:22:42.239Z" },
+]
+
+[[package]]
 name = "numpy"
 version = "2.4.6"
 source = { registry = "https://pypi.org/simple" }
@@ -241,6 +254,21 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/89/94/9148238d328f7442436256f07994eb78b1eeeffe41813e5a1d8fdad34bc6/prismatoid-0.17.0-cp311-cp311-win32.whl", hash = "sha256:4870ba25463a3b00de04a84a34070b927453a040c1d97b92056f38fb7af35281", size = 496091, upload-time = "2026-07-07T18:32:52.506Z" },
     { url = "https://files.pythonhosted.org/packages/7a/ed/275e1b0c4dc9da7282f4ab840f48b425c7eda6db956bf7e58203684c6ae9/prismatoid-0.17.0-cp311-cp311-win_amd64.whl", hash = "sha256:ea561dfe025402df622da17c476197f70bc6939dc6e90bc40953fad853ee744b", size = 496099, upload-time = "2026-07-07T18:32:53.991Z" },
     { url = "https://files.pythonhosted.org/packages/23/7b/11edc9d8b2d5779d996ad10dd1101ab552b90371a8cecf904e911c208115/prismatoid-0.17.0-cp311-cp311-win_arm64.whl", hash = "sha256:795d8190a3f56a2a14d0a3676522fd113908bb0d33441748550be1007fa15add", size = 495777, upload-time = "2026-07-07T18:32:55.627Z" },
+]
+
+[[package]]
+name = "py2app"
+version = "0.28.10"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "altgraph" },
+    { name = "macholib" },
+    { name = "modulegraph" },
+    { name = "packaging" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/93/82/79a2aaaf86c44c6018edce1a028cf821acec4c3ca63e2b5781f16822c99f/py2app-0.28.10.tar.gz", hash = "sha256:fd38f4a0083d4d1e91ea336eaef678b99d9e1b95ac6302315cad22fa5e859cb1", size = 1143601, upload-time = "2026-02-13T20:50:02.289Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/be/d8/a04a88b182613370a262f674929f0e284ea04e1803f2d38fc5639fbec2d7/py2app-0.28.10-py3-none-any.whl", hash = "sha256:bdb0cd2cbfa5160b5b11b8d612f6eb92d484a0282801e85b159f1930cd834714", size = 837349, upload-time = "2026-02-13T20:49:59.98Z" },
 ]
 
 [[package]]
@@ -431,12 +459,16 @@ dev = [
     { name = "pytest" },
     { name = "pytest-cov" },
 ]
+py2app = [
+    { name = "py2app", marker = "sys_platform == 'darwin'" },
+]
 
 [package.metadata]
 requires-dist = [
     { name = "chirp", editable = "chirp" },
     { name = "lark", specifier = ">=1.1.0" },
     { name = "prismatoid", specifier = ">=0.17.0" },
+    { name = "py2app", marker = "sys_platform == 'darwin' and extra == 'py2app'", specifier = ">=0.28" },
     { name = "pyinstaller", marker = "extra == 'build'", specifier = ">=6.10.0" },
     { name = "pyserial", specifier = ">=3.5" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.0.0" },
@@ -445,7 +477,7 @@ requires-dist = [
     { name = "wx-accessible-grid", git = "https://github.com/payown/wx-accessible-grid.git?rev=494103f8d7c82f79bc40221d823a7991d8984cf6" },
     { name = "wxpython", specifier = ">=4.2.0" },
 ]
-provides-extras = ["dev", "build"]
+provides-extras = ["dev", "build", "py2app"]
 
 [[package]]
 name = "win32more"

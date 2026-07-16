@@ -1,5 +1,10 @@
 # uv / Python
 .venv/
+# Dedicated framework-Python venv for the py2app build (setup.py) — py2app
+# can't introspect uv's statically-linked managed Python, so this is built
+# from a separate `brew install python@3.11` interpreter. Not the normal dev
+# venv; recreated on demand, never committed.
+.venv-py2app/
 __pycache__/
 *.pyc
 *.pyo
