@@ -35,12 +35,18 @@ see `docs/research/2026-06-24-native-grid-voiceover-feasibility.md`.
 provides supplemental speech, and the app packages to a single .exe with
 PyInstaller.
 
-> **If in-app help/docs are added later** and an HTML view is genuinely the right
-> tool, build a small, purpose-made read-only viewer (a `wx.Frame`/`wx.Dialog`
-> hosting a read-only `wx.html2.WebView`, which is part of wxPython core — no
-> extra dependency). Do **not** resurrect the old webview stack: it was a full
-> alternate front end for the editable channel grid, not a doc viewer, and shares
-> nothing useful with a help window.
+> **Help/docs landed, and they do NOT use a webview.** The Help menu opens the
+> HTML in the **user's own browser** (`vrp/help.py`, `webbrowser.open`). A
+> screen-reader user reading a long structured document wants browse mode — H by
+> heading, T by table, K by link — and already has it, tuned to taste, in the
+> browser they use daily. An embedded `wx.html2.WebView` would mean requesting
+> the Edge backend explicitly (wx's MSW default is **IE/Trident**, legacy for
+> screen readers), shipping `WebView2Loader.dll`, and depending on the WebView2
+> runtime on the user's machine — a silent fall back to IE, or a dead Help menu,
+> for the exact users this app exists for. Do **not** resurrect the old webview
+> stack either: it was a full alternate front end for the editable channel grid,
+> and its `wx-accessible-webview` fixes target the editable-grid-re-read problem,
+> which a read-only doc does not have (PROGRESS_LOG, 2026-06-29).
 
 The CHIRP library (./chirp/) is used UNMODIFIED as a dependency. Never edit
 files inside ./chirp/. Update it with git pull only.
@@ -93,8 +99,23 @@ obscure it. Any future help/docs page must carry it too.
                          chirp_backend/repeaterbook.py
   - prefs_dialog.py    — native wx Preferences dialog: recent-files count, band
                          plan region, apply-band-defaults, speak-aloud
+  - welcome_dialog.py  — startup welcome: band-plan region picker + an offer to
+                         open Getting Started. Shown by
+                         `MainWindow.maybe_show_welcome` (queued via
+                         wx.CallAfter from `vrp.native.app`) while the
+                         **`show_welcome`** pref is True. Only "Don't show this
+                         again" clears that pref — Escape and "Not now"
+                         deliberately leave it set. The region is saved whichever
+                         button is pressed, and is also in Preferences, so
+                         dismissing the screen loses nothing.
   - info_dialog.py     — read-only multiline edit box for reviewing text (Radio
                          Info, "Radio details…"); navigable + copyable
+  - about_dialog.py    — Help ▸ About: build info + the CHIRP acknowledgement in
+                         two read-only edit boxes (navigable/copyable, unlike
+                         wx.adv.AboutBox's static text)
+  - help.py            — locates help/ (beside the exe when frozen; the .app's
+                         Contents/Resources on macOS) and opens a document in
+                         the user's browser
   - config.py          — persistent JSON config: prefs + recent files +
                          favorite radios + band-plan region
   - speech.py          — prism speech wrapper, graceful no-op if unavailable
@@ -105,6 +126,12 @@ obscure it. Any future help/docs page must carry it too.
                          offset + band defaults, by region), col_defs, bank_ops,
                          serial_trace, repeaterbook (RepeaterBook query via
                          CHIRP's mirror; direct-API seam for a future VRP UA)
+- help/                — the shipped user documentation (Getting Started in md/
+                         txt/html + KeyboardCommands.html). `build.py`'s
+                         `stage_help()` copies the whole folder BESIDE the exe in
+                         every build; the Help menu opens the .html in the user's
+                         browser. Adding a doc = drop it here + link it from
+                         `_build_help_menu`.
 - tests/               — unit tests (no hardware needed)
 - tools/               — update_chirp.py (CHIRP version bump); throwaway spikes
 - build.py             — PyInstaller build script
@@ -122,9 +149,20 @@ optionally gated on a loaded radio (`needs_radio=True`, tracked in
 keep it in sync with the menu accelerators by hand.
 
 When adding a command: add it via `self._add(menu, key, label_with_accelerator,
-handler, needs_radio=...)` in the right `_build_*_menu`, add the same combo to
-`APP_SHORTCUTS`, and update `docs/keyboard-map.md` and
-`docs/chirp-feature-coverage.md`.
+handler, needs_radio=...)` in the right `_build_*_menu`, add the combo to
+`APP_SHORTCUTS`, add a row to `help/KeyboardCommands.html`, and update
+`docs/keyboard-map.md` and `docs/chirp-feature-coverage.md`.
+
+`APP_SHORTCUTS` entries are **`(windows_keys, macos_keys, description)`** and F1
+shows the column for the platform it is running on (`shortcuts_for_platform`).
+Do **not** derive the macOS column by replacing "Ctrl" with "Command": wx maps a
+`Ctrl+` accelerator to Command on macOS, but `Del` is `Fn+Delete` there,
+`Ctrl+Space` is just `Space` (the grid ignores Ctrl, and Cmd+Space is Spotlight),
+and `Ctrl+Up`/`Ctrl+Down` is the native list's own behaviour that NSTableView
+lacks entirely (VoiceOver navigation). `tests/test_help_keyboard_parity.py`
+enforces both columns against `help/KeyboardCommands.html`, in both directions —
+it exists because `Ctrl+Q` was wired and documented but missing from F1 for
+months.
 
 ## Accessibility Rules (Enforce These Always)
 
@@ -305,7 +343,14 @@ the filename:
   for. **Not yet run on a Mac** (written on Windows); naming/routing is
   unit-tested in `tests/test_build_artifact_name.py`.
 - **`--installer` is Windows-only** (Inno Setup) and errors out elsewhere.
-It also ships CHIRP's test images in a top-level **`sample-images/`** folder
+**Every build stages `help/`** (`stage_help()`) beside the executable — into
+`dist/vrp/help/`, or the .app's `Contents/Resources/help/` on macOS, where
+`vrp/help.py` looks for it. It is a post-PyInstaller copy, not `--add-data`,
+because PyInstaller 6 puts datas under `_internal/` and the docs belong somewhere
+a user can find them. Both downstream artifacts inherit it for free: the portable
+zip walks `dist/vrp/`, and `installer.iss` recurses `dist\vrp\*`.
+
+`--portable` also ships CHIRP's test images in a top-level **`sample-images/`** folder
 (beside `vrp.exe`, NOT in `_internal/` — a tester must be able to find them from
 a File-Open dialog) so the app can be exercised with no radio; they come from
 `./chirp` at the `CHIRP_COMMIT` pin, so they match the bundled drivers. ~0.5 MB

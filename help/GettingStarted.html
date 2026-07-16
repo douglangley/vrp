@@ -60,26 +60,39 @@
 <section aria-labelledby="announce">
   <h2 id="announce">Announcing a new radio programmer</h2>
   <p class="lead"><strong>VRP — the Versatile Radio Programmer</strong> — programs
-  over 550 radios, and it is built to be used entirely by ear and entirely from
-  the keyboard.</p>
+  over 550 radios, and it is built to be used by a screen reader user entirely
+  from the keyboard.</p>
   <ul>
     <li>Available for <strong>Windows</strong> and <strong>macOS</strong>.</li>
     <li>Tested on Windows with <strong>NVDA</strong>, <strong>JAWS</strong>, and
     <strong>Narrator</strong>, and on macOS with <strong>VoiceOver</strong>.</li>
     <li>Built on the <strong>CHIRP</strong> radio programming project.</li>
   </ul>
-  <p>CHIRP has long been difficult for blind and visually impaired people to use,
-  and making its interface accessible has not been a priority for the project. So
-  VRP takes a different approach. It uses CHIRP's back end for the radio drivers
-  and the radio communications, but the <strong>entire user interface has been
-  rebuilt from scratch</strong> to work with screen readers on both Windows and
-  macOS. Because the driver layer is CHIRP's, when CHIRP adds or fixes a radio,
-  VRP can pick that up and ship it in a new release.</p>
+  <p>CHIRP has long been difficult for blind and visually impaired people to use.
+  So VRP takes a different approach: it uses CHIRP's back end for the radio
+  drivers and the radio communications, but the <strong>entire user interface has
+  been rebuilt from scratch</strong> to work with screen readers on both Windows
+  and macOS.</p>
   <p>This is very much a first version. We have had a small group of testers so
   far, so you will probably find bugs. We are open to any and all suggestions,
   and we will do our best to fix problems as they get reported.</p>
-  <p class="attribution">Radio driver support provided by the CHIRP project —
-  chirpmyradio.com.</p>
+
+  <h3>With thanks to the CHIRP project</h3>
+  <p>VRP is an accessible front end that takes advantage of the open source CHIRP
+  radio programming software, found at
+  <a href="https://chirpmyradio.com">chirpmyradio.com</a> and
+  <a href="https://github.com/kk7ds/chirp">github.com/kk7ds/chirp</a>. We would
+  like to thank them, and to acknowledge that this software would not be possible
+  without their hard work.</p>
+  <p>Every radio VRP can talk to, it talks to through a driver that a CHIRP
+  volunteer wrote, tested, and still maintains — most of them worked out by taking
+  a radio's protocol apart by hand, without any help from the manufacturer. That
+  is years of patient work by a lot of people, given away freely, and it is the
+  foundation this program stands on. It keeps paying off, too: when CHIRP adds a
+  radio or fixes a driver, VRP picks that up and ships it in a new release.</p>
+  <p>VRP is released under the <strong>GPL v3</strong> — the same licence CHIRP
+  uses. The terms that let us build on their work are the terms we pass on to
+  you.</p>
 </section>
 
 <section aria-labelledby="keys">
@@ -95,7 +108,10 @@
   keys — is the same on both platforms. Where a key genuinely differs, it is
   called out.</p>
   <p><strong>Press <span class="kbd">F1</span> at any time</strong> to hear the
-  full list of shortcuts read out of the app itself.</p>
+  full list of shortcuts read out of the app itself. The <strong>Help</strong>
+  menu also has <strong>Getting Started</strong> (this guide) and
+  <strong>Keyboard Commands</strong> (<a href="KeyboardCommands.html">the full
+  reference</a>), which open in your browser.</p>
 </section>
 
 <section aria-labelledby="download">
@@ -183,6 +199,43 @@
   and <strong>Escape</strong> cancels. If something you typed is not valid, the
   dialog stays open, tells you why, and puts you on the field that needs
   fixing.</p>
+
+  <h3>The row context menu</h3>
+  <p>Once you are on a channel — or have selected several — press
+  <span class="kbd">Shift+F10</span> or the <strong>Applications key</strong> to
+  open a menu of everything you can do to that row, without going to the menu bar
+  for it. It is an ordinary menu: your screen reader reads it, you arrow through
+  it, and Escape closes it. (macOS has no context-menu key, so use the menu bar
+  there — the same commands live in the Channels and Edit menus.)</p>
+  <p>The menu is built fresh each time you open it, so it describes exactly what
+  you are sitting on. Items name the channel when one is selected ("Delete
+  channel 5") and the selection when several are ("Delete selected channels").
+  What you get:</p>
+  <div class="table-wrap">
+  <table>
+    <caption>The row context menu</caption>
+    <thead>
+      <tr><th scope="col">Item</th><th scope="col">Key</th><th scope="col">Notes</th></tr>
+    </thead>
+    <tbody>
+      <tr><th scope="row">Undo / Redo</th><td>Ctrl+Z / Ctrl+Y</td><td>Named for the operation they reverse or replay — "Undo Deleted channel 5". Greyed out when there is nothing to undo or redo.</td></tr>
+      <tr><th scope="row">Edit channel N</th><td>Ctrl+E</td><td>The whole channel in one dialog.</td></tr>
+      <tr><th scope="row">Edit cell — &lt;column&gt;</th><td>F2</td><td>Names the column your cell cursor is on: "Edit cell — Frequency". Left out when the cursor is on the channel number, or on a field this radio will not let you change.</td></tr>
+      <tr><th scope="row">Delete channel N, or Delete selected channels</th><td>Del</td><td>Asks you to confirm first.</td></tr>
+      <tr><th scope="row">Copy / Cut</th><td>Ctrl+C / Ctrl+X</td><td></td></tr>
+      <tr><th scope="row">Paste N channel(s) here</th><td>Ctrl+V</td><td>Tells you how many are on the clipboard. Greyed out while the clipboard is empty.</td></tr>
+      <tr><th scope="row">Export … to CSV…</th><td></td><td>The focused channel, or the whole selection.</td></tr>
+      <tr><th scope="row">Move up / Move down</th><td>Ctrl+Shift+Up / Ctrl+Shift+Down</td><td></td></tr>
+      <tr><th scope="row">Move to channel…</th><td>Ctrl+Shift+M</td><td></td></tr>
+      <tr><th scope="row">Sort N selected channels by</th><td></td><td>A submenu — Name, Receive frequency, Transmit frequency. Only appears with two or more channels selected.</td></tr>
+      <tr><th scope="row">Bulk operations…</th><td></td><td></td></tr>
+      <tr><th scope="row">Go to channel…</th><td>Ctrl+G</td><td></td></tr>
+      <tr><th scope="row">Channel banks…</th><td></td><td>On radios that have banks.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p>The menu only opens when a radio image is loaded — there is nothing to act
+  on before that.</p>
 
   <h3>A helping hand with offsets</h3>
   <p>When you type a <strong>frequency</strong> into the edit dialog, VRP fills in

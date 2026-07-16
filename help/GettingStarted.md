@@ -3,26 +3,38 @@
 ## Announcing a new radio programmer
 
 **VRP — the Versatile Radio Programmer** — programs over 550 radios, and it is
-built to be used entirely by ear and entirely from the keyboard.
+built to be used by a screen reader user entirely from the keyboard.
 
 - Available for **Windows** and **macOS**.
 - Tested on Windows with **NVDA**, **JAWS**, and **Narrator**, and on macOS with
   **VoiceOver**.
 - Built on the **CHIRP** radio programming project.
 
-CHIRP has long been difficult for blind and visually impaired people to use, and
-making its interface accessible has not been a priority for the project. So VRP
-takes a different approach. It uses CHIRP's back end for the radio drivers and
-the radio communications, but the **entire user interface has been rebuilt from
-scratch** to work with screen readers on both Windows and macOS. Because the
-driver layer is CHIRP's, when CHIRP adds or fixes a radio, VRP can pick that up
-and ship it in a new release.
+CHIRP has long been difficult for blind and visually impaired people to use. So
+VRP takes a different approach: it uses CHIRP's back end for the radio drivers
+and the radio communications, but the **entire user interface has been rebuilt
+from scratch** to work with screen readers on both Windows and macOS.
 
 This is very much a first version. We have had a small group of testers so far,
 so you will probably find bugs. We are open to any and all suggestions, and we
 will do our best to fix problems as they get reported.
 
-*Radio driver support provided by the CHIRP project — chirpmyradio.com.*
+### With thanks to the CHIRP project
+
+VRP is an accessible front end that takes advantage of the open source CHIRP
+radio programming software, found at **chirpmyradio.com** and
+**github.com/kk7ds/chirp**. We would like to thank them, and to acknowledge that
+this software would not be possible without their hard work.
+
+Every radio VRP can talk to, it talks to through a driver that a CHIRP volunteer
+wrote, tested, and still maintains — most of them worked out by taking a radio's
+protocol apart by hand, without any help from the manufacturer. That is years of
+patient work by a lot of people, given away freely, and it is the foundation this
+program stands on. It keeps paying off, too: when CHIRP adds a radio or fixes a
+driver, VRP picks that up and ships it in a new release.
+
+VRP is released under the **GPL v3** — the same licence CHIRP uses. The terms
+that let us build on their work are the terms we pass on to you.
 
 ## About the keys in this guide
 
@@ -36,7 +48,8 @@ keys — is the same on both platforms. Where a key genuinely differs, it is
 called out.
 
 **Press F1 at any time** to hear the full list of shortcuts read out of the app
-itself.
+itself. The **Help** menu also has **Getting Started** (this guide) and
+**Keyboard Commands** (the full reference), which open in your browser.
 
 ## Downloading from your radio
 
@@ -112,6 +125,37 @@ Every dialog in VRP works the same way: **Tab** and **Shift+Tab** move between
 fields, **Enter** accepts, and **Escape** cancels. If something you typed is not
 valid, the dialog stays open, tells you why, and puts you on the field that
 needs fixing.
+
+### The row context menu
+
+Once you are on a channel — or have selected several — press **Shift+F10** or the
+**Applications key** to open a menu of everything you can do to that row, without
+going to the menu bar for it. It is an ordinary menu: your screen reader reads it,
+you arrow through it, and Escape closes it. (macOS has no context-menu key, so use
+the menu bar there — the same commands live in the Channels and Edit menus.)
+
+The menu is built fresh each time you open it, so it describes exactly what you
+are sitting on. Items name the channel when one is selected ("Delete channel 5")
+and the selection when several are ("Delete selected channels"). What you get:
+
+| Item | Key | Notes |
+|---|---|---|
+| **Undo** / **Redo** | Ctrl+Z / Ctrl+Y | Named for the operation they reverse or replay — "Undo Deleted channel 5". Greyed out when there is nothing to undo or redo. |
+| **Edit channel N** | Ctrl+E | The whole channel in one dialog. |
+| **Edit cell — <column>** | F2 | Names the column your cell cursor is on: "Edit cell — Frequency". Left out when the cursor is on the channel number, or on a field this radio will not let you change. |
+| **Delete channel N** / **Delete selected channels** | Del | Asks you to confirm first. |
+| **Copy** / **Cut** | Ctrl+C / Ctrl+X | |
+| **Paste N channel(s) here** | Ctrl+V | Tells you how many are on the clipboard. Greyed out while the clipboard is empty. |
+| **Export … to CSV…** | | The focused channel, or the whole selection. |
+| **Move up** / **Move down** | Ctrl+Shift+Up / Down | |
+| **Move to channel…** | Ctrl+Shift+M | |
+| **Sort N selected channels by** | | A submenu — Name, Receive frequency, Transmit frequency. Only appears with two or more channels selected. |
+| **Bulk operations…** | | |
+| **Go to channel…** | Ctrl+G | |
+| **Channel banks…** | | On radios that have banks. |
+
+The menu only opens when a radio image is loaded — there is nothing to act on
+before that.
 
 ### A helping hand with offsets
 

@@ -55,12 +55,30 @@ arrow keys move across top-level menus; NVDA reads it like any native app menu.
 | Channels | Bulk operations… | `Ctrl+M` | needs a loaded radio; delete/delete+shift/insert/move/copy/sort/arrange over a range or list |
 | Channels | Find… | `Ctrl+F` | needs a loaded radio |
 | Channels | Find next | `F3` | needs a loaded radio |
+| Help | Getting Started | — | opens `help/GettingStarted.html` in the default browser |
+| Help | Keyboard Commands | — | opens `help/KeyboardCommands.html` in the default browser |
 | Help | Keyboard Shortcuts | `F1` | shows this list as a plain-text message box |
-| Help | About | — | |
+| Help | About | — | build info + the CHIRP acknowledgement, in two read-only edit boxes |
 
 Items marked "needs a loaded radio" are disabled until an image is open. F1's
 on-screen list (`APP_SHORTCUTS` in `vrp/native/main_window.py`) is kept in
 sync with this table by hand — update both when adding a command.
+
+The accelerators above are the **Windows** ones. wx maps a `Ctrl+` accelerator to
+**Command** on macOS, so `APP_SHORTCUTS` carries both columns and F1 shows the
+one for the platform it is running on. Three rows are not a Ctrl→Command swap:
+`Del` is `Fn+Delete` on a Mac, `Ctrl+Space` is just `Space` there, and
+`Ctrl+Up`/`Ctrl+Down` (the native list's focus-without-selection behaviour, which
+VRP never binds) has no NSTableView equivalent — VoiceOver users navigate with
+VoiceOver.
+
+The Help menu's shipped documents (`vrp/help.py`) open in the user's own browser
+rather than an in-app view, so a screen reader's browse mode does the reading.
+`help/KeyboardCommands.html` is the third statement of the key list, so it is
+**not** hand-checked: `tests/test_help_keyboard_parity.py` fails if it and
+`APP_SHORTCUTS` disagree in either direction. (That guard exists because this
+table and `APP_SHORTCUTS` *did* drift — `Ctrl+Q` was here and in the File menu
+but missing from F1.)
 
 **File ▸ Open Recent** lists the most-recently opened images (newest first),
 each labelled with an `Alt`+digit mnemonic (`&1`…`&9`) inside the submenu and

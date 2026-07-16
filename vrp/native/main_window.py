@@ -10,7 +10,7 @@ speech). Notable points:
 - on_radio_info: shows a plain-text summary in a read-only edit box (InfoDialog).
 - on_shortcuts: displayed with wx.MessageBox (plain text).
 - CHIRP attribution: shown permanently in status-bar field 1 and in the About
-  box (wx.adv.AboutBox description), satisfying the GPLv3 requirement in CLAUDE.md.
+  box (vrp.about_dialog), satisfying the GPLv3 requirement in CLAUDE.md.
 """
 
 from __future__ import annotations
@@ -23,10 +23,9 @@ import time
 from dataclasses import dataclass
 
 import wx
-import wx.adv
 
 from chirp_backend import radio as radio_backend
-from vrp import __version__, describe_version
+from vrp import help as vrp_help
 from vrp.native.announce import Announcer
 from vrp.native.channel_grid import ChannelGrid
 from vrp.speech import get_speaker
@@ -49,35 +48,66 @@ class _Clipboard:
 
 # Keyboard shortcuts table (combo, description).
 # Displayed by on_shortcuts (F1).
+# (Windows keys, macOS keys, description) — F1 shows the column for the platform
+# it is running on (shortcuts_for_platform).
+#
+# The macOS column is NOT "Ctrl" search-and-replaced. wx maps a "Ctrl+" menu
+# accelerator to Command on macOS, so most rows are a straight swap — but three
+# are not, and a blind replace would state keys that do nothing:
+#
+#  - Ctrl+Up/Down is the native list control's own focus-without-selection
+#    behaviour, which VRP never binds; NSTableView has no equivalent, so a
+#    VoiceOver user navigates with VoiceOver.
+#  - Ctrl+Space: the grid's Space handler ignores Ctrl (channel_grid._on_grid_key),
+#    and Cmd+Space is Spotlight on macOS, so only plain Space is offered.
+#  - Del: a Mac keyboard's "delete" key is Backspace; forward delete is Fn+Delete.
+#
+# This column must stay in step with help/KeyboardCommands.html — both directions
+# are enforced by tests/test_help_keyboard_parity.py.
 APP_SHORTCUTS = [
-    ("Ctrl+O", "Open image file"),
-    ("Ctrl+S", "Save"),
-    ("Ctrl+Shift+S", "Save as"),
-    ("Ctrl+Shift+D", "Download from radio"),
-    ("Ctrl+Shift+U", "Upload to radio"),
-    ("Ctrl+Shift+P", "Edit radio settings"),
-    ("Ctrl+E / Enter", "Edit the focused channel (all fields)"),
-    ("F2", "Edit the focused cell (the column at the Left/Right cursor)"),
-    ("Del", "Delete the selected channel(s)"),
-    ("Ctrl+Z", "Undo the last change"),
-    ("Ctrl+Y / Ctrl+Shift+Z", "Redo the last undone change"),
-    ("Space / Ctrl+Space", "Select or deselect the focused channel"),
-    ("Ctrl+Up / Ctrl+Down", "Move the cursor without changing the selection"),
-    ("Shift+Up / Shift+Down", "Extend the selection"),
-    ("Ctrl+A", "Select all channels"),
-    ("Ctrl+C", "Copy selected channel(s)"),
-    ("Ctrl+X", "Cut selected channel(s)"),
-    ("Ctrl+V", "Paste at the focused channel"),
-    ("Ctrl+G", "Go to channel"),
-    ("Ctrl+B", "Channel banks for the focused channel"),
-    ("Ctrl+Shift+Up", "Move selected channel(s) up"),
-    ("Ctrl+Shift+Down", "Move selected channel(s) down"),
-    ("Ctrl+Shift+M", "Move selected channel(s) to a chosen slot"),
-    ("Ctrl+M", "Bulk operations dialog"),
-    ("Ctrl+F", "Find a channel"),
-    ("F3", "Find next match"),
-    ("F1", "Show this list of keyboard shortcuts"),
+    ("Ctrl+O", "Command+O", "Open image file"),
+    ("Ctrl+S", "Command+S", "Save"),
+    ("Ctrl+Shift+S", "Command+Shift+S", "Save as"),
+    ("Ctrl+Q", "Command+Q", "Exit"),
+    ("Ctrl+Shift+D", "Command+Shift+D", "Download from radio"),
+    ("Ctrl+Shift+U", "Command+Shift+U", "Upload to radio"),
+    ("Ctrl+Shift+P", "Command+Shift+P", "Edit radio settings"),
+    ("Ctrl+E / Enter", "Command+E / Enter", "Edit the focused channel (all fields)"),
+    ("F2", "F2", "Edit the focused cell (the column at the Left/Right cursor)"),
+    ("Del", "Fn+Delete", "Delete the selected channel(s)"),
+    ("Ctrl+Z", "Command+Z", "Undo the last change"),
+    ("Ctrl+Y / Ctrl+Shift+Z", "Command+Y / Command+Shift+Z",
+     "Redo the last undone change"),
+    ("Space / Ctrl+Space", "Space", "Select or deselect the focused channel"),
+    ("Ctrl+Up / Ctrl+Down", "VoiceOver navigation",
+     "Move the cursor without changing the selection"),
+    ("Shift+Up / Shift+Down", "Shift+Up / Shift+Down", "Extend the selection"),
+    ("Ctrl+A", "Command+A", "Select all channels"),
+    ("Ctrl+C", "Command+C", "Copy selected channel(s)"),
+    ("Ctrl+X", "Command+X", "Cut selected channel(s)"),
+    ("Ctrl+V", "Command+V", "Paste at the focused channel"),
+    ("Ctrl+G", "Command+G", "Go to channel"),
+    ("Ctrl+B", "Command+B", "Channel banks for the focused channel"),
+    ("Ctrl+Shift+Up", "Command+Shift+Up", "Move selected channel(s) up"),
+    ("Ctrl+Shift+Down", "Command+Shift+Down", "Move selected channel(s) down"),
+    ("Ctrl+Shift+M", "Command+Shift+M", "Move selected channel(s) to a chosen slot"),
+    ("Ctrl+M", "Command+M", "Bulk operations dialog"),
+    ("Ctrl+F", "Command+F", "Find a channel"),
+    ("F3", "F3", "Find next match"),
+    ("F1", "F1", "Show this list of keyboard shortcuts"),
 ]
+
+
+def shortcuts_for_platform(mac: bool | None = None) -> list[tuple[str, str]]:
+    """APP_SHORTCUTS as (keys, description) for the running platform.
+
+    ``mac`` overrides the platform detection (for tests). F1 previously showed
+    the Windows column everywhere, so a Mac user was told to press Ctrl+S for a
+    command actually bound to Command+S.
+    """
+    if mac is None:
+        mac = sys.platform == "darwin"
+    return [(macos if mac else win, desc) for win, macos, desc in APP_SHORTCUTS]
 
 
 _CHIRP_ATTRIBUTION = (
@@ -363,7 +393,13 @@ class MainWindow(wx.Frame):
 
     def _build_help_menu(self) -> wx.Menu:
         m = wx.Menu()
-        self._add(m, "shortcuts", "&Keyboard Shortcuts\tF1", self.on_shortcuts)
+        # Mnemonics here are all distinct: G, K, S, A. "Keyboard Shortcuts" gave
+        # up its K (it was the only K) so the full reference — the document a
+        # user is told to go read — can have it.
+        self._add(m, "getting_started", "&Getting Started", self.on_getting_started)
+        self._add(m, "keyboard_commands", "&Keyboard Commands", self.on_keyboard_commands)
+        m.AppendSeparator()
+        self._add(m, "shortcuts", "Keyboard &Shortcuts\tF1", self.on_shortcuts)
         self._add(m, "about", "&About", self.on_about)
         return m
 
@@ -2002,36 +2038,104 @@ class MainWindow(wx.Frame):
     # -- help handlers ------------------------------------------------
 
     def on_shortcuts(self, _evt=None) -> None:
-        """Help > Keyboard Shortcuts — show shortcut list in a MessageBox."""
+        """Help > Keyboard Shortcuts — show shortcut list in a MessageBox.
+
+        Shows the keys for the platform it is running on: wx maps the Ctrl
+        accelerators to Command on macOS, so the Windows column would be wrong
+        there (see APP_SHORTCUTS).
+        """
+        entries = shortcuts_for_platform()
+        # Width from the longest key on THIS platform: the macOS column is wider
+        # than the Windows one ("Command+Y / Command+Shift+Z"), so a hardcoded
+        # pad would ragged the list there.
+        width = max(len(keys) for keys, _desc in entries)
         lines = ["Keyboard Shortcuts", ""]
-        for combo, desc in APP_SHORTCUTS:
-            lines.append(f"  {combo:<22}  {desc}")
+        for combo, desc in entries:
+            lines.append(f"  {combo:<{width}}  {desc}")
         wx.MessageBox(
             "\n".join(lines), "Keyboard Shortcuts", wx.OK | wx.ICON_INFORMATION, self
         )
         self.grid.SetFocus()
 
-    def on_about(self, _evt=None) -> None:
-        """Help > About — standard About box.
+    def maybe_show_welcome(self) -> None:
+        """Show the startup welcome screen, unless the user switched it off.
 
-        The CHIRP attribution ("Radio driver support provided by the CHIRP
-        project — chirpmyradio.com.") is a GPLv3 requirement and appears here as
-        well as permanently in status-bar field 1.
+        Called via wx.CallAfter once the main window is up (vrp.native.app), so
+        it has a real parent and focus lands back on the grid afterwards — not
+        during __init__, where the frame isn't shown yet.
 
-        Releases are dated (VRP-YYYYMMDD.N), so the description leads with
-        describe_version()'s speakable form ("Release 1 of 15 July 2026") — a
-        screen reader reads the bare version as one huge number. The exact
-        string still goes to SetVersion for copying into a bug report.
+        The region is saved whichever button is pressed, including Escape: the
+        user answered that question by the time they dismiss the screen, and
+        re-asking it next launch would be the annoying part.
         """
-        info = wx.adv.AboutDialogInfo()
-        info.SetName("Versatile Radio Programmer")
-        info.SetVersion(__version__)
-        info.SetDescription(
-            f"{describe_version()}.\n\n"
-            "An accessible front end to the CHIRP radio programming library.\n\n"
-            "Radio driver support provided by the CHIRP project — "
-            "chirpmyradio.com."
+        from chirp_backend import bandplan
+        from vrp.config import get_config
+        from vrp.welcome_dialog import WelcomeDialog
+
+        cfg = get_config()
+        if not cfg.get("show_welcome", True):
+            return
+
+        dlg = WelcomeDialog(
+            self, current_region=cfg.get("bandplan_region", bandplan.DEFAULT_REGION)
         )
-        info.SetWebSite("https://chirpmyradio.com", "chirpmyradio.com")
-        wx.adv.AboutBox(info, self)
-        self.grid.SetFocus()
+        try:
+            result = dlg.ShowModal()
+            region = dlg.region_code()
+        finally:
+            dlg.Destroy()
+
+        cfg.set("bandplan_region", region)
+        bandplan.set_region(region)  # takes effect immediately
+        if result == WelcomeDialog.DONT_SHOW:
+            cfg.set("show_welcome", False)
+        cfg.save()
+
+        self.grid.SetFocus()  # focus lands in the app, not nowhere
+        if result == WelcomeDialog.OPEN_GUIDE:
+            self.on_getting_started()
+            return
+        # Confirm the region either way: it is the one thing the screen changed,
+        # and a screen-reader user who pressed Escape should still hear it stuck.
+        self.announce.announce(
+            f"Band plan region set to {bandplan.region_label(region)}."
+        )
+
+    def on_getting_started(self, _evt=None) -> None:
+        """Help > Getting Started — the guide, in the user's own browser."""
+        self._open_help_doc(vrp_help.GETTING_STARTED, "Getting Started guide")
+
+    def on_keyboard_commands(self, _evt=None) -> None:
+        """Help > Keyboard Commands — the full reference, in the browser. The
+        quick in-app list is still on F1 (on_shortcuts)."""
+        self._open_help_doc(vrp_help.KEYBOARD_COMMANDS, "Keyboard Commands list")
+
+    def _open_help_doc(self, name: str, description: str) -> None:
+        """Open a help document, announcing either outcome.
+
+        The browser takes focus, so the success announcement is what tells a
+        screen-reader user the keypress did something; a missing file is an
+        error, so it interrupts (assertive) rather than being missed.
+        """
+        if vrp_help.open_help(name):
+            self.announce.announce(f"Opening the {description} in your browser.")
+            return
+        self.announce.announce(
+            f"The {description} could not be found. It should be in the "
+            f"{vrp_help.HELP_DIRNAME} folder next to the program.",
+            assertive=True,
+        )
+
+    def on_about(self, _evt=None) -> None:
+        """Help > About — build information and the CHIRP acknowledgement, each
+        in a navigable read-only edit box (see vrp.about_dialog for why not
+        wx.adv.AboutBox). The attribution it carries is a GPLv3 requirement.
+        """
+        from vrp.about_dialog import AboutDialog
+
+        dlg = AboutDialog(self)
+        try:
+            dlg.ShowModal()
+        finally:
+            dlg.Destroy()
+        self.grid.SetFocus()  # focus returns to the control that opened it

@@ -269,6 +269,66 @@ def build(onefile: bool) -> int:
     return subprocess.run(cmd).returncode
 
 
+HELP_DIRNAME = "help"
+
+
+def stage_help(onefile: bool = False) -> int:
+    """Copy the repo's help/ documents into the built app.
+
+    The Help menu opens these in the user's browser (see vrp/help.py), so they
+    must ship with EVERY build, not just the portable zip the way sample-images
+    does. Staging them into dist/vrp/ means both downstream artifacts get them
+    for free: the portable zip walks that folder, and installer.iss recurses
+    dist\\vrp\\*.
+
+    They are copied in rather than passed to PyInstaller's --add-data because in
+    PyInstaller 6 datas land under _internal/. Help belongs beside the
+    executable: vrp/help.py looks for it there, and a user who wants to read the
+    guide without launching the app (or mail it to someone) should not have to
+    go digging through the app's plumbing to find it.
+
+    Re-copied from scratch on every build, so a doc deleted from the repo does
+    not linger in dist/ and ship forever.
+    """
+    src = os.path.join(PROJECT_ROOT, HELP_DIRNAME)
+    if not os.path.isdir(src):
+        print(f"! No help documents at {src} - skipping them.")
+        return 0
+
+    if onefile:
+        # onefile puts the exe straight in dist/, so help/ goes beside it there.
+        dests = [os.path.join(PROJECT_ROOT, "dist", HELP_DIRNAME)]
+    elif sys.platform == "darwin":
+        # Inside a .app, sys.executable is vrp.app/Contents/MacOS/vrp, so
+        # "beside the executable" is not a place a user can see. Contents/
+        # Resources/ is the bundle convention and is what vrp/help.py's macOS
+        # candidate looks for. The raw COLLECT folder gets a copy too, since
+        # --portable ships the .app but the folder is still runnable.
+        # NOT yet exercised on a Mac - see CLAUDE.md on the macOS build.
+        dests = [
+            os.path.join(PROJECT_ROOT, "dist", f"{APP_NAME}.app", "Contents",
+                         "Resources", HELP_DIRNAME),
+            os.path.join(PROJECT_ROOT, "dist", APP_NAME, HELP_DIRNAME),
+        ]
+    else:
+        dests = [os.path.join(PROJECT_ROOT, "dist", APP_NAME, HELP_DIRNAME)]
+
+    count = 0
+    for dest in dests:
+        parent = os.path.dirname(dest)
+        if not os.path.isdir(parent):
+            # e.g. dist/vrp.app absent because --windowed didn't run.
+            print(f"! {parent} not found - skipping help/ there.")
+            continue
+        if os.path.isdir(dest):
+            shutil.rmtree(dest)
+        shutil.copytree(src, dest)
+        count = sum(len(files) for _r, _d, files in os.walk(dest))
+        print(f"  + {count} help documents in "
+              f"{os.path.relpath(dest, os.path.join(PROJECT_ROOT, 'dist'))}")
+    return 0
+
+
 SAMPLES_DIRNAME = "sample-images"
 
 _SAMPLES_README = """\
@@ -619,6 +679,12 @@ def main() -> None:
         sys.exit(rc)
 
     print("\nBuild succeeded.")
+
+    # Help docs ship with every build (the Help menu opens them), so this runs
+    # before the portable/installer steps that package dist/ up.
+    print("\nStaging the help documents...")
+    stage_help(onefile=args.onefile)
+
     suffix = ".exe" if os.name == "nt" else ""
     if args.onefile:
         print(f"Output: dist{os.sep}{APP_NAME}{suffix}")

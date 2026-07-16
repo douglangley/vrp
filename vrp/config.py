@@ -46,6 +46,14 @@ _DEFAULTS = {
     "recent_files": [],
     "recent_files_count": 9,  # how many recent files to show in the menu (0 hides it)
     "last_serial_port": None,  # device string (e.g. "COM4") last used for a clone
+    # Show the welcome screen at startup (region picker + an offer to open the
+    # Getting Started guide). Named for what it does rather than "first_run":
+    # it is not a one-shot latch. It stays True — so the screen returns each
+    # launch — until the user presses "Don't show this again", because the two
+    # things it asks are worth a second chance. "Not now" and Escape leave it
+    # True deliberately; nothing in it is lost either way, since the region also
+    # lives in File > Preferences and the guide in Help > Getting Started.
+    "show_welcome": True,
     "bandplan_region": "north_america",  # CHIRP band plan for offset suggestions
     "auto_band_defaults": False,  # also fill mode/step/tone from the band plan
     "favorite_radios": [],  # CHIRP driver ids the user has starred
