@@ -10,7 +10,8 @@ ditto-zipped-with-sample-images artifact PyInstaller's macOS path does.
 
 Usage:
   uv sync --extra py2app
-  uv run python setup.py py2app              Build to dist/vrp.app.
+  uv run python setup.py py2app              Build to
+                                              dist/VRP-<version>-macos-<arch>.app.
   uv run python setup.py py2app --portable    Also zip it as
                                                dist/VRP-<version>-macos-<arch>.zip
                                                (see build_portable() below).
@@ -178,11 +179,11 @@ def _sample_files() -> list:
 
 
 def build_portable(app_path: str, version: str, include_samples: bool = True) -> int:
-    """Stage vrp.app + sample-images, then zip with ditto — same approach as
+    """Stage the .app + sample-images, then zip with ditto — same approach as
     build.py's _build_portable_macos (see that function's docstring for why
     ditto, not zipfile, is required for a .app bundle). Output:
-    dist/VRP-<version>-macos-<arch>.zip, holding VRP-<version>/vrp.app (+
-    sample-images/).
+    dist/VRP-<version>-macos-<arch>.zip, holding
+    VRP-<version>/VRP-<version>-macos-<arch>.app (+ sample-images/).
     """
     if shutil.which("ditto") is None:
         print("Cannot build the portable zip: `ditto` not found on PATH.")
@@ -333,7 +334,13 @@ finally:
     os.chdir(PROJECT_ROOT)
 
 built_app = os.path.join(STAGE_DIR, "dist", f"{DISPLAY_NAME}.app")
-final_app = os.path.join(DIST_DIR, f"{APP_NAME}.app")
+# Named to match the portable zip exactly (VRP-<version>-macos-<arch>.app),
+# not the generic "vrp.app" build.py's PyInstaller path uses — a tester with
+# several builds on disk (or unzipped side by side) can tell them apart by
+# the .app name alone, the same way the zip and its VRP-<version>/ top folder
+# already do.
+RELEASE_APP_NAME = f"{RELEASE_PREFIX}-{VERSION}-{artifact_suffix()}"
+final_app = os.path.join(DIST_DIR, f"{RELEASE_APP_NAME}.app")
 if os.path.isdir(built_app):
     os.makedirs(DIST_DIR, exist_ok=True)
     if os.path.isdir(final_app):
