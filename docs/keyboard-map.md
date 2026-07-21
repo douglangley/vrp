@@ -149,14 +149,23 @@ After a move, the moved block stays selected at its new position and focus
 lands on its first channel; the result is announced via the status bar and
 speech.
 
-**Cut / copy / paste** work on whole rows with an in-app clipboard (current
-image only). `Ctrl+C` snapshots the selected channel(s); `Ctrl+X` marks them
-(deferred — nothing changes until you paste, which then *moves* them and clears
-the clipboard); `Ctrl+V` pastes at the focused channel. Paste **overwrites** the
-destination, but when the destination is occupied a dialog offers **Overwrite**,
-**Make room** (shift the existing channels down to insert — blocked if there
-aren't enough empty slots near the end), or **Cancel**. The radio's channel
-count is fixed, so nothing is ever added or pushed off the end.
+**Cut / copy / paste** work on whole rows with an in-app clipboard. `Ctrl+C`
+snapshots the selected channel(s); `Ctrl+X` marks them (deferred — nothing
+changes until you paste); `Ctrl+V` pastes at the focused channel. Within the
+same open image, Cut + Paste is a move and clears the clipboard. After opening
+or downloading another radio, Paste uses CHIRP's cross-model conversion for
+frequency, names, power, tones, modes, duplex and D-STAR fields. A cross-image
+Cut is safely treated as Copy because its original image is no longer active.
+
+Within one image, an occupied destination offers **Overwrite**, **Make room**
+(shift existing channels down), or **Cancel**. During cross-radio migration it
+offers **Overwrite**, **Skip**, or **Cancel**. Incompatible channels are skipped
+individually and shown with their reasons in a navigable, copyable details
+dialog; compatible channels still import. The radio's channel count is fixed,
+so every source channel that runs past the end is also listed in that report.
+This first migration slice covers regular numbered memories (including D-STAR
+where both drivers support it); radio-wide settings, bank membership, special
+channels, and image subdevice selection are not migrated yet.
 
 **Undo / redo** cover every channel operation — edit, delete, move, copy,
 cut/paste, sort, insert, arrange, import. `Ctrl+Z` undoes the last one and
@@ -263,10 +272,11 @@ Ctrl shortcuts); a recent entry that's gone is announced and pruned.
 
 ### Import / Export / Radio Info
 
-File ▸ Import from File… picks another radio image (native file dialog), loads
-it as an independent source (the active radio is untouched), then reuses the
-import-destination dialog + import op (adapts each memory via CHIRP import_logic,
-overwrite/skip, announces counts, focuses the first imported channel). File ▸
+File ▸ Import from File… picks another radio image or CHIRP CSV (native file
+dialog), loads it as an independent source (the active radio is untouched), then reuses the
+generic migration engine (adapts each memory via CHIRP import_logic,
+overwrite/skip, reports each incompatibility, focuses the first imported
+channel). File ▸
 Export to CSV… writes the loaded radio's non-empty channels to a CSV via CHIRP's
 generic_csv driver (native save dialog with overwrite prompt; announces count +
 file). You can also export **just a selection**: the row context menu's "Export
@@ -293,8 +303,8 @@ Dialog`, a `wx.ListBox` with `LB_MULTIPLE`): arrow through the repeaters, press
 **Unselect all** buttons and a **Back to search** button that returns to the
 query dialog with the previous inputs preserved (query → results loops until
 Import or Cancel). The checked rows flow through the shared
-`ImportDestinationDialog` + `memory_ops.import_memories` (its `numbers=`
-argument limits the import to the checked source channels). A checkbox list
+`ImportDestinationDialog` + shared migration engine (the selected source
+channel numbers limit the import to the checked rows). A checkbox list
 (`wx.CheckListBox`) was avoided — its per-item checkboxes read unreliably under
 NVDA; a multi-select ListBox announces each row and its selected state. It currently pulls from **CHIRP's mirror**
 (`data.chirpmyradio.com/rb/`, generic CHIRP User-Agent, no credential) — the
@@ -308,8 +318,8 @@ MURS, Marine VHF, aviation, railroad, EU PMR/LPD, …) into the loaded radio —
 *local* import, no network. A filterable `FrequencyListDialog` (type-ahead
 `RadioListView` + a **Details…** button that previews the list's channels in the
 read-only `InfoDialog`) chooses the list; the whole list then imports through the
-same `ImportDestinationDialog` (start channel + overwrite/skip) +
-`memory_ops.import_memories`. The files are read from the pinned CHIRP tree
+same `ImportDestinationDialog` (start channel + overwrite/skip) + shared
+migration engine. The files are read from the pinned CHIRP tree
 (`chirp/stock_configs`) — no copy into the VRP repo; the frozen build bundles
 that one subdir via a targeted `--add-data` (see `chirp_backend/stock_configs.py`
 and `build.py`). Unlike CHIRP, which *opens* a stock config as its own document,

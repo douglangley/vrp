@@ -18,6 +18,7 @@ import logging
 import os
 import re
 import threading
+import uuid
 from dataclasses import dataclass, field
 from typing import Callable, Optional
 
@@ -128,6 +129,9 @@ class RadioState:
     """Holds everything about the currently loaded radio."""
     radio: object = None            # chirp CloneModeRadio instance
     image_path: Optional[str] = None
+    # A new identity for every open/download operation. Clipboard cut may erase
+    # its source only while this exact document is still active.
+    document_id: Optional[str] = None
     is_modified: bool = False
     # Cache of memory objects keyed by channel number, populated on load
     _mem_cache: dict = field(default_factory=dict)
@@ -164,6 +168,7 @@ def unload() -> None:
     with _state_lock:
         _state.radio = None
         _state.image_path = None
+        _state.document_id = None
         _state.is_modified = False
         _state._mem_cache = {}
     _undo = None  # drop the undo history with the radio
@@ -191,6 +196,7 @@ def load_image(path: str) -> tuple[bool, str]:
         with _state_lock:
             _state.radio = radio
             _state.image_path = path
+            _state.document_id = uuid.uuid4().hex
             _state.is_modified = False
             _state._mem_cache = {}
         _install_undo(radio)  # fresh, empty history for the new radio
@@ -416,7 +422,7 @@ def export_to_csv(path: str, numbers=None) -> tuple:
             return False, "No radio loaded", 0
         radio = _state.radio
 
-    from chirp import import_logic
+    from chirp import chirp_common, import_logic
     from chirp.drivers import generic_csv
 
     try:
@@ -436,9 +442,17 @@ def export_to_csv(path: str, numbers=None) -> tuple:
         if not rows:
             return False, "No channels to export.", 0
 
-        csv = generic_csv.CSVRadio(None)
+        # CSVRadio(None) creates a synthetic blank channel zero. Size the
+        # in-memory CSV to the real maximum and explicitly erase zero so radios
+        # whose first channel is 1 do not gain a phantom row on export.
+        csv = generic_csv.CSVRadio(None, max_memory=max(mem.number for mem in rows))
+        csv.erase_memory(0)
         for mem in rows:
-            csv.set_memory(import_logic.import_mem(csv, features, mem))
+            csv.set_memory(
+                import_logic.import_mem(
+                    csv, features, mem, mem_cls=chirp_common.Memory
+                )
+            )
         csv.save_mmap(path)
         return True, f"Exported {len(rows)} channel(s) to {os.path.basename(path)}.", len(rows)
     except Exception as e:  # noqa: BLE001
@@ -818,6 +832,7 @@ def download_from_radio(
         with _state_lock:
             _state.radio = radio
             _state.image_path = None   # downloaded, not yet saved to disk
+            _state.document_id = uuid.uuid4().hex
             _state.is_modified = True
             _state._mem_cache = {}
         _install_undo(radio)  # a downloaded image starts with empty history

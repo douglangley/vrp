@@ -558,8 +558,13 @@ class TestImportMemories:
 
     @pytest.fixture
     def identity_import(self, monkeypatch):
-        monkeypatch.setattr("chirp.import_logic.import_mem",
-                            lambda target, feats, mem: mem.dupe())
+        def _identity(target, feats, mem, overrides=None, **_kwargs):
+            result = mem.dupe()
+            for field, value in (overrides or {}).items():
+                setattr(result, field, value)
+            return result
+
+        monkeypatch.setattr("chirp.import_logic.import_mem", _identity)
 
     def test_import_all(self, stub_radio, identity_import):
         from chirp_backend.memory_ops import import_memories
@@ -596,3 +601,28 @@ class TestImportMemories:
         )
         assert not ok  # imported 0 -> ok is False
         assert affected == []
+
+    def test_destination_number_is_applied_during_conversion(
+        self, stub_radio, monkeypatch
+    ):
+        """Immutable checks inside CHIRP must see the destination, not the
+        source channel number."""
+        seen = []
+
+        def _capture(target, feats, mem, overrides=None, **_kwargs):
+            seen.append((mem.number, dict(overrides or {})))
+            result = mem.dupe()
+            for field, value in (overrides or {}).items():
+                setattr(result, field, value)
+            return result
+
+        monkeypatch.setattr("chirp.import_logic.import_mem", _capture)
+        from chirp_backend.memory_ops import import_memories
+
+        ok, _msg, affected = import_memories(
+            self._source(), 10, overwrite=True, numbers=[3]
+        )
+
+        assert ok
+        assert affected == [10]
+        assert seen == [(3, {"number": 10, "extd_number": ""})]

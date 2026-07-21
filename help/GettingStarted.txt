@@ -248,11 +248,21 @@ The cut-and-paste way, which also works across scattered selections:
   4. Press Ctrl+V (macOS: Command+V) to paste.
 
 Ctrl+C / Command+C copies instead of moving. Cut is deferred - nothing actually
-changes until you paste, and only then are the originals cleared.
+changes until you paste. If the same image is still open, the paste moves the
+channels and clears the originals. If you open or download another radio first,
+VRP converts each channel for that model and leaves the original image unchanged;
+a cross-image Cut becomes Copy so you can paste again.
 
 If you paste onto a channel that is already occupied, VRP does not silently
 clobber it. A dialog asks whether you want to Overwrite it, Make room (shift
-the existing channels down to insert yours), or Cancel.
+the existing channels down to insert yours), or Cancel within one image. Across
+radio images the choices are Overwrite, Skip, or Cancel. Any incompatible
+channels are skipped individually, and a navigable, copyable details window
+explains why; compatible channels still paste.
+
+Cross-radio migration currently covers regular numbered channels. It does not
+copy radio-wide settings, bank membership, special channels, or choose among an
+image's subdevices yet.
 
 After any move, the moved channels stay selected at their new home, focus lands
 on the first of them, and the result is announced.
@@ -306,8 +316,11 @@ WORTH EXPLORING NEXT
   * Radio > Query Source > Frequency lists - import one of CHIRP's ready-made
     lists (NOAA weather, FRS/GMRS, MURS, Marine VHF, aviation, railroad, PMR,
     and more). No internet needed.
-  * File > Import from File and File > Export to CSV - move channels between
-    images, or send someone just the part of your memories they asked for.
+  * File > Import from File and File > Export to CSV - move channels directly
+    between images, import a CHIRP CSV, or send someone just the part of your
+    memories they asked for.
+    Import and cross-image Paste use the same CHIRP conversion and per-channel
+    compatibility report.
     (There is no print command; Export to CSV is the accessible equivalent.)
   * File > Preferences - how many recent files to show, which band plan region
     to use, whether entering a frequency should also fill in mode/step/tone,

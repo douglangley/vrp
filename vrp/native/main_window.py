@@ -39,12 +39,18 @@ class _Clipboard:
 
     ``mems`` are deep-copied Memory snapshots taken at copy/cut time, so the
     clipboard survives later edits to the source. ``source_numbers`` are the
-    original channel numbers — used only for a ``cut`` (to erase the sources when
-    the paste lands, making cut+paste a move); a ``copy`` ignores them."""
+    original channel numbers — used only for a ``cut`` pasted back into the exact
+    same open document. Source metadata lets a paste into another radio run
+    through CHIRP's generic migration conversion instead of writing foreign
+    driver objects directly."""
 
     mode: str  # "copy" | "cut"
     mems: list
     source_numbers: list[int]
+    source_features: object
+    source_radio_id: str
+    source_label: str
+    source_document_id: str | None
 
 # Keyboard shortcuts table (combo, description).
 # Displayed by on_shortcuts (F1).
@@ -817,29 +823,53 @@ class MainWindow(wx.Frame):
 
     def on_copy(self, _evt=None) -> None:
         """Copy the selected channel(s) to the in-app clipboard (source kept)."""
+        from chirp_backend import migration
+
         snap = self._snapshot_selection()
         if snap is None:
             return
         numbers, mems = snap
-        self._clipboard = _Clipboard("copy", mems, list(numbers))
+        state = radio_backend.get_state()
+        self._clipboard = _Clipboard(
+            "copy",
+            mems,
+            list(numbers),
+            state.features,
+            migration.radio_id(state.radio),
+            migration.radio_label(state.radio),
+            state.document_id,
+        )
         self.announce.announce(f"Copied {len(mems)} channel(s).")
 
     def on_cut(self, _evt=None) -> None:
         """Cut the selected channel(s) to the clipboard. Deferred: the source is
         untouched until paste, which then moves them (erasing the source)."""
+        from chirp_backend import migration
+
         snap = self._snapshot_selection()
         if snap is None:
             return
         numbers, mems = snap
-        self._clipboard = _Clipboard("cut", mems, list(numbers))
+        state = radio_backend.get_state()
+        self._clipboard = _Clipboard(
+            "cut",
+            mems,
+            list(numbers),
+            state.features,
+            migration.radio_id(state.radio),
+            migration.radio_label(state.radio),
+            state.document_id,
+        )
         self.announce.announce(f"Cut {len(mems)} channel(s). Paste to move them.")
 
     def on_paste(self, _evt=None) -> None:
-        """Paste the clipboard at the focused channel. Overwrites by default; when
-        the destination is occupied, asks whether to overwrite or make room (shift
-        the existing channels down). A cut paste moves (erases the source) and
-        empties the clipboard; a copy paste keeps it for pasting again."""
-        from chirp_backend import memory_ops
+        """Paste whole rows at the focused channel.
+
+        A same-document paste preserves the native move/make-room behavior. A
+        paste after another image is opened uses generic migration; a deferred
+        cut becomes a copy because the inactive source cannot be erased safely.
+        """
+        from chirp_backend import memory_ops, migration
 
         if not radio_backend.get_state().loaded:
             self.announce.announce("No radio image is open.", assertive=True)
@@ -853,7 +883,61 @@ class MainWindow(wx.Frame):
             self.announce.announce("No channel selected.")
             return
         n = len(clip.mems)
-        low, high = radio_backend.get_state().memory_bounds
+        _low, high = radio_backend.get_state().memory_bounds
+        same_document = bool(
+            clip.source_document_id
+            and clip.source_document_id == radio_backend.get_state().document_id
+        )
+
+        if not same_document:
+            batch = migration.batch_from_memories(
+                clip.mems,
+                clip.source_numbers,
+                clip.source_features,
+                clip.source_radio_id,
+                clip.source_label,
+                clip.source_document_id,
+            )
+            occupied = []
+            for k in range(dest, min(high, dest + len(batch.entries) - 1) + 1):
+                mem = radio_backend.get_memory(k)
+                if mem is not None and not mem.empty:
+                    occupied.append(k)
+            overwrite = True
+            if occupied:
+                choice = self._ask_migration_conflict(
+                    dest,
+                    min(high, dest + len(batch.entries) - 1),
+                    len(occupied),
+                )
+                if choice is None:
+                    return
+                overwrite = choice
+
+            ok, message, affected, report = memory_ops.apply_migration_batch(
+                batch, dest, overwrite
+            )
+            if affected:
+                self.grid.reorder_refresh()
+                self.grid.select_channels(affected)
+                self.grid.focus_channel(affected[0])
+            else:
+                self.grid.SetFocus()
+
+            cut_note = ""
+            if clip.mode == "cut":
+                # The original image is no longer active, so it cannot be
+                # changed safely. Preserve the snapshots for another paste.
+                clip.mode = "copy"
+                cut_note = " Source image was unchanged; clipboard is now Copy."
+            if report.has_issues or report.warning_count:
+                self._show_migration_report(report, "Paste details")
+            self.announce.announce(
+                message + cut_note,
+                assertive=not ok or report.has_issues,
+            )
+            return
+
         if dest + n - 1 > high:
             self.announce.announce(
                 f"Not enough room: pasting {n} channel(s) at {dest} runs past "
@@ -898,6 +982,37 @@ class MainWindow(wx.Frame):
         if clip.mode == "cut":
             self._clipboard = None  # cut is one-shot
         self.announce.announce(f"{message}. Now on channel {dest}.", assertive=True)
+
+    def _ask_migration_conflict(
+        self, first: int, last: int, occupied: int
+    ) -> bool | None:
+        """Ask whether cross-radio migration should overwrite occupied rows.
+
+        Returns True for overwrite, False for skip, and None for cancel. Unlike
+        a same-document paste, migration never shifts model-specific raw rows.
+        """
+        where = f"Channel {first} is" if first == last else f"Channels {first} to {last} are"
+        msg = (
+            f"{where} not empty ({occupied} occupied). Overwrite those channels, "
+            "or skip them during migration?"
+        )
+        dlg = wx.MessageDialog(
+            self,
+            msg,
+            "Paste — destination not empty",
+            wx.YES_NO | wx.CANCEL | wx.ICON_QUESTION,
+        )
+        dlg.SetYesNoCancelLabels("Overwrite", "Skip", "Cancel")
+        try:
+            result = dlg.ShowModal()
+        finally:
+            dlg.Destroy()
+            self.grid.SetFocus()
+        if result == wx.ID_YES:
+            return True
+        if result == wx.ID_NO:
+            return False
+        return None
 
     def _ask_paste_conflict(self, first: int, last: int, occupied: int) -> str | None:
         """Ask how to resolve a paste onto occupied channels. Returns
@@ -1304,6 +1419,24 @@ class MainWindow(wx.Frame):
             dlg.Destroy()
             self.grid.SetFocus()
 
+    def _show_migration_report(self, report, title: str = "Import details") -> None:
+        """Show an itemised, keyboard-readable migration result."""
+        from vrp.info_dialog import InfoDialog
+
+        dlg = InfoDialog(
+            self,
+            title,
+            report.details_text(),
+            name="Migration details",
+            size=(650, 420),
+            ok_button=True,
+        )
+        try:
+            dlg.ShowModal()
+        finally:
+            dlg.Destroy()
+            self.grid.SetFocus()
+
     # -- file handlers ------------------------------------------------
 
     def on_open(self, _evt=None) -> None:
@@ -1476,8 +1609,12 @@ class MainWindow(wx.Frame):
             )
             return
         with wx.FileDialog(
-            self, "Import channels from radio image file",
-            wildcard="Radio images (*.img)|*.img|All files (*.*)|*.*",
+            self, "Import channels from radio image or CSV file",
+            wildcard=(
+                "Radio images and CSV (*.img;*.csv)|*.img;*.csv|"
+                "Radio images (*.img)|*.img|CSV files (*.csv)|*.csv|"
+                "All files (*.*)|*.*"
+            ),
             style=wx.FD_OPEN | wx.FD_FILE_MUST_EXIST,
         ) as dlg:
             if dlg.ShowModal() != wx.ID_OK:
@@ -1509,7 +1646,7 @@ class MainWindow(wx.Frame):
         ``numbers`` optionally restricts the import to specific source channel
         numbers (the rows checked in the results picker); None imports all.
         """
-        from chirp_backend import memory_ops
+        from chirp_backend import memory_ops, migration
         from vrp.query_dialogs import ImportDestinationDialog
 
         low, high = radio_backend.get_state().memory_bounds
@@ -1524,8 +1661,9 @@ class MainWindow(wx.Frame):
             self.grid.SetFocus()
             return
 
-        ok, message, affected = memory_ops.import_memories(
-            src_radio, dest, overwrite, numbers=numbers
+        batch = migration.batch_from_radio(src_radio, numbers=numbers)
+        ok, message, affected, report = memory_ops.apply_migration_batch(
+            batch, dest, overwrite
         )
         if ok:
             self._load_into_grid()
@@ -1534,7 +1672,8 @@ class MainWindow(wx.Frame):
             self.announce.announce(message)
         else:
             self.announce.announce(message, assertive=True)
-            wx.MessageBox(message, "Import", wx.OK | wx.ICON_ERROR, self)
+        if report.has_issues or report.warning_count:
+            self._show_migration_report(report)
 
     def _first_empty_channel(self) -> int:
         low, high = radio_backend.get_state().memory_bounds

@@ -297,12 +297,22 @@
     <li>Press <strong>Ctrl+V</strong> (macOS: Command+V) to paste.</li>
   </ol>
   <p><strong>Ctrl+C / Command+C</strong> copies instead of moving. Cut is
-  <em>deferred</em> — nothing actually changes until you paste, and only then are
-  the originals cleared.</p>
+  <em>deferred</em> — nothing actually changes until you paste. If the same image
+  is still open, the paste moves the channels and clears the originals. If you
+  open or download another radio first, VRP converts each channel for that model
+  and leaves the original image unchanged; a cross-image Cut becomes Copy so you
+  can paste again.</p>
   <p>If you paste onto a channel that is <strong>already occupied</strong>, VRP
   does not silently clobber it. A dialog asks whether you want to
   <strong>Overwrite</strong> it, <strong>Make room</strong> (shift the existing
-  channels down to insert yours), or <strong>Cancel</strong>.</p>
+  channels down to insert yours), or <strong>Cancel</strong> within one image.
+  Across radio images the choices are <strong>Overwrite</strong>,
+  <strong>Skip</strong>, or <strong>Cancel</strong>. Any incompatible channels are
+  skipped individually, and a navigable, copyable details window explains why;
+  compatible channels still paste.</p>
+  <p>Cross-radio migration currently covers regular numbered channels. It does
+  not copy radio-wide settings, bank membership, special channels, or choose
+  among an image's subdevices yet.</p>
   <p>After any move, the moved channels stay selected at their new home, focus
   lands on the first of them, and the result is announced.</p>
   <p>Everything here is undoable — <strong>Ctrl+Z / Command+Z</strong> — and VRP
@@ -360,9 +370,10 @@
     CHIRP's ready-made lists (NOAA weather, FRS/GMRS, MURS, Marine VHF, aviation,
     railroad, PMR, and more). No internet needed.</li>
     <li><strong>File ▸ Import from File</strong> and <strong>File ▸ Export to
-    CSV</strong> — move channels between images, or send someone just the part of
-    your memories they asked for. (There is no print command; Export to CSV is the
-    accessible equivalent.)</li>
+    CSV</strong> — move channels directly between images, import a CHIRP CSV, or
+    send someone just the part of your memories they asked for. Import and cross-image Paste use the same CHIRP
+    conversion and per-channel compatibility report. (There is no print command;
+    Export to CSV is the accessible equivalent.)</li>
     <li><strong>File ▸ Preferences</strong> — how many recent files to show, which
     band plan region to use, whether entering a frequency should also fill in
     mode/step/tone, and whether VRP speaks status messages aloud on top of your

@@ -282,84 +282,48 @@ def set_channel_field(number: int, field: str, value):
 
 
 @undo.records
+def apply_migration_batch(
+    batch,
+    destination: int,
+    overwrite: bool = True,
+):
+    """Apply a prepared migration batch as one undoable operation.
+
+    Returns ``(ok, summary, affected, report)``. The fourth value retains every
+    per-channel incompatibility/warning for an accessible results dialog, while
+    the first three keep the usual memory-operation convention.
+    """
+    from chirp_backend import migration
+
+    try:
+        target = _get_radio()
+    except RuntimeError as exc:
+        report = migration.MigrationReport(batch.source_label, "No radio")
+        return False, str(exc), [], report
+
+    report = migration.apply_batch(
+        target, batch, destination, overwrite=overwrite
+    )
+    from chirp_backend.radio import invalidate_cache
+
+    invalidate_cache(report.affected)
+    return report.ok, report.summary(), report.affected, report
+
+
 def import_memories(
     src_radio,
     destination: int,
     overwrite: bool = True,
     numbers=None,
 ) -> OpResult:
-    """Import a query/source radio's memories into the loaded radio.
+    """Compatibility wrapper for migrating memories from a source radio."""
+    from chirp_backend import migration
 
-    Copies each non-empty source memory into consecutive destination channels
-    starting at ``destination``, adapting it for the target radio via CHIRP's
-    import_logic (handles mode/tone/power differences). With overwrite=False,
-    occupied destination channels are skipped. Returns (ok, message, affected).
-
-    ``numbers`` optionally restricts the import to a subset of source channel
-    numbers (e.g. the rows the user checked in the results picker); given
-    None, every non-empty source memory is imported. Out-of-range or duplicate
-    numbers are ignored; the surviving numbers are imported in ascending order.
-    """
-    from chirp import import_logic
-
-    try:
-        target = _get_radio()
-    except RuntimeError as e:
-        return False, str(e), []
-
-    tlo, thi = _mem_bounds()
-    src_features = src_radio.get_features()
-    slo, shi = src_features.memory_bounds
-
-    if numbers is None:
-        source_numbers = range(slo, shi + 1)
-    else:
-        source_numbers = sorted({n for n in numbers if slo <= n <= shi})
-
-    dest = destination
-    imported = overwritten = skipped = 0
-    affected: list[int] = []
-    for n in source_numbers:
-        if dest > thi:
-            break
-        try:
-            src_mem = src_radio.get_memory(n)
-        except Exception:  # noqa: BLE001
-            continue
-        if getattr(src_mem, "empty", False):
-            continue
-
-        existing = _get_mem(target, dest)
-        if existing is not None and not existing.empty:
-            if not overwrite:
-                skipped += 1
-                dest += 1
-                continue
-            overwritten += 1
-
-        try:
-            mem = import_logic.import_mem(target, src_features, src_mem)
-            mem.number = dest
-            _set_mem(target, mem)
-            imported += 1
-            affected.append(dest)
-        except Exception as e:  # noqa: BLE001
-            LOG.warning("import channel %s -> %s failed: %s", n, dest, e)
-            skipped += 1
-        dest += 1
-
-    from chirp_backend.radio import get_state, invalidate_cache
-
-    invalidate_cache(affected)
-    get_state().is_modified = True
-
-    parts = [f"Imported {imported} channel(s)"]
-    if overwritten:
-        parts.append(f"{overwritten} overwritten")
-    if skipped:
-        parts.append(f"{skipped} skipped")
-    message = ", ".join(parts) + "."
-    return imported > 0, message, affected
+    batch = migration.batch_from_radio(src_radio, numbers=numbers)
+    ok, message, affected, _report = apply_migration_batch(
+        batch, destination, overwrite
+    )
+    return ok, message, affected
 
 
 def parse_channel_spec(spec: str, low: int, high: int):
