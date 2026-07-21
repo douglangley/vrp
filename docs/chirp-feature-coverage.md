@@ -23,8 +23,8 @@ update (`git pull` ./chirp) in case new dialogs appear.
 | Open Stock Config      | 1         | ☑ (as an **import**: Radio ▸ Query Source ▸ Frequency lists… imports a CHIRP stock config into the loaded radio, rather than opening it as its own document) |
 | Open Recent            | config    | ☑      |
 | Save / Save As         | 1         | ☑      |
-| Import (from image)    | 8         | ☑      |
-| Export (to CSV)        | 8         | ☑ (whole image via File ▸ Export; a selected subset via the row context menu + Bulk operations dialog) |
+| Import (image / CSV)   | 8         | ☑ (generic CHIRP cross-model conversion, overwrite/skip, partial success + accessible per-channel report) |
+| Export (to CSV)        | 8         | ☑ (whole image via File ▸ Export; a selected subset via the row context menu + Bulk operations dialog; no synthetic channel 0) |
 | Load Module            | 8         | ☐      |
 | Print / Print Preview  | 8         | ✗ (intentional — covered by Export to CSV; native print is inaccessible) |
 | Close Image / Exit     | 1 / 0     | ☑      |
@@ -36,7 +36,7 @@ update (`git pull` ./chirp) in case new dialogs appear.
 | Copy to / Move to (bulk)        | 3         | ☑      |
 | Delete / Delete + shift         | 3         | ☑      |
 | Insert / Move / Sort / Arrange  | 3         | ☑ (Sort: any column + synthetic Transmit frequency, non-contiguous-safe; also a quick Sort submenu in the row context menu) |
-| Cut / Paste (clipboard)         | 3         | ☑      |
+| Cut / Paste (clipboard)         | 3         | ☑ (same-image move/make-room; cross-image Paste uses generic migration and cross-image Cut safely becomes Copy) |
 | Undo / Redo (channel ops)       | —         | ☑      |
 | Find / Find Next                | 3         | ☑      |
 | Goto channel                    | 3         | ☑      |
@@ -75,6 +75,17 @@ update (`git pull` ./chirp) in case new dialogs appear.
 
 ## Notes
 
+- **Cross-radio channel migration (VRP-only integration):** Phase 1 is complete
+  (2026-07-21). `chirp_backend/migration.py` routes ordinary numbered
+  `Memory`/`DVMemory` objects through CHIRP `import_logic`, clears foreign
+  driver-private extras, validates/writes compatible rows, and reports every
+  occupied/incompatible/failed/out-of-space row. File Import, RepeaterBook,
+  Frequency lists, and cross-image clipboard Paste share the same undoable
+  engine. Audit baseline: 385 targets from 358 pinned images, zero unexpected
+  failures. Still open: bank membership, special memories, source/active
+  subdevice-selection UX, D-STAR call-list side-effect tests, and screen-reader
+  hand passes. See
+  `docs/superpowers/plans/2026-07-21-cross-radio-migration.md`.
 - **Favorite radios (VRP-only, not a CHIRP feature):** Radio ▸ Favorite radios…
   manages a starred-radio list (`vrp/serial_dialogs.py` `FavoritesDialog`,
   `vrp/config.py` favorites); the Download dialog gains a **Show: All radios /

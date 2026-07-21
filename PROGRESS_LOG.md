@@ -6,6 +6,70 @@ architecture, keyboard map, and CHIRP feature-coverage checklist.
 
 ---
 
+## 2026-07-21 — Generic cross-radio channel migration (Phase 1)
+
+**Outcome:** ordinary numbered channels can now move directly between different
+radio images with Copy/Paste or File ▸ Import; a CSV round-trip is optional, not
+required. The implementation is model-generic and delegates compatibility to
+CHIRP instead of adding UV-5R/UV-5R Mini (or any other) pairwise converters.
+Implemented on `feature/cross-radio-migration`, commit `69cf9b1`. Detailed
+handoff and remaining phases:
+[`docs/superpowers/plans/2026-07-21-cross-radio-migration.md`](docs/superpowers/plans/2026-07-21-cross-radio-migration.md).
+
+**CHIRP behavior confirmed.** CHIRP's editor transports model-neutral
+`Memory`/`DVMemory` objects plus the source `RadioFeatures` and stable
+`directory.radio_class_id`, then runs `import_logic.import_mem` against the
+destination. That routine already adapts/checks frequency, name, power, tones,
+DTCS, mode, duplex/split/off, immutability, target validation, and D-STAR. Its
+own `test_copy_all` follows the same generic principle across driver fixtures.
+There is no model-pair migration table to reproduce.
+
+**Shared backend.** New `chirp_backend/migration.py` supplies
+`MigrationBatch`, per-item results, `MigrationReport`, source snapshot helpers,
+radio identity/labels, and `apply_batch`. File import, RepeaterBook/frequency
+list imports, and cross-image clipboard paste now converge on the undoable
+`memory_ops.apply_migration_batch`. `import_memories` remains as a compatibility
+wrapper. The destination number is passed to `import_mem` as an override so its
+immutable-policy check sees the correct target slot. Populated source channels
+are packed in order; every attempted row is reported as imported, occupied,
+incompatible, failed, or out of space. Partial success is allowed and all writes
+form one Undo operation.
+
+**Driver-private extras.** Raw clipboard writes failed both UV-5R ↔ Mini
+directions because their `PowerLevel`/`Memory.extra` objects are driver-specific;
+Mini → UV-5R specifically failed on `sqmode`. A cross-radio batch now clears
+`Memory.extra` when CHIRP radio class IDs differ (before import/write); exact
+same-driver transfers retain it. This matches CHIRP's class boundary while
+avoiding the Mini extra reaching the UV-5R setter.
+
+**Safe clipboard identity.** `RadioState.document_id` is regenerated on every
+image open/download and copied into `_Clipboard`. Same-document Cut/Paste keeps
+the existing move + Make room behavior. After another image is opened, Paste
+uses the migration engine, occupied rows offer Overwrite / Skip / Cancel, and a
+deferred Cut becomes Copy rather than erasing same-numbered rows in the new
+radio. Incompatibilities/warnings open a keyboard-navigable, copyable
+`InfoDialog` with source/destination and exact reasons.
+
+**CSV fixes.** File Import now exposes both `.img` and `.csv`. Export mirrors
+CHIRP's generic CSV path: size `CSVRadio` to the real maximum channel, erase its
+synthetic channel 0, and import into base `chirp_common.Memory`. This fixes a
+radio whose memories begin at 1 exporting an extra channel zero.
+
+**Verification:** full suite **383 passed**; focused migration tests **71
+passed**. Real pinned fixtures: Mini → UV-5R imported all 21 populated channels;
+UV-5R → Mini imported 36 and correctly reported one invalid transmit-frequency
+channel. New `tools/audit_migrations.py` exercised a representative Generic CSV
+channel against **385 targets from 358 pinned image files** (including exposed
+subdevices): 276 imported, 109 returned normal band/feature incompatibilities,
+and **zero unexpected failures**. The vendored `chirp/` tree was not modified.
+
+**Scope boundary / next work:** Phase 1 covers ordinary numbered memories.
+Radio-wide settings, bank memberships, special memories, and active/source
+subdevice-selection UX are not migrated. D-STAR conversion is wired through
+CHIRP, but real call-list side effects need focused fixture coverage. NVDA and
+VoiceOver hand passes of the new cross-image/report flow are also owed. See the
+dated plan for sequenced Phases 2–6 and the resume checklist.
+
 ## 2026-07-15 — `--portable` builds a real macOS artifact (ready for a Mac run)
 
 Prep for cutting a Mac release from the developer's Mac. `build_portable` was

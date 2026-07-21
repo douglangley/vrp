@@ -53,15 +53,16 @@ main.py  (entry; launches the native UI)
        ├─ native wx dialogs (input/editing — first-class NVDA support):
        │    edit_dialog · ops_dialog · find_dialog · serial_dialogs ·
        │    settings_dialog · bank_dialog · query_dialogs · prefs_dialog ·
-       │    info_dialog
+       │    info_dialog (including migration issue reports)
        ├─ vrp/native/announce.py : Announcer — writes the status bar (field 0;
        │    field 1 permanently holds the CHIRP attribution) and speaks via
        │    vrp/speech.py (prism) if available. The PRIMARY announcement
        │    signal is still focus management (handlers move focus to the
        │    result row); the announcer covers summaries/errors with no
        │    natural focus target
-       └─ chirp_backend/: radio.py, memory_ops.py, undo.py, bandplan.py,
-            col_defs.py, bank_ops.py, serial_trace.py (framework-agnostic)
+       └─ chirp_backend/: radio.py, migration.py, memory_ops.py, undo.py,
+            bandplan.py, col_defs.py, bank_ops.py, serial_trace.py
+            (framework-agnostic)
             └─ chirp  (vendored ./chirp, used unmodified; serial + driver library)
 ```
 
@@ -114,6 +115,51 @@ main.py  (entry; launches the native UI)
   the real `chirp/chirp` package instead of the empty `./chirp` repo dir.
 - Never import `chirp.wxui` (that's the inaccessible GUI we replace). Use the
   library: `directory`, `chirp_common`, drivers, settings, banks, sources.
+
+### Cross-radio migration
+
+Cross-model channel transfer is one generic pipeline, not a matrix of radio
+pairs:
+
+```text
+source image / CSV / query / clipboard snapshots
+                  │
+                  ▼
+ migration.MigrationBatch
+ (Memory snapshots + source RadioFeatures + radio/document identity)
+                  │
+                  ▼
+ chirp.import_logic.import_mem(target, source_features, memory,
+                               overrides=destination)
+                  │
+                  ▼
+ target validation + set_memory ──► MigrationReport ──► InfoDialog/Announcer
+```
+
+- `chirp_backend/migration.py` owns the wx-free payload, conversion, and
+  per-channel result model. It uses CHIRP's `Memory`/`DVMemory`,
+  `RadioFeatures`, `directory.radio_class_id`, and `import_logic.import_mem`.
+- `chirp_backend.memory_ops.apply_migration_batch` supplies the active target
+  radio and wraps all successful writes in one undo transaction. The older
+  `import_memories` API is a compatibility wrapper around this path.
+- `MainWindow._import_results` (File Import, RepeaterBook, Frequency lists) and
+  cross-image `on_paste` both use this engine. Same-document Paste continues to
+  use raw `paste_block`, because only that path may safely erase/move sources or
+  shift existing rows to make room.
+- `RadioState.document_id` distinguishes the exact currently open image. A Cut
+  pasted after switching images becomes Copy; it never erases matching channel
+  numbers in the newly opened destination.
+- Driver-private `Memory.extra` values are kept only when CHIRP radio class IDs
+  match. Cross-driver extras are cleared before conversion/write.
+- Migration is intentionally partial: incompatible, occupied, failed, and
+  out-of-space rows are retained in `MigrationReport`, while compatible rows
+  still write. Issue/warning reports use the read-only, copyable `InfoDialog`.
+- Current boundary: ordinary numbered memories. Radio settings, banks, special
+  memories, and subdevice-selection UX remain in the dated migration plan.
+
+See
+`docs/superpowers/plans/2026-07-21-cross-radio-migration.md` for decisions,
+verification, and the sequenced follow-up work.
 
 ## Packaging
 

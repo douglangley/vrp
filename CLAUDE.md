@@ -109,7 +109,8 @@ obscure it. Any future help/docs page must carry it too.
                          button is pressed, and is also in Preferences, so
                          dismissing the screen loses nothing.
   - info_dialog.py     — read-only multiline edit box for reviewing text (Radio
-                         Info, "Radio details…"); navigable + copyable
+                         Info, "Radio details…", migration issue reports);
+                         navigable + copyable
   - about_dialog.py    — Help ▸ About: build info + the CHIRP acknowledgement in
                          two read-only edit boxes (navigable/copyable, unlike
                          wx.adv.AboutBox's static text)
@@ -121,11 +122,13 @@ obscure it. Any future help/docs page must carry it too.
   - speech.py          — prism speech wrapper, graceful no-op if unavailable
   - _chirp_path.py     — makes the editable ./chirp package importable
 - chirp_backend/       — all chirp library interaction (framework-agnostic):
-                         radio (incl. describe_model), memory_ops, undo
-                         (channel-edit undo/redo), bandplan (suggested repeater
-                         offset + band defaults, by region), col_defs, bank_ops,
-                         serial_trace, repeaterbook (RepeaterBook query via
-                         CHIRP's mirror; direct-API seam for a future VRP UA)
+                         radio (incl. document identity + describe_model),
+                         migration (generic cross-radio conversion + detailed
+                         reports), memory_ops, undo (channel-edit undo/redo),
+                         bandplan (suggested repeater offset + band defaults, by
+                         region), col_defs, bank_ops, serial_trace, stock_configs,
+                         repeaterbook (RepeaterBook query via CHIRP's mirror;
+                         direct-API seam for a future VRP UA)
 - help/                — the shipped user documentation (Getting Started in md/
                          txt/html + KeyboardCommands.html). `build.py`'s
                          `stage_help()` copies the whole folder BESIDE the exe in
@@ -133,7 +136,9 @@ obscure it. Any future help/docs page must carry it too.
                          browser. Adding a doc = drop it here + link it from
                          `_build_help_menu`.
 - tests/               — unit tests (no hardware needed)
-- tools/               — update_chirp.py (CHIRP version bump); throwaway spikes
+- tools/               — update_chirp.py (CHIRP version bump),
+                         audit_migrations.py (all pinned driver fixtures),
+                         release helpers, and throwaway spikes
 - build.py             — PyInstaller build script
 - chirp/               — upstream CHIRP library (DO NOT EDIT)
 
@@ -223,11 +228,41 @@ months.
 - mem.empty == True means the channel slot is unused
 - mem.immutable is a list of field names that cannot be changed for that memory
 
+### Cross-radio migration invariants (2026-07-21)
+
+- Cross-model channel transfer is **generic**, never a pairwise model matrix.
+  Build a `chirp_backend.migration.MigrationBatch` containing source
+  `RadioFeatures`, stable `directory.radio_class_id`, and duplicated
+  `Memory`/`DVMemory` snapshots; convert each through
+  `chirp.import_logic.import_mem` against the destination.
+- Pass the destination location to `import_mem` in `overrides` (`number` and
+  cleared `extd_number`) so CHIRP's immutable-policy check inspects the target
+  slot. Do not renumber only after conversion.
+- `Memory.extra` is driver-private. Preserve it only when source and target
+  radio class IDs match; clear it before cross-driver conversion/write.
+- File Import, RepeaterBook, Frequency lists, and cross-image clipboard Paste
+  must converge on `memory_ops.apply_migration_batch`. Keep
+  `import_memories` only as the compatibility wrapper. Never add a separate
+  converter to one of those entry points.
+- Preserve partial success and every per-channel reason in `MigrationReport`.
+  A UI issue report must use the navigable/copyable `InfoDialog`, not a long
+  static `MessageBox`.
+- `RadioState.document_id` identifies one exact open/downloaded image. A
+  deferred Cut may erase source rows only when the ID still matches. Across
+  images it becomes Copy. Same-document raw `paste_block` is the only path that
+  offers Make room/row shifting.
+- Current migration scope is ordinary numbered memories. Banks, radio-wide
+  settings, special memories, and image subdevice selection are follow-ups;
+  never silently claim they moved. See
+  `docs/superpowers/plans/2026-07-21-cross-radio-migration.md`.
+
 ## Memory Operations Reference
 
-All implemented in chirp_backend/memory_ops.py. When adding new operations,
-follow the same pattern: pure functions taking a radio object + parameters,
-returning (success: bool, message: str, affected_channels: list).
+Ordinary operations are implemented in `chirp_backend/memory_ops.py`. When
+adding new operations, follow the same pattern: pure functions taking a radio
+object + parameters, returning `(success: bool, message: str,
+affected_channels: list)`. `apply_migration_batch` deliberately returns a
+fourth `MigrationReport` so the UI never loses itemised incompatibilities.
 
 Operations that modify the radio must call radio.set_memory() or
 radio.erase_memory() — never modify the memory map directly.
@@ -276,6 +311,11 @@ venv and errors clearly if pytest is missing. The run scripts use
 `uv sync --inexact`, so launching the app no longer prunes pytest from the venv.
 Tests use chirp/tests/images/ image files — no radio hardware needed.
 Every memory operation in memory_ops.py must have a corresponding test.
+After migration or CHIRP-pin changes, also run the opt-in broad audit:
+`.venv\Scripts\python.exe tools\audit_migrations.py`. The 2026-07-21 baseline
+is 385 targets from 358 pinned images, with zero unexpected failures; normal
+band/feature incompatibilities are expected and must remain classified rather
+than treated as crashes.
 
 ## Running
 

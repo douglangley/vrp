@@ -4,6 +4,12 @@
 **Date:** 2026-06-18
 **Branch:** `feat/native-ui` (off `main`)
 
+> **Historical spec / current-state note (2026-07-21):** the native UI is the
+> sole UI and the webview has been removed. The clipboard deferred here later
+> landed, and now supports generic cross-image radio migration. Current behavior
+> and remaining metadata/subdevice work live in
+> `docs/superpowers/plans/2026-07-21-cross-radio-migration.md`.
+
 ## Goal
 
 Replace VRP's embedded-webview view layer with a fully native wxPython UI that

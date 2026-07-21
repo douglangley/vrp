@@ -5,6 +5,10 @@
 > follow-up. A bounded **undo + redo history** for channel-memory operations:
 > reverses/replays edits, deletes, moves, copies, cut/paste, sort, insert,
 > arrange, and import. Builds on [[project-grid-row-clipboard]] / the native grid.
+>
+> **2026-07-21 addendum:** generic cross-radio import writes through the
+> decorated `memory_ops.apply_migration_batch`, so every compatible row in a
+> partial migration remains one undo step. `import_memories` is now a wrapper.
 
 ---
 

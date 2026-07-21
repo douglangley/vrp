@@ -11,6 +11,16 @@ Status marks: ☐ not started · ◐ in progress · ☑ done.
 
 ## Current priority
 
+- ◐ **Generic cross-radio migration.** Phase 1 landed 2026-07-21: direct
+  cross-image Copy/Paste and `.img`/`.csv` Import share CHIRP's model-generic
+  conversion, preserve partial success with per-channel accessible reports,
+  safely turn cross-image Cut into Copy, and are one-step undoable. Verified
+  with 383 project tests and an audit of 385 targets from 358 pinned images
+  (zero unexpected failures). **Next:** subdevice-selection UX, then special
+  memories, explicit bank mapping, D-STAR call-list tests, and NVDA/VoiceOver
+  hand passes. Detailed status/resume plan:
+  [2026-07-21-cross-radio-migration.md](2026-07-21-cross-radio-migration.md).
+
 - ☑ **Serial port hardware verification.** Both **Download and Upload are
   verified on real hardware** (Baofeng UV-5R Mini over COM4 — download
   2026-06-23, upload 2026-06-24), and the serial backend was hardened against
@@ -40,8 +50,9 @@ Query sources (Phase 7):
 - The generic query framework and the earlier sources (AMSAT, SatNOGS, DMR-MARC,
   mapy73.pl) were **removed 2026-07-05** — they weren't going to be used. The
   `chirp_backend/query.py` framework and `QueryParamsDialog` are gone; the shared
-  `ImportDestinationDialog` + `memory_ops.import_memories` stay (they back Import
-  from File and will back a future query import). Recoverable from git history.
+  `ImportDestinationDialog` + `memory_ops.apply_migration_batch` path stays (it
+  backs Import from File, RepeaterBook, and Frequency lists). Recoverable from
+  git history.
 - ◐ RepeaterBook — **wired via CHIRP's mirror** (2026-07-09). Radio ▸ Query
   Source ▸ RepeaterBook…: country→state cascade + filter/open-only/mode form,
   background fetch, shared import flow. Backend `chirp_backend/repeaterbook.py`
@@ -63,7 +74,9 @@ Query sources (Phase 7):
 
 Smaller deferred items (chirp-feature-coverage.md "☐"/"◐" rows):
 - ☐ Bank renaming + "channels in a bank" overview (Phase 6.1).
-- ☑ Cut/Paste clipboard (done 2026-06-27 — native grid row clipboard).
+- ☑ Cut/Paste clipboard (same-image row clipboard done 2026-06-27; generic
+  cross-image conversion done 2026-07-21 — remaining metadata phases are linked
+  under Current priority).
 - ☐ File menu: New (empty image), New Window, Load Module — all need a
   model-picker UX decision first. (Open Stock Config is covered as an import —
   see Frequency lists above.)

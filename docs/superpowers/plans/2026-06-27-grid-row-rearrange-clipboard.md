@@ -5,6 +5,13 @@
 > channel grid (`vrp/native/`) now supports selecting and rearranging whole
 > **rows** (channels) with a clipboard, on top of the existing Move up/down/to.
 > **Rows only — cells are never moved.**
+>
+> **2026-07-21 addendum:** the v1 same-image restriction in D6 is superseded.
+> Clipboard snapshots now carry source features, CHIRP radio class ID, and an
+> exact document ID. After switching images, Paste uses the generic migration
+> engine and a deferred Cut safely becomes Copy. Same-image behavior described
+> below is unchanged. See
+> [2026-07-21-cross-radio-migration.md](2026-07-21-cross-radio-migration.md).
 
 ## Step 0 results (NVDA spike, 2026-06-27)
 
@@ -86,9 +93,11 @@ channel count** (slots are overwritten or shifted, never added/removed).
   **down** by the clipboard size to make room, then drop the pasted rows at the
   cursor. Requires enough empty slots near the tail to absorb the shift; otherwise
   the paste is **blocked with a clear reason** (no silent data loss off the end).
-- **D6 — In-app clipboard only for v1.** Copy/cut/paste operate within the current
-  radio image. No OS clipboard and no cross-image paste yet; the snapshot design
-  (D3) leaves the door open to add them later.
+- **D6 — In-app clipboard only for v1 (SUPERSEDED 2026-07-21).** The clipboard
+  remains in-app (not the OS clipboard), but cross-image Paste is now supported
+  through `chirp_backend.migration`. Same-document Cut/Paste moves; cross-image
+  Cut becomes Copy so a newly opened destination can never have same-numbered
+  rows erased as presumed sources.
 
 ## Keyboard & menu spec
 
@@ -280,5 +289,6 @@ On paste, if any destination slot in `[dest, dest+len-1]` is non-empty:
    destination channels down to make room and insert the pasted block, bounded by
    empty tail slots; block with a reason if there isn't room.
 2. **Select All + Clear Selection are included** in the Edit menu now (D4).
-3. **In-app clipboard only for v1** (D6): no OS clipboard / cross-image paste yet;
-   the snapshot design leaves room to add them later.
+3. **In-app clipboard only for v1** (D6) was superseded 2026-07-21: it remains
+   an in-app clipboard, but source-aware cross-image Paste is implemented via
+   the shared migration engine. OS clipboard interchange remains out of scope.
