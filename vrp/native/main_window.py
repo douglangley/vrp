@@ -40,7 +40,7 @@ class _Clipboard:
     ``mems`` are deep-copied Memory snapshots taken at copy/cut time, so the
     clipboard survives later edits to the source. ``source_numbers`` are the
     original channel numbers — used only for a ``cut`` pasted back into the exact
-    same open document. Source metadata lets a paste into another radio run
+    same open memory section. Source metadata lets a paste into another radio run
     through CHIRP's generic migration conversion instead of writing foreign
     driver objects directly."""
 
@@ -364,6 +364,13 @@ class MainWindow(wx.Frame):
         self._add(m, "favorites", "&Favorite radios…", self.on_favorites)
         m.AppendSeparator()
         self._add(m, "settings", "&Settings…\tCtrl+Shift+P", self.on_settings, needs_radio=True)
+        self._add(
+            m,
+            "select_subdevice",
+            "Select &memory section…",
+            self.on_select_subdevice,
+            needs_radio=True,
+        )
         self._add(m, "radio_info", "Radio &Info…", self.on_radio_info, needs_radio=True)
         m.AppendSeparator()
         # Query Source submenu (online repeater directories). Gated on a loaded
@@ -410,9 +417,13 @@ class MainWindow(wx.Frame):
         return m
 
     def _update_menu_state(self) -> None:
-        loaded = radio_backend.get_state().loaded
+        state = radio_backend.get_state()
+        loaded = state.loaded
         for key in self._radio_gated_keys:
             self._menu_items[key].Enable(loaded)
+        self._menu_items["select_subdevice"].Enable(
+            loaded and state.has_multiple_subdevices
+        )
 
     # -- channel handlers ---------------------------------------------
 
@@ -837,7 +848,7 @@ class MainWindow(wx.Frame):
             state.features,
             migration.radio_id(state.radio),
             migration.radio_label(state.radio),
-            state.document_id,
+            state.context_id,
         )
         self.announce.announce(f"Copied {len(mems)} channel(s).")
 
@@ -858,7 +869,7 @@ class MainWindow(wx.Frame):
             state.features,
             migration.radio_id(state.radio),
             migration.radio_label(state.radio),
-            state.document_id,
+            state.context_id,
         )
         self.announce.announce(f"Cut {len(mems)} channel(s). Paste to move them.")
 
@@ -886,7 +897,7 @@ class MainWindow(wx.Frame):
         _low, high = radio_backend.get_state().memory_bounds
         same_document = bool(
             clip.source_document_id
-            and clip.source_document_id == radio_backend.get_state().document_id
+            and clip.source_document_id == radio_backend.get_state().context_id
         )
 
         if not same_document:
@@ -1379,11 +1390,21 @@ class MainWindow(wx.Frame):
         state = radio_backend.get_state()
         if state.loaded:
             self.grid.set_state(state)
-            self.SetTitle(f"{state.radio.VENDOR} {state.radio.MODEL} — VRP")
+            self._set_radio_title(state)
         else:
             self.grid.clear()
             self.SetTitle("Versatile Radio Programmer")
         self._update_menu_state()
+
+    def _set_radio_title(self, state) -> None:
+        parent = state.physical_radio
+        label = f"{parent.VENDOR} {parent.MODEL}"
+        if state.has_multiple_subdevices:
+            variant = getattr(state.radio, "VARIANT", "") or (
+                f"section {state.subdevice_index + 1}"
+            )
+            label += f" — {variant}"
+        self.SetTitle(f"{label} — VRP")
 
     def _confirm(self, message: str) -> bool:
         """Show a Yes/No confirmation dialog. Returns True if the user chose Yes."""
@@ -1437,6 +1458,32 @@ class MainWindow(wx.Frame):
             dlg.Destroy()
             self.grid.SetFocus()
 
+    def _choose_memory_section(
+        self,
+        labels,
+        *,
+        title: str,
+        action_label: str,
+        current_index: int = 0,
+    ) -> int | None:
+        """Return a section index, or None when the user cancels."""
+        labels = tuple(labels)
+        if len(labels) <= 1:
+            return 0 if labels else None
+        from vrp.subdevice_dialog import SubdeviceDialog
+
+        dlg = SubdeviceDialog(
+            self,
+            labels,
+            title=title,
+            action_label=action_label,
+            current_index=current_index,
+        )
+        try:
+            return dlg.get_index() if dlg.ShowModal() == wx.ID_OK else None
+        finally:
+            dlg.Destroy()
+
     # -- file handlers ------------------------------------------------
 
     def on_open(self, _evt=None) -> None:
@@ -1460,10 +1507,22 @@ class MainWindow(wx.Frame):
         if not self._confirm_discard_or_save():
             return False
 
-        ok, message = radio_backend.load_image(path)
-        if not ok:
+        image_set, message = radio_backend.load_image_set(path)
+        if image_set is None:
             # A modal (not just announce) so the error is reliably read — see
             # _show_error. This is the "unsupported file error not read" fix.
+            self._show_error("Could not open file", message)
+            return False
+        section = self._choose_memory_section(
+            image_set.labels,
+            title=f"Open {image_set.parent.VENDOR} {image_set.parent.MODEL}",
+            action_label="Open",
+        )
+        if section is None:
+            self.grid.SetFocus()
+            return False
+        ok, message = radio_backend.activate_image_set(image_set, section)
+        if not ok:
             self._show_error("Could not open file", message)
             return False
         self._load_into_grid()
@@ -1538,7 +1597,7 @@ class MainWindow(wx.Frame):
         ok, message = radio_backend.save_image(path)
         self.announce.announce(message, assertive=not ok)
         if ok:
-            self.SetTitle(f"{state.radio.VENDOR} {state.radio.MODEL} — VRP")
+            self._set_radio_title(state)
         return ok
 
     def _confirm_discard_or_save(self) -> bool:
@@ -1621,11 +1680,20 @@ class MainWindow(wx.Frame):
                 return
             path = dlg.GetPath()
 
-        src, message = radio_backend.open_image_as_source(path)
-        if src is None:
+        image_set, message = radio_backend.load_image_set(path)
+        if image_set is None:
             self.announce.announce(message, assertive=True)
             wx.MessageBox(message, "Import", wx.OK | wx.ICON_ERROR, self)
             return
+        section = self._choose_memory_section(
+            image_set.labels,
+            title=f"Import from {image_set.parent.VENDOR} {image_set.parent.MODEL}",
+            action_label="Import",
+        )
+        if section is None:
+            self.grid.SetFocus()
+            return
+        src = image_set.devices[section]
 
         lo, hi = src.get_features().memory_bounds
         count = 0
@@ -2001,7 +2069,8 @@ class MainWindow(wx.Frame):
             self.announce.announce("Upload canceled.")
             self.grid.SetFocus()
             return
-        label = f"{state.radio.VENDOR} {state.radio.MODEL}"
+        physical = state.physical_radio
+        label = f"{physical.VENDOR} {physical.MODEL}"
         if not self._confirm(
             f"This will overwrite ALL memory channels on the {label} connected to "
             f"{port}. The radio's current contents cannot be recovered. Continue?"
@@ -2078,6 +2147,20 @@ class MainWindow(wx.Frame):
                 self.grid.SetFocus()
                 return
             if ok:
+                state = radio_backend.get_state()
+                section = self._choose_memory_section(
+                    state.subdevice_labels,
+                    title=(
+                        f"Show {state.physical_radio.VENDOR} "
+                        f"{state.physical_radio.MODEL} memory section"
+                    ),
+                    action_label="Show",
+                    current_index=state.subdevice_index,
+                )
+                if section is not None and section != state.subdevice_index:
+                    switched, switch_message = radio_backend.select_subdevice(section)
+                    if not switched:
+                        self._show_error("Could not show memory section", switch_message)
                 self._load_into_grid()
                 low, _high = radio_backend.get_state().memory_bounds
                 self.grid.focus_channel(low)
@@ -2126,6 +2209,37 @@ class MainWindow(wx.Frame):
             self.announce.announce("No settings were changed.")
         self.grid.SetFocus()
 
+    def on_select_subdevice(self, _evt=None) -> None:
+        """Radio > Select memory section — switch the grid's active child."""
+        state = radio_backend.get_state()
+        if not state.loaded or not state.has_multiple_subdevices:
+            self.announce.announce("This radio has only one memory section.")
+            return
+        section = self._choose_memory_section(
+            state.subdevice_labels,
+            title=(
+                f"Choose {state.physical_radio.VENDOR} "
+                f"{state.physical_radio.MODEL} memory section"
+            ),
+            action_label="Show",
+            current_index=state.subdevice_index,
+        )
+        if section is None:
+            self.grid.SetFocus()
+            return
+        if section == state.subdevice_index:
+            self.grid.SetFocus()
+            return
+        ok, message = radio_backend.select_subdevice(section)
+        if not ok:
+            self._show_error("Could not show memory section", message)
+            return
+        self._load_into_grid()
+        low, _high = radio_backend.get_state().memory_bounds
+        self.grid.focus_channel(low)
+        self.announce.announce(message)
+        self.grid.SetFocus()
+
     def on_radio_info(self, _evt=None) -> None:
         """Radio > Radio Info — plain-text summary of the loaded radio.
 
@@ -2138,9 +2252,10 @@ class MainWindow(wx.Frame):
             self.announce.announce("No radio image is open.")
             return
 
-        radio = state.radio
-        f = radio.get_features()
-        variant = getattr(radio, "VARIANT", "") or ""
+        radio = state.physical_radio
+        memory_radio = state.radio
+        f = memory_radio.get_features()
+        variant = getattr(memory_radio, "VARIANT", "") or ""
         source = (
             os.path.basename(state.image_path)
             if state.image_path
@@ -2154,8 +2269,11 @@ class MainWindow(wx.Frame):
             f"  Vendor:           {radio.VENDOR}",
             f"  Model:            {radio.MODEL}",
         ]
-        if variant:
-            lines.append(f"  Variant:          {variant}")
+        if state.has_multiple_subdevices:
+            section = variant or f"section {state.subdevice_index + 1}"
+            lines.append(f"  {'Memory section:':<18}{section}")
+        elif variant:
+            lines.append(f"  {'Variant:':<18}{variant}")
         lines += [
             f"  Source:           {source}",
             f"  Unsaved changes:  {'Yes' if state.is_modified else 'No'}",

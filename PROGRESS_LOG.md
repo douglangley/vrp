@@ -6,6 +6,55 @@ architecture, keyboard map, and CHIRP feature-coverage checklist.
 
 ---
 
+## 2026-07-21 — Generic cross-radio channel migration (Phase 2)
+
+**Outcome:** CHIRP images that expose multiple memory devices—sides, bands,
+VFOs, or dynamically parsed zones—can now be opened, imported, downloaded, and
+switched inside VRP. The selected child supplies memories/features to the grid
+and migration engine; the physical parent remains the owner of Save/Save As,
+radio Settings, clone prompts, and Upload. Work is on
+`feature/cross-radio-migration`; the dated migration plan is the detailed
+handoff.
+
+**Backend ownership.** `RadioImageSet` holds one parsed parent and its memory
+views. `load_image_set` discovers views without mutating active state, then
+`activate_image_set` selects one after the UI choice, so canceling Open does not
+replace the existing document. Parents with only one child still activate that
+child automatically. Dynamic subdevices are discovered after image parsing,
+and `ExternalMemoryProperties.link_device_metadata` mirrors CHIRP's editor so
+child metadata survives a parent save.
+
+**Accessible UX.** New `SubdeviceDialog` is a real filterable modal using the
+same platform-native `RadioListView` as the model/frequency-list pickers, with
+adjacent screen-reader labels, match count, explicit Open/Import/Show and Cancel
+buttons, and Escape. It appears for multi-view Open, File Import, and successful
+Download. Radio ▸ Select memory section… changes the view later. The window
+title and Radio Info identify the selected section. Labels come from CHIRP's
+`VARIANT` and channel bounds—never generated class names (dynamic Kenwood class
+names can exceed 20,000 characters).
+
+**Safety and history.** Clipboard identity is now the document UUID plus
+selected section. Raw move/make-room Paste is restricted to that exact context;
+after a side/zone switch, Paste uses the generic migration engine and deferred
+Cut becomes Copy, so it cannot erase a same-numbered row in another section.
+Switching restores the previous child's original write methods and installs a
+fresh Undo recorder on the next child. Existing image edits and the dirty flag
+remain, while section-local Undo history resets cleanly.
+
+**Verification:** full suite **420 passed**. `tests/test_subdevices.py` covers
+all **23 pinned CHIRP subdevice parents** and their expected **50 child views**,
+including one-child dynamic parents; static FT-8800 and dynamic TK-3180K2 edits
+both survive parent Save/reopen. GUI tests cover chooser accessibility/filtering,
+selected-section Open, cancel-without-replacement, menu/title behavior, and
+cross-section Cut safety. The full migration audit remains **385 targets from
+358 images: 276 imported, 109 normal incompatibilities, zero unexpected
+failures**. `chirp/` remains unmodified.
+
+**Next:** Phase 3 special-memory semantics, followed by explicit bank mapping,
+D-STAR call-list side-effect tests, and NVDA/VoiceOver acceptance passes. A
+multi-section physical-radio Download/Upload hand test belongs in that
+acceptance work.
+
 ## 2026-07-21 — Generic cross-radio channel migration (Phase 1)
 
 **Outcome:** ordinary numbered channels can now move directly between different

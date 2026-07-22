@@ -122,6 +122,8 @@ Windows (exposed to MSAA/UIA so **NVDA** reads it):
   frequency-list import
 - Direct channel migration from another radio image or CHIRP CSV, with
   overwrite/skip, partial success, accessible details, and one-step undo
+- Multi-side/zone radio images: accessible memory-section selection for Open,
+  Import, Download, and later switching, while saving/uploading the full image
 - High contrast and forced-colors (Windows High Contrast) support
 - Packages as a Windows installer (Inno Setup) wrapping a PyInstaller build
 
@@ -145,6 +147,7 @@ vrp/
   ops_dialog.py           Native wx dialog for bulk operations.
   find_dialog.py          Native wx Find dialog.
   serial_dialogs.py       Native wx Download / Upload / favorites / progress dialogs.
+  subdevice_dialog.py      Filterable native memory-section chooser.
   settings_dialog.py      Native wx radio settings editor, Treebook.
   bank_dialog.py          Native wx dialog to assign a channel to banks.
   query_dialogs.py        Native wx query-source param + import dialogs.
@@ -155,8 +158,8 @@ vrp/
   speech.py               prism speech wrapper, graceful no-op if unavailable.
   _chirp_path.py          Makes the editable ./chirp package importable.
 chirp_backend/
-  radio.py               Wraps chirp library: load image, read/write memories,
-                         serial port download/upload, describe_model.
+  radio.py               Wraps chirp library: parent/selected-subdevice image
+                         state, read/write/save, serial clone, describe_model.
   migration.py           Generic cross-radio Memory/DVMemory conversion and
                          per-channel compatibility reports.
   memory_ops.py          Field edits + range operations: set/update channel,

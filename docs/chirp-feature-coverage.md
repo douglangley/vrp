@@ -59,6 +59,7 @@ update (`git pull` ./chirp) in case new dialogs appear.
 | Query: RepeaterBook              | 7         | ◐ (wired via CHIRP's mirror — Radio ▸ Query Source ▸ RepeaterBook; direct API pending VRP User-Agent) |
 | Query: RadioReference            | 7         | ☐ (to be added purpose-built after RepeaterBook) |
 | Import: Frequency lists (stock configs) | 7   | ☑ (Radio ▸ Query Source ▸ Frequency lists… — filterable chooser, imports a CHIRP stock config into the loaded radio; `chirp_backend/stock_configs.py`) |
+| Select memory section (subdevices) | migration 2 | ☑ (filterable accessible chooser on Open/Import/post-Download and Radio ▸ Select memory section…; static + dynamic parents) |
 | Auto edits toggle                | 8         | ☑ (offset always-on; mode/step/tone via Preferences ▸ Apply band-plan defaults; duplex intentionally manual) |
 | Select bandplan                  | 8         | ☐      |
 
@@ -75,16 +76,18 @@ update (`git pull` ./chirp) in case new dialogs appear.
 
 ## Notes
 
-- **Cross-radio channel migration (VRP-only integration):** Phase 1 is complete
+- **Cross-radio channel migration (VRP-only integration):** Phases 1–2 are complete
   (2026-07-21). `chirp_backend/migration.py` routes ordinary numbered
   `Memory`/`DVMemory` objects through CHIRP `import_logic`, clears foreign
   driver-private extras, validates/writes compatible rows, and reports every
   occupied/incompatible/failed/out-of-space row. File Import, RepeaterBook,
   Frequency lists, and cross-image clipboard Paste share the same undoable
-  engine. Audit baseline: 385 targets from 358 pinned images, zero unexpected
-  failures. Still open: bank membership, special memories, source/active
-  subdevice-selection UX, D-STAR call-list side-effect tests, and screen-reader
-  hand passes. See
+  engine. Source and active images now discover CHIRP static/dynamic subdevices;
+  the accessible chooser selects the memory child while the physical parent
+  retains Save/Settings/Upload ownership. Fixture coverage spans all 23 pinned
+  parents and 50 child views. Audit baseline: 385 targets from 358 pinned
+  images, zero unexpected failures. Still open: bank membership, special
+  memories, D-STAR call-list side-effect tests, and screen-reader hand passes. See
   `docs/superpowers/plans/2026-07-21-cross-radio-migration.md`.
 - **Favorite radios (VRP-only, not a CHIRP feature):** Radio ▸ Favorite radios…
   manages a starred-radio list (`vrp/serial_dialogs.py` `FavoritesDialog`,

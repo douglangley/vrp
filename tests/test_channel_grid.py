@@ -14,6 +14,12 @@ IMAGE = os.path.abspath(
         "Baofeng_BF-888.img",
     )
 )
+FT8800 = os.path.abspath(
+    os.path.join(
+        os.path.dirname(__file__), "..", "chirp", "tests", "images",
+        "Yaesu_FT-8800.img",
+    )
+)
 
 
 @pytest.fixture
@@ -238,6 +244,52 @@ def test_open_failure_shows_modal_error(app, monkeypatch, tmp_path):
         title, msg = errors[0]
         assert title == "Could not open file"
         assert msg  # carries the driver's failure message
+    finally:
+        radio_backend.unload()
+        win.Destroy()
+
+
+def test_open_activates_the_chosen_memory_section(app, monkeypatch):
+    from vrp.native.main_window import MainWindow
+
+    win = MainWindow()
+    try:
+        chosen = []
+
+        def choose(labels, **kwargs):
+            chosen.append((tuple(labels), kwargs))
+            return 1
+
+        monkeypatch.setattr(win, "_choose_memory_section", choose)
+        monkeypatch.setattr(wx, "CallLater", lambda *args, **kwargs: None)
+
+        assert win._open_path(FT8800)
+        state = radio_backend.get_state()
+        assert state.radio.VARIANT == "Right"
+        assert state.parent_radio.MODEL == "FT-8800"
+        assert chosen[0][0][0].startswith("Left")
+        assert "Right" in win.GetTitle()
+        assert win._menu_items["select_subdevice"].IsEnabled()
+    finally:
+        radio_backend.unload()
+        win.Destroy()
+
+
+def test_canceling_section_choice_keeps_current_document(app, monkeypatch):
+    from vrp.native.main_window import MainWindow
+
+    win = MainWindow()
+    try:
+        ok, message = radio_backend.load_image(IMAGE)
+        assert ok, message
+        win._load_into_grid()
+        before = radio_backend.get_state().document_id
+        monkeypatch.setattr(win, "_choose_memory_section", lambda *a, **k: None)
+
+        assert not win._open_path(FT8800)
+        state = radio_backend.get_state()
+        assert state.document_id == before
+        assert state.radio.MODEL == "BF-888"
     finally:
         radio_backend.unload()
         win.Destroy()

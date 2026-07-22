@@ -11,14 +11,17 @@ Status marks: ☐ not started · ◐ in progress · ☑ done.
 
 ## Current priority
 
-- ◐ **Generic cross-radio migration.** Phase 1 landed 2026-07-21: direct
+- ◐ **Generic cross-radio migration.** Phases 1–2 landed 2026-07-21: direct
   cross-image Copy/Paste and `.img`/`.csv` Import share CHIRP's model-generic
   conversion, preserve partial success with per-channel accessible reports,
-  safely turn cross-image Cut into Copy, and are one-step undoable. Verified
-  with 383 project tests and an audit of 385 targets from 358 pinned images
-  (zero unexpected failures). **Next:** subdevice-selection UX, then special
-  memories, explicit bank mapping, D-STAR call-list tests, and NVDA/VoiceOver
-  hand passes. Detailed status/resume plan:
+  safely turn cross-image/section Cut into Copy, and are one-step undoable.
+  Static and dynamic CHIRP subdevices now have an accessible chooser for Open,
+  Import, post-Download, and later section switching; parent Save/Settings/
+  Upload ownership is retained. Verified with 420 project tests, all 23 pinned
+  subdevice parents (50 views), and an audit of 385 targets from 358 pinned
+  images (zero unexpected failures). **Next:** special memories, explicit bank
+  mapping, D-STAR call-list tests, and NVDA/VoiceOver hand passes. Detailed
+  status/resume plan:
   [2026-07-21-cross-radio-migration.md](2026-07-21-cross-radio-migration.md).
 
 - ☑ **Serial port hardware verification.** Both **Download and Upload are

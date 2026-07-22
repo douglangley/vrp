@@ -143,19 +143,28 @@ source image / CSV / query / clipboard snapshots
   radio and wraps all successful writes in one undo transaction. The older
   `import_memories` API is a compatibility wrapper around this path.
 - `MainWindow._import_results` (File Import, RepeaterBook, Frequency lists) and
-  cross-image `on_paste` both use this engine. Same-document Paste continues to
-  use raw `paste_block`, because only that path may safely erase/move sources or
-  shift existing rows to make room.
-- `RadioState.document_id` distinguishes the exact currently open image. A Cut
-  pasted after switching images becomes Copy; it never erases matching channel
-  numbers in the newly opened destination.
+  cross-image `on_paste` both use this engine. Same-document-and-section Paste
+  continues to use raw `paste_block`, because only that exact context may safely
+  erase/move sources or shift existing rows to make room.
+- A CHIRP subdevice parent is retained as `RadioState.physical_radio` for Save,
+  Settings, prompts, and Upload. The selected child remains `RadioState.radio`
+  for the memory grid, banks, export, and migration. `load_image_set` discovers
+  static/dynamic children before `activate_image_set` changes active state.
+- `RadioState.context_id` combines the open document UUID and selected memory
+  section. A Cut pasted after switching images or sections becomes Copy; it
+  never erases matching channel numbers in the new destination context.
+- Open, Import, and post-Download use the filterable native
+  `SubdeviceDialog`; Radio ▸ Select memory section… switches later. Section
+  switching preserves parent edits/dirty state and starts a fresh section-local
+  undo history.
 - Driver-private `Memory.extra` values are kept only when CHIRP radio class IDs
   match. Cross-driver extras are cleared before conversion/write.
 - Migration is intentionally partial: incompatible, occupied, failed, and
   out-of-space rows are retained in `MigrationReport`, while compatible rows
   still write. Issue/warning reports use the read-only, copyable `InfoDialog`.
-- Current boundary: ordinary numbered memories. Radio settings, banks, special
-  memories, and subdevice-selection UX remain in the dated migration plan.
+- Current migration boundary: ordinary numbered memories. Radio settings, bank
+  memberships, and special memories are not transferred between models;
+  subdevice selection itself is implemented.
 
 See
 `docs/superpowers/plans/2026-07-21-cross-radio-migration.md` for decisions,

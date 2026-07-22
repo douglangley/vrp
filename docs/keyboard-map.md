@@ -44,6 +44,7 @@ arrow keys move across top-level menus; NVDA reads it like any native app menu.
 | Radio | Favorite radios… | — | manage starred radios (no loaded radio needed); used by Download's Favorites toggle; has a **Radio details…** button |
 | Radio | Radio Info… | — | needs a loaded radio; opens a read-only, navigable, copyable edit box |
 | Radio | Settings… | `Ctrl+Shift+P` | needs a loaded radio |
+| Radio | Select memory section… | — | enabled for a loaded multi-side/zone image; filter and show another section |
 | Channels | Edit channel… | `Ctrl+E` | needs a loaded radio; all fields (also `Enter` / double-click on the grid) |
 | Channels | Edit cell… | `F2` | needs a loaded radio; edits the focused cell (the column at the Left/Right cursor) |
 | Channels | Delete channel(s) | `Del` | needs a loaded radio; clears the selected channel(s) |
@@ -156,6 +157,9 @@ same open image, Cut + Paste is a move and clears the clipboard. After opening
 or downloading another radio, Paste uses CHIRP's cross-model conversion for
 frequency, names, power, tones, modes, duplex and D-STAR fields. A cross-image
 Cut is safely treated as Copy because its original image is no longer active.
+The same safety rule applies after switching a multi-section radio from one
+side/zone to another: only Paste within the exact same image and memory section
+may erase the deferred Cut source.
 
 Within one image, an occupied destination offers **Overwrite**, **Make room**
 (shift existing channels down), or **Cancel**. During cross-radio migration it
@@ -163,17 +167,20 @@ offers **Overwrite**, **Skip**, or **Cancel**. Incompatible channels are skipped
 individually and shown with their reasons in a navigable, copyable details
 dialog; compatible channels still import. The radio's channel count is fixed,
 so every source channel that runs past the end is also listed in that report.
-This first migration slice covers regular numbered memories (including D-STAR
-where both drivers support it); radio-wide settings, bank membership, special
-channels, and image subdevice selection are not migrated yet.
+Migration covers regular numbered memories (including D-STAR where both drivers
+support it). Multi-side/zone images present a filterable **memory section**
+chooser on Open and Import, and Radio ▸ Select memory section… switches the
+grid later. Radio-wide settings, bank membership, and special channels are not
+migrated between models.
 
 **Undo / redo** cover every channel operation — edit, delete, move, copy,
 cut/paste, sort, insert, arrange, import. `Ctrl+Z` undoes the last one and
 announces what it reversed (e.g. "Undone: Deleted channel 5"); `Ctrl+Y` (or
 `Ctrl+Shift+Z`) redoes it. The Edit menu's Undo/Redo items show the operation
 they'd act on; the history is bounded (most-recent ops) and cleared when you
-load, close, or download an image. Radio Settings and bank assignments are not
-yet undoable.
+load, close, download an image, or switch memory sections. Section switching
+preserves image edits and the unsaved-changes state. Radio Settings and bank
+assignments are not yet undoable.
 
 ## Dialogs
 
@@ -246,6 +253,9 @@ channels…", default Cancel). The transfer runs on a background thread; progres
 is announced (throttled), with a gauge for sighted users. Download can be
 cancelled (result discarded); upload cannot (a half-written radio is worse). On
 download success the grid refreshes and focus moves to the first channel.
+If the downloaded image exposes multiple memory sections, a filterable chooser
+first asks which section to show; canceling that chooser keeps the first section
+available because the hardware download itself has already completed.
 
 ### Favorite radios
 
@@ -273,7 +283,8 @@ Ctrl shortcuts); a recent entry that's gone is announced and pruned.
 ### Import / Export / Radio Info
 
 File ▸ Import from File… picks another radio image or CHIRP CSV (native file
-dialog), loads it as an independent source (the active radio is untouched), then reuses the
+dialog), loads it as an independent source (the active radio is untouched), and
+offers a filterable memory-section chooser when needed. It then reuses the
 generic migration engine (adapts each memory via CHIRP import_logic,
 overwrite/skip, reports each incompatibility, focuses the first imported
 channel). File ▸

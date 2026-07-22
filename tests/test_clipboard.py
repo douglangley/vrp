@@ -26,6 +26,12 @@ MINI_IMAGE = os.path.abspath(
         "Baofeng_UV-5R_Mini.img",
     )
 )
+FT8800_IMAGE = os.path.abspath(
+    os.path.join(
+        os.path.dirname(__file__), "..", "chirp", "tests", "images",
+        "Yaesu_FT-8800.img",
+    )
+)
 
 
 @pytest.fixture
@@ -343,6 +349,37 @@ def test_cross_image_cut_never_erases_same_number_in_destination(win, monkeypatc
     assert not after.empty
     assert after.freq == before.freq
     assert win._clipboard is not None
+    assert win._clipboard.mode == "copy"
+
+
+def test_cross_section_cut_never_erases_same_number_in_other_side(win, monkeypatch):
+    ok, message = radio_backend.load_image(FT8800_IMAGE, subdevice_index=0)
+    assert ok, message
+    win._load_into_grid()
+    low, high = radio_backend.get_state().memory_bounds
+    source = _first_nonempty(low, high)
+    assert source is not None
+    win.grid.select_channels([source])
+    win.on_cut()
+
+    ok, message = radio_backend.select_subdevice(1)
+    assert ok, message
+    win._load_into_grid()
+    same_number_before = radio_backend.get_memory(source).dupe()
+    destination = _first_empty(low, high)
+    assert destination is not None and destination != source
+    win.grid.focus_channel(destination)
+    monkeypatch.setattr(
+        win,
+        "_ask_paste_conflict",
+        lambda *args: pytest.fail("empty destination should not conflict"),
+    )
+
+    win.on_paste()
+
+    same_number_after = radio_backend.get_memory(source)
+    assert same_number_after.freq == same_number_before.freq
+    assert same_number_after.name == same_number_before.name
     assert win._clipboard.mode == "copy"
 
 

@@ -1,10 +1,10 @@
 # Plan — Generic cross-radio channel migration
 
-> **Status:** Phase 1 implemented and verified 2026-07-21 on branch
-> `feature/cross-radio-migration`, commit `69cf9b1`. The shared engine, direct
-> cross-image clipboard paste, image/CSV import, accessible reports, undo, and
-> regression/audit coverage are complete. The remaining phases below cover
-> banks, special memories, subdevice selection, and broader hands-on testing.
+> **Status:** Phases 1 and 2 implemented and verified 2026-07-21 on branch
+> `feature/cross-radio-migration` (Phase 1 commit `69cf9b1`). The generic
+> migration engine and subdevice-aware image UX are complete. The remaining
+> phases cover special memories, banks, D-STAR side effects, and broader
+> hands-on testing.
 
 ## Goal
 
@@ -56,9 +56,10 @@ Therefore VRP must use that generic pipeline, not invent pairwise migrations.
    target slots. It never shifts foreign raw rows. Same-document Paste retains
    Overwrite / Make room / Cancel.
 8. **Safe deferred Cut.** `RadioState.document_id` changes on every open or
-   download. Cut + Paste erases sources only when that exact document remains
-   active. After switching images, a Cut safely becomes Copy and the snapshots
-   remain available.
+   download. Phase 2 refines this with `context_id` (document plus section).
+   Cut + Paste erases sources only when that exact context remains active.
+   After switching images or sections, a Cut safely becomes Copy and the
+   snapshots remain available.
 9. **One undo transaction.** All successful writes from a migration batch are
    recorded by `@undo.records` as one operation. Partial success is still one
    undo step.
@@ -73,7 +74,9 @@ Therefore VRP must use that generic pipeline, not invent pairwise migrations.
   detailed result/report types.
 - `chirp_backend/memory_ops.py` — undoable `apply_migration_batch`; legacy
   `import_memories` is a compatibility wrapper.
-- `chirp_backend/radio.py` — document identity and corrected CSV export.
+- `chirp_backend/radio.py` — parent/selected-child state, context identity,
+  image/source discovery, save/settings/clone ownership, and corrected CSV
+  export.
 - `vrp/native/main_window.py` — source-aware clipboard, generic cross-image
   Paste, `.img`/`.csv` File Import, and accessible report display.
 - `tests/test_migration.py`, `tests/test_clipboard.py`,
@@ -82,9 +85,53 @@ Therefore VRP must use that generic pipeline, not invent pairwise migrations.
 - `tools/audit_migrations.py` — opt-in sweep across every pinned CHIRP image and
   exposed subdevice.
 
-## Verification baseline (2026-07-21)
+## Decisions implemented in Phase 2
 
-- Full VRP suite: **383 passed**.
+1. **Parent owns the image; child owns the grid.** `RadioState.physical_radio`
+   retains CHIRP's parent for Save/Save As, Settings, clone prompts, and Upload.
+   `RadioState.radio` is the selected child used by memory, bank, export, and
+   migration operations.
+2. **Parse before choosing.** `load_image_set` parses the parent and calls
+   `get_sub_devices` once, so drivers with `has_dynamic_subdevices` can build
+   zones from their loaded image. `activate_image_set` is separate, which means
+   canceling the chooser leaves the currently open document untouched.
+3. **Single-child parents still use their child.** A parent reporting
+   `has_sub_devices` is never used as the memory grid merely because it returns
+   one child; the chooser is skipped and that child is selected automatically.
+4. **External metadata is linked.** Parents implementing
+   `ExternalMemoryProperties` run `link_device_metadata(children)` exactly as
+   CHIRP's editor does, so per-memory metadata is included in a later parent
+   save.
+5. **Accessible section chooser.** `SubdeviceDialog` uses the existing native
+   `RadioListView` (SysListView32 on Windows, NSTableView/GtkTreeView elsewhere),
+   adjacent labels, filtering, a count, explicit action/Cancel buttons, and
+   Escape. It is used by Open, Import, and post-Download; Radio ▸ Select memory
+   section… permits later switching.
+6. **Stable human labels.** Choices use CHIRP `VARIANT` plus channel bounds, not
+   generated Python class names. This matters for dynamic Kenwood fixtures whose
+   generated class names exceed 20,000 characters.
+7. **Section-safe clipboard identity.** `RadioState.context_id` combines the
+   document UUID and selected section. Paste uses raw move/make-room semantics
+   only in that exact context. After switching sections, Paste uses generic
+   migration and a deferred Cut becomes Copy, so same-numbered rows in another
+   side/zone cannot be erased.
+8. **Section-local undo.** Switching sections restores the previous child's
+   original write methods before installing a fresh recorder on the next child.
+   Image changes and the dirty flag remain, while undo history resets rather
+   than accidentally wrapping an old recorder recursively.
+
+Phase 2 adds `vrp/subdevice_dialog.py`, `tests/test_subdevices.py`, and
+`tests/test_subdevice_dialog.py`, plus interaction coverage in the grid and
+clipboard test modules.
+
+## Verification baseline after Phase 2 (2026-07-21)
+
+- Full VRP suite: **420 passed**.
+- Subdevice backend coverage: all **23 pinned parent fixtures** expand to their
+  expected **50 child views**; both static FT-8800 and dynamic TK-3180K2 edits
+  survive parent Save/reopen.
+- GUI coverage verifies chooser filtering/accessibility, selected-section Open,
+  cancel-without-replacement, menu/title state, and cross-section Cut safety.
 - Focused migration/clipboard/export/memory tests: **71 passed**.
 - Real UV-5R Mini → UV-5R: all 21 populated fixture channels imported after
   foreign extras were removed.
@@ -102,13 +149,10 @@ Run the audit from the repository root:
 
 ## Remaining work
 
-### Phase 2 — Subdevice-aware image UX
+### Phase 2 — Subdevice-aware image UX — complete
 
-- Detect `RadioFeatures.has_sub_devices` when opening a source or active image.
-- Present an accessible chooser for multi-VFO/multi-band subdevices and retain
-  the selected child radio's own class ID/features.
-- Handle dynamic subdevices whose list is available only after image parsing.
-- Add fixtures for the 23 pinned parent images currently exposing subdevices.
+Implemented as described above. Hardware downloads of a multi-section radio and
+NVDA/VoiceOver hand passes remain part of Phase 6 acceptance, not backend gaps.
 
 ### Phase 3 — Special memories
 
@@ -161,7 +205,7 @@ Run the audit from the repository root:
    `origin/feature/cross-radio-migration`.
 2. Run `uv sync --extra dev`, then `uv run python -m pytest`.
 3. Run `tools/audit_migrations.py` after any CHIRP pin or migration change.
-4. Start with Phase 2 unless product priority moves banks or special memories
-   ahead of subdevice UX.
+4. Start with Phase 3 (special memories) unless product priority moves explicit
+   bank mapping or Phase 6 hands-on acceptance ahead of it.
 5. Keep `chirp/` unmodified and add a real pinned fixture for every new edge
    case.
