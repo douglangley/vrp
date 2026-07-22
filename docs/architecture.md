@@ -126,7 +126,7 @@ source image / CSV / query / clipboard snapshots
                   │
                   ▼
  migration.MigrationBatch
- (Memory snapshots + source RadioFeatures + radio/document identity)
+ (Memory snapshots + source RadioFeatures + radio/source-context identity)
                   │
                   ▼
  chirp.import_logic.import_mem(target, source_features, memory,

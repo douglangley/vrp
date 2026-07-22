@@ -13,8 +13,8 @@ VFOs, or dynamically parsed zones—can now be opened, imported, downloaded, and
 switched inside VRP. The selected child supplies memories/features to the grid
 and migration engine; the physical parent remains the owner of Save/Save As,
 radio Settings, clone prompts, and Upload. Work is on
-`feature/cross-radio-migration`; the dated migration plan is the detailed
-handoff.
+`feature/cross-radio-migration`, commit `00af255`; the dated migration plan is
+the detailed handoff.
 
 **Backend ownership.** `RadioImageSet` holds one parsed parent and its memory
 views. `load_image_set` discovers views without mutating active state, then
@@ -112,12 +112,13 @@ channel against **385 targets from 358 pinned image files** (including exposed
 subdevices): 276 imported, 109 returned normal band/feature incompatibilities,
 and **zero unexpected failures**. The vendored `chirp/` tree was not modified.
 
-**Scope boundary / next work:** Phase 1 covers ordinary numbered memories.
-Radio-wide settings, bank memberships, special memories, and active/source
-subdevice-selection UX are not migrated. D-STAR conversion is wired through
+**Scope boundary at the Phase 1 checkpoint:** Phase 1 covered ordinary numbered
+memories. Radio-wide settings, bank memberships, special memories, and active/
+source subdevice-selection UX were not yet migrated; the Phase 2 entry above
+records that subdevice UX is now complete. D-STAR conversion is wired through
 CHIRP, but real call-list side effects need focused fixture coverage. NVDA and
-VoiceOver hand passes of the new cross-image/report flow are also owed. See the
-dated plan for sequenced Phases 2–6 and the resume checklist.
+VoiceOver hand passes of the cross-image/report flow are also owed. See the
+dated plan for the remaining phases and resume checklist.
 
 ## 2026-07-15 — `--portable` builds a real macOS artifact (ready for a Mac run)
 

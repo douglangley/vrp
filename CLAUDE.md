@@ -91,6 +91,8 @@ obscure it. Any future help/docs page must carry it too.
   - serial_dialogs.py  — native wx Download/Upload/Favorites/progress dialogs +
                          the shared filter ModelPicker and type-ahead
                          RadioListView (a wx.ListCtrl)
+  - subdevice_dialog.py — accessible filterable chooser for CHIRP memory
+                         sections (multi-side/VFO/band/zone images)
   - settings_dialog.py — native wx radio settings editor, Treebook
   - bank_dialog.py     — native wx dialog to assign a channel to banks
   - query_dialogs.py   — native wx ImportDestinationDialog (shared by Import
@@ -122,7 +124,8 @@ obscure it. Any future help/docs page must carry it too.
   - speech.py          — prism speech wrapper, graceful no-op if unavailable
   - _chirp_path.py     — makes the editable ./chirp package importable
 - chirp_backend/       — all chirp library interaction (framework-agnostic):
-                         radio (incl. document identity + describe_model),
+                         radio (incl. parent/selected-subdevice ownership,
+                         context identity + describe_model),
                          migration (generic cross-radio conversion + detailed
                          reports), memory_ops, undo (channel-edit undo/redo),
                          bandplan (suggested repeater offset + band defaults, by
@@ -247,13 +250,25 @@ months.
 - Preserve partial success and every per-channel reason in `MigrationReport`.
   A UI issue report must use the navigable/copyable `InfoDialog`, not a long
   static `MessageBox`.
-- `RadioState.document_id` identifies one exact open/downloaded image. A
-  deferred Cut may erase source rows only when the ID still matches. Across
-  images it becomes Copy. Same-document raw `paste_block` is the only path that
-  offers Make room/row shifting.
+- `RadioState.context_id` combines the exact open/downloaded document UUID and
+  selected memory-section index. A deferred Cut may erase source rows only when
+  that context still matches. Across images or sections it becomes Copy.
+  Same-document-and-section raw `paste_block` is the only path that offers Make
+  room/row shifting.
+- A CHIRP parent reporting `has_sub_devices` owns Save/Settings/prompts/Upload
+  as `RadioState.physical_radio`; its selected child owns memory/bank/export/
+  migration operations as `RadioState.radio`. Discover static or dynamic
+  children with `load_image_set` before calling `activate_image_set`, and call
+  `ExternalMemoryProperties.link_device_metadata` as the backend already does.
+  Never replace the current document before the memory-section chooser returns.
+- Switching sections preserves the parent image and dirty state, but resets
+  section-local Undo after restoring the prior child's original write methods.
+  Open, Import, post-Download, and Radio ▸ Select memory section… share the
+  accessible `SubdeviceDialog`; never expose generated child class names as
+  labels—use CHIRP `VARIANT` and channel bounds.
 - Current migration scope is ordinary numbered memories. Banks, radio-wide
-  settings, special memories, and image subdevice selection are follow-ups;
-  never silently claim they moved. See
+  settings, and special memories are follow-ups; never silently claim they
+  moved. Phase 2 subdevice selection is complete in commit `00af255`. See
   `docs/superpowers/plans/2026-07-21-cross-radio-migration.md`.
 
 ## Memory Operations Reference

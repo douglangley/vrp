@@ -202,10 +202,11 @@ The cut-and-paste way, which also works across scattered selections:
 4. Press **Ctrl+V** (macOS: Command+V) to paste.
 
 **Ctrl+C / Command+C** copies instead of moving. Cut is *deferred* — nothing
-actually changes until you paste. If the same image is still open, the paste
-moves the channels and clears the originals. If you open or download another
-radio first, VRP converts each channel for that model and leaves the original
-image unchanged; a cross-image Cut becomes Copy so you can paste again.
+actually changes until you paste. If the same image and memory section are
+still active, the paste moves the channels and clears the originals. If you
+open or download another radio, or switch to another side or zone first, VRP
+converts each channel for that destination and leaves the original section
+unchanged; the Cut becomes Copy so you can paste again.
 
 If you paste onto a channel that is **already occupied**, VRP does not silently
 clobber it. A dialog asks whether you want to **Overwrite** it, **Make room**
@@ -216,8 +217,10 @@ navigable, copyable details window explains why; compatible channels still
 paste.
 
 Cross-radio migration currently covers regular numbered channels. It does not
-copy radio-wide settings, bank membership, special channels, or choose among an
-image's subdevices yet.
+copy radio-wide settings, bank membership, or special channels. When an image
+has multiple sides, VFOs, bands, or zones, Open and Import show a filterable
+**Memory section** chooser. **Radio ▸ Select memory section…** switches the grid
+later; Save and Upload still include the complete radio image.
 
 After any move, the moved channels stay selected at their new home, focus lands
 on the first of them, and the result is announced.
@@ -257,6 +260,9 @@ stops and asks: **Save**, **Don't save**, or **Cancel**.
 
 - **Radio ▸ Settings** (Ctrl+Shift+P / Command+Shift+P) — the radio's own
   settings, laid out as a navigable tree of labelled controls.
+- **Radio ▸ Select memory section…** — on a multi-side or multi-zone radio,
+  choose which section the channel grid shows. Open, Import, and Download also
+  offer this chooser when needed.
 - **Channels ▸ Channel banks** (Ctrl+B / Command+B) — assign a channel to the
   radio's banks, on radios that have them.
 - **Radio ▸ Query Source ▸ RepeaterBook** — look up repeaters by country and

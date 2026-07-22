@@ -9,6 +9,9 @@
 > **2026-07-21 addendum:** generic cross-radio import writes through the
 > decorated `memory_ops.apply_migration_batch`, so every compatible row in a
 > partial migration remains one undo step. `import_memories` is now a wrapper.
+> Phase 2 multi-section images keep Undo local to the selected child: switching
+> sections preserves image edits/dirty state but restores the old child's write
+> methods and starts a fresh history on the newly selected child.
 
 ---
 

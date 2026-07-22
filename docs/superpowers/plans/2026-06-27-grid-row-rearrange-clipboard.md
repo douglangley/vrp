@@ -8,9 +8,10 @@
 >
 > **2026-07-21 addendum:** the v1 same-image restriction in D6 is superseded.
 > Clipboard snapshots now carry source features, CHIRP radio class ID, and an
-> exact document ID. After switching images, Paste uses the generic migration
-> engine and a deferred Cut safely becomes Copy. Same-image behavior described
-> below is unchanged. See
+> exact document-and-memory-section context ID. After switching images or
+> sections, Paste uses the generic migration engine and a deferred Cut safely
+> becomes Copy. Raw move/make-room behavior remains only inside the exact same
+> document and section. See
 > [2026-07-21-cross-radio-migration.md](2026-07-21-cross-radio-migration.md).
 
 ## Step 0 results (NVDA spike, 2026-06-27)

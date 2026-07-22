@@ -1,10 +1,10 @@
 # Plan — Generic cross-radio channel migration
 
 > **Status:** Phases 1 and 2 implemented and verified 2026-07-21 on branch
-> `feature/cross-radio-migration` (Phase 1 commit `69cf9b1`). The generic
-> migration engine and subdevice-aware image UX are complete. The remaining
-> phases cover special memories, banks, D-STAR side effects, and broader
-> hands-on testing.
+> `feature/cross-radio-migration` (Phase 1 commit `69cf9b1`; Phase 2 commit
+> `00af255`). The generic migration engine and subdevice-aware image UX are
+> complete. The remaining phases cover special memories, banks, D-STAR side
+> effects, and broader hands-on testing.
 
 ## Goal
 
@@ -34,7 +34,8 @@ Therefore VRP must use that generic pipeline, not invent pairwise migrations.
 1. **One shared engine.** `chirp_backend/migration.py` is wx-free and is used by
    File Import, query/frequency-list import, and cross-image clipboard Paste.
 2. **Stable source identity.** A `MigrationBatch` carries source features, radio
-   class ID, label, document ID, populated memory snapshots, and read errors.
+   class ID, label, optional document/section context, populated memory
+   snapshots, and read errors.
 3. **Populated numeric channels only.** Empty rows are omitted and surviving
    source rows are packed consecutively from the chosen destination. Each
    populated source consumes one destination position even if it is skipped or
