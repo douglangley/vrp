@@ -1,17 +1,19 @@
 # Plan — Generic cross-radio channel migration
 
-> **Status:** Phases 1 and 2 implemented and verified 2026-07-21 on branch
+> **Status:** Phases 1–3 implemented and verified through 2026-07-22 on branch
 > `feature/cross-radio-migration` (Phase 1 commit `69cf9b1`; Phase 2 commit
-> `00af255`). The generic migration engine and subdevice-aware image UX are
-> complete. The remaining phases cover special memories, banks, D-STAR side
-> effects, and broader hands-on testing.
+> `00af255`). The generic migration engine, subdevice-aware image UX, and
+> explicit single special-memory workflow are complete. The remaining phases
+> cover banks, D-STAR side effects, and broader hands-on testing.
 
 ## Goal
 
-Move ordinary programmed channels between any two CHIRP-supported radio models
-when the destination can represent them, without maintaining a source/target
-pair matrix and without requiring a CSV round-trip. Preserve partial success:
-one incompatible channel must not prevent the compatible channels from moving.
+Move programmed channels between any two CHIRP-supported radio models when the
+destination can represent them, without maintaining a source/target pair matrix
+and without requiring a CSV round-trip. Preserve partial success: one
+incompatible channel must not prevent the compatible channels from moving.
+Named special memories require an explicit one-source/one-target mapping and
+are never included in ordinary bulk migration.
 
 The motivating UV-5R ↔ UV-5R Mini case is a regression fixture, not a special
 case. Model-specific behavior remains in CHIRP's drivers and import logic.
@@ -79,12 +81,20 @@ Therefore VRP must use that generic pipeline, not invent pairwise migrations.
   image/source discovery, save/settings/clone ownership, and corrected CSV
   export.
 - `vrp/native/main_window.py` — source-aware clipboard, generic cross-image
-  Paste, `.img`/`.csv` File Import, and accessible report display.
+  Paste, `.img`/`.csv` File Import, explicit special-memory flow, and accessible
+  report display.
+- `vrp/special_memory_dialogs.py` — accessible import-mode, destination-type,
+  and filterable regular/special memory pickers.
 - `tests/test_migration.py`, `tests/test_clipboard.py`,
   `tests/test_export_csv.py`, `tests/test_memory_ops.py` — real-driver and UI
   regressions.
+- `tests/test_special_migration.py`, `tests/test_special_memory_dialogs.py`,
+  `tests/test_special_import_ui.py` — special conversion, persistence,
+  accessibility, and UI-policy regressions.
 - `tools/audit_migrations.py` — opt-in sweep across every pinned CHIRP image and
   exposed subdevice.
+- `tools/audit_special_migrations.py` — opt-in sweep of a representative source
+  memory into every named special slot exposed by the pinned fixture corpus.
 
 ## Decisions implemented in Phase 2
 
@@ -125,9 +135,43 @@ Phase 2 adds `vrp/subdevice_dialog.py`, `tests/test_subdevices.py`, and
 `tests/test_subdevice_dialog.py`, plus interaction coverage in the grid and
 clipboard test modules.
 
-## Verification baseline after Phase 2 (2026-07-21)
+## Decisions implemented in Phase 3
 
-- Full VRP suite: **420 passed**.
+1. **Bulk remains numeric-only.** Existing File Import, query/frequency-list
+   import, and cross-image Paste still enumerate only populated ordinary channel
+   numbers. They never pull named specials into a bulk operation.
+2. **One explicit source and destination.** File Import offers ordinary bulk or
+   one memory when either side exposes specials. The single-memory path accepts
+   a populated regular or special source, then requires a numbered or named
+   special destination.
+3. **Same name is a preselection, not an automatic mapping.** When both radios
+   expose a special with the same name, VRP selects it in the target picker for
+   convenience. The user must still accept it. This avoids pretending that
+   `CALL`, `HOME`, scan limits, VFO state, and band-specific variants share one
+   universal meaning.
+4. **Occupied specials require explicit overwrite.** The target picker does not
+   write. An occupied named target gets a second confirmation whose safe default
+   is not to overwrite.
+5. **CHIRP owns field conversion.** Special→regular, regular→special, and
+   special→special all use `import_logic.import_mem`. For named targets VRP
+   preserves the destination slot's virtual number, `extd_number`, and genuine
+   immutable values while clearing cross-driver private extras.
+6. **Driver defects are reportable incompatibilities.** Invalid immutable field
+   declarations, drivers that cannot reread a special by virtual number, and
+   plain out-of-band setter exceptions are classified as incompatibilities.
+   Unknown exceptions remain failures, so the audit still catches regressions.
+7. **Special writes are undoable and persistent.** The undo recorder keys named
+   specials by `extd_number`; restoring an empty special uses `set_memory`
+   rather than numeric erase. Save/reopen uses the physical parent image exactly
+   like an ordinary edit.
+8. **Accessible native selection.** `MemoryPickerDialog` uses `RadioListView`
+   with an adjacent label, filter, count, explicit action/Cancel buttons, and
+   Escape. The import-mode and destination-type choices are explicit native
+   radio controls.
+
+## Verification baseline after Phase 3 (2026-07-22)
+
+- Full VRP suite: **440 passed**.
 - Subdevice backend coverage: all **23 pinned parent fixtures** expand to their
   expected **50 child views**; both static FT-8800 and dynamic TK-3180K2 edits
   survive parent Save/reopen.
@@ -141,11 +185,15 @@ clipboard test modules.
 - Pinned CHIRP audit: **385 targets from 358 image files**; 276 accepted the
   representative Generic CSV channel, 109 rejected it with normal model/band
   compatibility reasons, and **0 unexpected failures**.
+- Special-memory audit: **1,989 named slots across 70 radio targets from 358
+  image files**; 1,007 imported, 982 returned expected incompatibilities, and
+  **0 unexpected failures**.
 
-Run the audit from the repository root:
+Run both audits from the repository root:
 
 ```powershell
 .\.venv\Scripts\python.exe tools\audit_migrations.py
+.\.venv\Scripts\python.exe tools\audit_special_migrations.py
 ```
 
 ## Remaining work
@@ -155,13 +203,11 @@ Run the audit from the repository root:
 Implemented as described above. Hardware downloads of a multi-section radio and
 NVDA/VoiceOver hand passes remain part of Phase 6 acceptance, not backend gaps.
 
-### Phase 3 — Special memories
+### Phase 3 — Special memories — complete
 
-- Decide how named special channels map to ordinary numeric destinations and to
-  another model's special names. CHIRP can convert special↔regular by managing
-  `number` and `extd_number`, but the user needs an explicit, predictable UX.
-- Never silently include call channels, scan limits, or weather memories in an
-  ordinary bulk migration.
+Implemented as described above. Special memories remain outside the ordinary
+grid and bulk clipboard path; File Import is the deliberate one-memory entry
+point. Physical-radio and screen-reader hand passes remain Phase 6 acceptance.
 
 ### Phase 4 — Banks and mapping metadata
 
@@ -205,8 +251,9 @@ NVDA/VoiceOver hand passes remain part of Phase 6 acceptance, not backend gaps.
 1. Check out `feature/cross-radio-migration` and confirm it tracks
    `origin/feature/cross-radio-migration`.
 2. Run `uv sync --extra dev`, then `uv run python -m pytest`.
-3. Run `tools/audit_migrations.py` after any CHIRP pin or migration change.
-4. Start with Phase 3 (special memories) unless product priority moves explicit
-   bank mapping or Phase 6 hands-on acceptance ahead of it.
+3. Run `tools/audit_migrations.py` and `tools/audit_special_migrations.py` after
+   any CHIRP pin or migration change.
+4. Start with Phase 4 explicit bank mapping and decide the matching and undo
+   policy before writing bank memberships.
 5. Keep `chirp/` unmodified and add a real pinned fixture for every new edge
    case.

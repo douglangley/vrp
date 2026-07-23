@@ -47,14 +47,26 @@ def radio_label(radio) -> str:
 class MigrationEntry:
     """One populated source channel and its immutable-at-batch-time snapshot."""
 
-    source_number: int
+    source_number: int | str
     memory: object
 
 
 @dataclass(frozen=True)
 class MigrationReadError:
-    source_number: int
+    source_number: int | str
     message: str
+
+
+@dataclass(frozen=True)
+class MemoryLocation:
+    """One selectable regular or named-special memory in a source/target."""
+
+    identifier: int | str
+    number: int
+    is_special: bool
+    empty: bool
+    label: str
+    memory: object
 
 
 @dataclass
@@ -71,8 +83,8 @@ class MigrationBatch:
 
 @dataclass(frozen=True)
 class MigrationItemResult:
-    source_number: int
-    destination_number: int | None
+    source_number: int | str
+    destination_number: int | str | None
     status: str
     message: str = ""
     warnings: tuple[str, ...] = ()
@@ -119,7 +131,7 @@ class MigrationReport:
         return sum(len(item.warnings) for item in self.items)
 
     @property
-    def affected(self) -> list[int]:
+    def affected(self) -> list[int | str]:
         return [
             item.destination_number
             for item in self.items
@@ -228,6 +240,113 @@ def batch_from_radio(
         if getattr(memory, "empty", False) and not include_empty:
             continue
         batch.entries.append(MigrationEntry(number, memory.dupe()))
+    return batch
+
+
+def _memory_location(identifier, memory, *, is_special: bool) -> MemoryLocation:
+    """Build a concise accessible label without depending on driver internals."""
+    prefix = f"Special {identifier}" if is_special else f"Channel {identifier}"
+    empty = bool(getattr(memory, "empty", False))
+    if empty:
+        label = f"{prefix} — empty"
+    else:
+        details = []
+        name = (getattr(memory, "name", "") or "").strip()
+        if name:
+            details.append(name)
+        freq = getattr(memory, "freq", 0) or 0
+        if freq:
+            details.append(f"{chirp_common.format_freq(freq)} MHz")
+        label = f"{prefix} — {' — '.join(details) if details else 'programmed'}"
+    return MemoryLocation(
+        identifier=identifier,
+        number=memory.number,
+        is_special=is_special,
+        empty=empty,
+        label=label,
+        memory=memory.dupe(),
+    )
+
+
+def list_memory_locations(
+    radio,
+    *,
+    include_regular: bool = True,
+    include_special: bool = True,
+    include_empty: bool = False,
+) -> list[MemoryLocation]:
+    """List selectable memories, keeping ordinary and special identities clear.
+
+    Specials are read only when explicitly requested here; the ordinary bulk
+    path in :func:`batch_from_radio` remains numeric-only by design.
+    Unreadable locations are omitted from the chooser and will never be written.
+    """
+    features = radio.get_features()
+    identifiers: list[tuple[int | str, bool]] = []
+    if include_regular:
+        low, high = features.memory_bounds
+        identifiers.extend((number, False) for number in range(low, high + 1))
+    if include_special:
+        identifiers.extend(
+            (name, True) for name in (features.valid_special_chans or [])
+        )
+
+    locations = []
+    for identifier, is_special in identifiers:
+        try:
+            memory = radio.get_memory(identifier)
+        except Exception as exc:  # noqa: BLE001 - one driver slot must not block UI
+            LOG.warning("Could not read memory location %r: %s", identifier, exc)
+            continue
+        if memory is None:
+            continue
+        if getattr(memory, "empty", False) and not include_empty:
+            continue
+        locations.append(
+            _memory_location(identifier, memory, is_special=is_special)
+        )
+    return locations
+
+
+def batch_from_identifiers(
+    source_radio,
+    identifiers,
+    *,
+    source_document_id: str | None = None,
+    include_empty: bool = False,
+) -> MigrationBatch:
+    """Snapshot an explicit ordered list of numeric and/or special locations."""
+    features = source_radio.get_features()
+    batch = MigrationBatch(
+        source_label=radio_label(source_radio),
+        source_radio_id=radio_id(source_radio),
+        source_features=features,
+        source_document_id=source_document_id,
+    )
+    low, high = features.memory_bounds
+    valid_specials = set(features.valid_special_chans or [])
+    for identifier in identifiers:
+        valid = (
+            isinstance(identifier, int) and low <= identifier <= high
+        ) or identifier in valid_specials
+        if not valid:
+            batch.read_errors.append(
+                MigrationReadError(identifier, "The source memory is not available")
+            )
+            continue
+        try:
+            memory = source_radio.get_memory(identifier)
+        except Exception as exc:  # noqa: BLE001
+            batch.read_errors.append(MigrationReadError(identifier, str(exc)))
+            continue
+        if memory is None:
+            batch.read_errors.append(
+                MigrationReadError(identifier, "The source memory could not be read")
+            )
+            continue
+        if getattr(memory, "empty", False) and not include_empty:
+            continue
+        batch.entries.append(MigrationEntry(identifier, memory.dupe()))
     return batch
 
 
@@ -367,4 +486,207 @@ def apply_batch(
             )
         dest += 1
 
+    return report
+
+
+def apply_batch_to_special(
+    target_radio,
+    batch: MigrationBatch,
+    destination_name: str,
+    *,
+    overwrite: bool = True,
+) -> MigrationReport:
+    """Convert exactly one explicit source memory into a named target special.
+
+    The caller must choose ``destination_name``; there is deliberately no
+    same-name guessing or bulk traversal because call channels, scan limits,
+    VFOs, homes, and band-state slots have different meanings across models.
+    """
+    report = MigrationReport(batch.source_label, radio_label(target_radio))
+    for read_error in batch.read_errors:
+        report.items.append(
+            MigrationItemResult(
+                read_error.source_number,
+                destination_name,
+                "failed",
+                f"Could not read source memory: {read_error.message}",
+            )
+        )
+
+    entries = list(batch.entries)
+    if not entries:
+        return report
+    if len(entries) != 1:
+        for entry in entries:
+            report.items.append(
+                MigrationItemResult(
+                    entry.source_number,
+                    destination_name,
+                    "incompatible",
+                    "Choose exactly one source memory for a named special destination",
+                )
+            )
+        return report
+
+    entry = entries[0]
+    valid_specials = list(
+        target_radio.get_features().valid_special_chans or []
+    )
+    if destination_name not in valid_specials:
+        report.items.append(
+            MigrationItemResult(
+                entry.source_number,
+                destination_name,
+                "incompatible",
+                f"Special memory {destination_name} is not available on the destination",
+            )
+        )
+        return report
+
+    try:
+        existing = target_radio.get_memory(destination_name)
+    except Exception as exc:  # noqa: BLE001
+        report.items.append(
+            MigrationItemResult(
+                entry.source_number,
+                destination_name,
+                "failed",
+                f"Could not read destination special memory: {exc}",
+            )
+        )
+        return report
+
+    was_occupied = existing is not None and not getattr(existing, "empty", True)
+    if was_occupied and not overwrite:
+        report.items.append(
+            MigrationItemResult(
+                entry.source_number,
+                destination_name,
+                "occupied",
+                "Destination special memory is not empty",
+            )
+        )
+        return report
+
+    target_identity = radio_id(target_radio)
+    source_memory = entry.memory.dupe()
+    if batch.source_radio_id != target_identity:
+        source_memory.extra = []
+
+    try:
+        # Special memories often mark their location fields immutable. Preserve
+        # every real immutable value from the chosen target slot before CHIRP's
+        # importer performs its policy check. A driver that names a nonexistent
+        # immutable attribute is reported as incompatible instead of crashing.
+        source_memory.immutable = []
+        missing = [
+            field for field in (getattr(existing, "immutable", None) or [])
+            if not hasattr(existing, field)
+        ]
+        if missing:
+            raise import_logic.DestNotCompatible(
+                "Destination driver does not expose immutable field(s): "
+                + ", ".join(missing)
+            )
+        for field in (getattr(existing, "immutable", None) or []):
+            setattr(source_memory, field, getattr(existing, field))
+
+        converted = import_logic.import_mem(
+            target_radio,
+            batch.source_features,
+            source_memory,
+            overrides={
+                "number": existing.number,
+                "extd_number": destination_name,
+            },
+        )
+        warnings: tuple[str, ...] = ()
+        validate = getattr(target_radio, "validate_memory", None)
+        if validate is not None:
+            messages = validate(chirp_common.FrozenMemory(converted))
+            validation_warnings, validation_errors = (
+                chirp_common.split_validation_msgs(messages)
+            )
+            if validation_errors:
+                raise import_logic.DestNotCompatible(
+                    ", ".join(str(msg) for msg in validation_errors)
+                )
+            warnings = tuple(str(msg) for msg in validation_warnings)
+        target_radio.set_memory(converted)
+    except (
+        import_logic.DestNotCompatible,
+        chirp_common.ImmutableValueError,
+        errors.RadioError,
+        errors.InvalidDataError,
+        errors.InvalidValueError,
+        ValueError,
+    ) as exc:
+        LOG.warning(
+            "migration source %s -> special %s incompatible: %s",
+            entry.source_number,
+            destination_name,
+            exc,
+        )
+        report.items.append(
+            MigrationItemResult(
+                entry.source_number,
+                destination_name,
+                "incompatible",
+                str(exc),
+            )
+        )
+    except Exception as exc:  # noqa: BLE001 - classify known driver contracts
+        # A few special-memory setters use plain Exception for band enforcement,
+        # and some drivers cannot re-read a special by its virtual integer while
+        # CHIRP's importer performs immutable validation. Both mean "this chosen
+        # source cannot be applied to this target special", not an application
+        # failure. Keep unknown exceptions as failed so the audit still exposes
+        # genuine integration/driver bugs.
+        message = str(exc)
+        expected_driver_rejection = (
+            isinstance(exc, IndexError)
+            or "out of range" in message.lower()
+        )
+        if expected_driver_rejection:
+            if isinstance(exc, IndexError):
+                message = (
+                    "Destination driver cannot validate this special memory by "
+                    "its virtual channel number"
+                )
+            LOG.warning(
+                "migration source %s -> special %s incompatible: %s",
+                entry.source_number,
+                destination_name,
+                message,
+            )
+            report.items.append(
+                MigrationItemResult(
+                    entry.source_number,
+                    destination_name,
+                    "incompatible",
+                    message,
+                )
+            )
+        else:
+            LOG.exception(
+                "migration source %s -> special %s failed",
+                entry.source_number,
+                destination_name,
+            )
+            report.items.append(
+                MigrationItemResult(
+                    entry.source_number, destination_name, "failed", message
+                )
+            )
+    else:
+        report.items.append(
+            MigrationItemResult(
+                entry.source_number,
+                destination_name,
+                "imported",
+                "Imported",
+                warnings,
+                overwritten=was_occupied,
+            )
+        )
     return report

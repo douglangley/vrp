@@ -515,7 +515,7 @@ def _install_undo(radio) -> None:
         # the image is read, and reading an image doesn't call set_memory.
         def recording_set(mem):
             if _undo is not None:
-                _undo.record(mem.number)
+                _undo.record(getattr(mem, "extd_number", "") or mem.number)
             result = orig_set(mem)
             _state.is_modified = True
             return result

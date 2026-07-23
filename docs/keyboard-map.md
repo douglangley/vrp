@@ -170,8 +170,11 @@ so every source channel that runs past the end is also listed in that report.
 Migration covers regular numbered memories (including D-STAR where both drivers
 support it). Multi-side/zone images present a filterable **memory section**
 chooser on Open and Import, and Radio ▸ Select memory section… switches the
-grid later. Radio-wide settings, bank membership, and special channels are not
-migrated between models.
+grid later. File Import can also map one explicitly selected regular or named
+special memory to a numbered channel or named special on the destination.
+Ordinary bulk migration never includes specials, and a same-name special is
+only preselected for confirmation—not written automatically. Radio-wide
+settings and bank membership are not migrated between models.
 
 **Undo / redo** cover every channel operation — edit, delete, move, copy,
 cut/paste, sort, insert, arrange, import. `Ctrl+Z` undoes the last one and
@@ -179,8 +182,9 @@ announces what it reversed (e.g. "Undone: Deleted channel 5"); `Ctrl+Y` (or
 `Ctrl+Shift+Z`) redoes it. The Edit menu's Undo/Redo items show the operation
 they'd act on; the history is bounded (most-recent ops) and cleared when you
 load, close, download an image, or switch memory sections. Section switching
-preserves image edits and the unsaved-changes state. Radio Settings and bank
-assignments are not yet undoable.
+preserves image edits and the unsaved-changes state. An imported named special
+is announced by name and restores correctly through Undo/Redo. Radio Settings
+and bank assignments are not yet undoable.
 
 ## Dialogs
 
@@ -284,10 +288,16 @@ Ctrl shortcuts); a recent entry that's gone is announced and pruned.
 
 File ▸ Import from File… picks another radio image or CHIRP CSV (native file
 dialog), loads it as an independent source (the active radio is untouched), and
-offers a filterable memory-section chooser when needed. It then reuses the
-generic migration engine (adapts each memory via CHIRP import_logic,
-overwrite/skip, reports each incompatibility, focuses the first imported
-channel). File ▸
+offers a filterable memory-section chooser when needed. If either radio exposes
+named specials, the next dialog explicitly chooses **Bulk ordinary channels**
+or **One memory**. Bulk retains the normal numeric-only destination/overwrite
+flow and never includes specials. One memory opens a filterable regular/special
+source picker, then asks for a numbered or named-special destination. A matching
+special name may be preselected but must still be accepted; an occupied special
+requires a separate overwrite confirmation whose safe default is No. Both
+paths reuse the generic migration engine (adapts via CHIRP `import_logic`,
+reports incompatibilities, and focuses or announces the imported destination).
+File ▸
 Export to CSV… writes the loaded radio's non-empty channels to a CSV via CHIRP's
 generic_csv driver (native save dialog with overwrite prompt; announces count +
 file). You can also export **just a selection**: the row context menu's "Export

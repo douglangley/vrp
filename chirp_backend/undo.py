@@ -36,11 +36,12 @@ DEFAULT_MAX_DEPTH = 30
 
 @dataclass
 class _Entry:
-    """One undoable operation: the touched channels' state before and after.
+    """One undoable operation: the touched memories' state before and after.
 
     ``before``/``after`` are lists of Memory snapshots (each carries ``.number``
-    and ``.empty``); an empty snapshot means the slot was blank, so restoring it
-    erases rather than sets."""
+    and ``.empty``). Empty ordinary channels restore by erasing their numbered
+    slot; named special memories restore through ``set_memory`` so their
+    ``extd_number`` identity is preserved."""
 
     label: str
     before: list
@@ -61,8 +62,8 @@ class UndoManager:
         # Open-transaction state.
         self._depth = 0
         self._label: str | None = None
-        self._before: dict[int, object] = {}
-        self._order: list[int] = []
+        self._before: dict[int | str, object] = {}
+        self._order: list[int | str] = []
         self._applying = False  # True while restoring (suppresses recording)
 
     # -- transaction --------------------------------------------------
@@ -96,7 +97,7 @@ class UndoManager:
         if self._depth > 0:
             self._label = label
 
-    def record(self, number: int) -> None:
+    def record(self, number: int | str) -> None:
         """Capture the current (pre-write) state of ``number`` once per
         transaction. Call **before** the write. No-op when no transaction is open
         or while applying an undo/redo."""
@@ -145,34 +146,44 @@ class UndoManager:
 
     # -- undo / redo --------------------------------------------------
 
-    def undo(self) -> tuple[str, list[int]] | None:
+    def undo(self) -> tuple[str, list[int | str]] | None:
         """Restore the most recent op's before-images. Returns ``(label,
-        restored_channel_numbers)`` or ``None`` when there's nothing to undo."""
+        restored_memory_identifiers)`` or ``None`` when there's nothing to
+        undo."""
         if not self._undo:
             return None
         entry = self._undo.pop()
         self._apply(entry.before)
         self._redo.append(entry)
-        return entry.label, [m.number for m in entry.before]
+        return entry.label, [
+            getattr(m, "extd_number", "") or m.number for m in entry.before
+        ]
 
-    def redo(self) -> tuple[str, list[int]] | None:
+    def redo(self) -> tuple[str, list[int | str]] | None:
         """Re-apply the most recently undone op's after-images. Returns ``(label,
-        restored_channel_numbers)`` or ``None`` when there's nothing to redo."""
+        restored_memory_identifiers)`` or ``None`` when there's nothing to
+        redo."""
         if not self._redo:
             return None
         entry = self._redo.pop()
         self._apply(entry.after)
         self._undo.append(entry)
-        return entry.label, [m.number for m in entry.after]
+        return entry.label, [
+            getattr(m, "extd_number", "") or m.number for m in entry.after
+        ]
 
     def _apply(self, images: list) -> None:
         """Write a set of snapshots back to the radio without recording them.
-        An empty snapshot erases its slot; otherwise it is set (from a dupe, so
-        the stored snapshot stays pristine for a later undo/redo)."""
+        An empty ordinary snapshot erases its slot. Named special snapshots and
+        populated ordinary snapshots are set from a dupe, so the stored
+        snapshot stays pristine for a later undo/redo."""
         self._applying = True
         try:
             for mem in images:
-                if getattr(mem, "empty", False):
+                if (
+                    getattr(mem, "empty", False)
+                    and not getattr(mem, "extd_number", "")
+                ):
                     self._erase(mem.number)
                 else:
                     self._set(mem.dupe())

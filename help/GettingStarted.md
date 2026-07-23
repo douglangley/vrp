@@ -216,11 +216,16 @@ image. Across radio images the choices are **Overwrite**, **Skip**, or
 navigable, copyable details window explains why; compatible channels still
 paste.
 
-Cross-radio migration currently covers regular numbered channels. It does not
-copy radio-wide settings, bank membership, or special channels. When an image
-has multiple sides, VFOs, bands, or zones, Open and Import show a filterable
-**Memory section** chooser. **Radio ▸ Select memory section…** switches the grid
-later; Save and Upload still include the complete radio image.
+Cross-radio bulk migration covers regular numbered channels. **File ▸ Import
+from File** can also transfer one explicitly selected regular or special memory
+to a numbered channel or named special on the destination. It never silently
+includes call channels, scan limits, VFOs, home channels, or other specials in
+a bulk import. A same-name target is only preselected for you to confirm, and
+an occupied special asks separately before overwrite. Radio-wide settings and
+bank membership are not copied. When an image has multiple sides, VFOs, bands,
+or zones, Open and Import show a filterable **Memory section** chooser. **Radio
+▸ Select memory section…** switches the grid later; Save and Upload still
+include the complete radio image.
 
 After any move, the moved channels stay selected at their new home, focus lands
 on the first of them, and the result is announced.
@@ -274,8 +279,9 @@ stops and asks: **Save**, **Don't save**, or **Cancel**.
 - **File ▸ Import from File** and **File ▸ Export to CSV** — move channels
   directly between images, import a CHIRP CSV, or send someone just the part of
   your memories they asked for.
-  Import and cross-image Paste use the same CHIRP conversion and per-channel
-  compatibility report.
+  Import and cross-image Paste use the same CHIRP conversion and compatibility
+  report. If either radio has named special memories, Import lets you choose
+  ordinary bulk migration or explicitly map one regular/special memory.
   (There is no print command; Export to CSV is the accessible equivalent.)
 - **File ▸ Preferences** — how many recent files to show, which band plan region
   to use, whether entering a frequency should also fill in mode/step/tone, and

@@ -3,11 +3,11 @@ Memory channel operations — bulk and range operations on the radio image.
 
 All functions here are pure operations: they take a RadioState (or radio
 object directly) plus parameters, perform the operation, and return
-(success, message, affected_channel_numbers).
+(success, message, affected_memory_identifiers).
 
 This mirrors the operations available in CHIRP's memedit.py but decoupled
-from any GUI. The affected_channel_numbers list tells the UI which channels to
-re-read and refresh in the grid.
+from any GUI. The affected identifiers tell the UI which numbered channels or
+named special memories changed.
 
 Reference: chirp/chirp/wxui/memedit.py methods:
   _delete_memories_at, _mem_insert, cb_move, _do_sort_memories,
@@ -22,7 +22,7 @@ from chirp_backend import undo
 LOG = logging.getLogger(__name__)
 
 # Type alias for the return value of all operations
-OpResult = tuple[bool, str, list[int]]
+OpResult = tuple[bool, str, list[int | str]]
 
 
 def _get_radio():
@@ -307,6 +307,32 @@ def apply_migration_batch(
     from chirp_backend.radio import invalidate_cache
 
     invalidate_cache(report.affected)
+    return report.ok, report.summary(), report.affected, report
+
+
+@undo.records
+def apply_migration_batch_to_special(
+    batch,
+    destination_name: str,
+    overwrite: bool = True,
+):
+    """Apply one explicit source memory to one named target special.
+
+    Returns ``(ok, summary, affected, report)`` like
+    :func:`apply_migration_batch`; ``affected`` contains the special name so
+    Undo/UI callers never mistake its driver virtual number for a grid channel.
+    """
+    from chirp_backend import migration
+
+    try:
+        target = _get_radio()
+    except RuntimeError as exc:
+        report = migration.MigrationReport(batch.source_label, "No radio")
+        return False, str(exc), [], report
+
+    report = migration.apply_batch_to_special(
+        target, batch, destination_name, overwrite=overwrite
+    )
     return report.ok, report.summary(), report.affected, report
 
 

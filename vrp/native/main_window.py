@@ -768,14 +768,22 @@ class MainWindow(wx.Frame):
         # The op rewrote these channels; refresh the whole grid (a structural op
         # may have shifted rows) and re-anchor on the affected block.
         self.grid.rebuild()
-        numbers = sorted(n for n in numbers) if numbers else []
-        if numbers:
+        numeric = sorted(n for n in (numbers or []) if isinstance(n, int))
+        specials = [
+            str(n) for n in (numbers or []) if not isinstance(n, int)
+        ]
+        if numeric:
             low, high = radio_backend.get_state().memory_bounds
-            target = min(max(numbers[0], low), high)
-            self.grid.select_channels([n for n in numbers if low <= n <= high])
+            target = min(max(numeric[0], low), high)
+            self.grid.select_channels([n for n in numeric if low <= n <= high])
             self.grid.focus_channel(target)
             self.announce.announce(f"{verb}: {label}. Now on channel {target}.",
                                    assertive=True)
+        elif specials:
+            self.announce.announce(
+                f"{verb}: {label}. Special memory {', '.join(specials)}.",
+                assertive=True,
+            )
         else:
             self.announce.announce(f"{verb}: {label}.", assertive=True)
 
@@ -1695,18 +1703,174 @@ class MainWindow(wx.Frame):
             return
         src = image_set.devices[section]
 
-        lo, hi = src.get_features().memory_bounds
-        count = 0
-        for n in range(lo, hi + 1):
-            try:
-                if not getattr(src.get_memory(n), "empty", True):
-                    count += 1
-            except Exception:  # noqa: BLE001
-                continue
-        if count == 0:
-            self.announce.announce("That image has no channels to import.")
+        self._import_open_source(src)
+
+    def _import_open_source(self, src_radio) -> None:
+        """Choose numeric bulk or one explicit regular/special memory."""
+        from chirp_backend import migration
+
+        regular = migration.list_memory_locations(
+            src_radio, include_special=False
+        )
+        specials = migration.list_memory_locations(
+            src_radio, include_regular=False
+        )
+        target_specials = migration.list_memory_locations(
+            radio_backend.get_state().radio,
+            include_regular=False,
+            include_empty=True,
+        )
+
+        if not regular and not specials:
+            self.announce.announce("That image has no programmed memories to import.")
+            self.grid.SetFocus()
             return
-        self._import_results(src, count)
+
+        # Preserve the original one-dialog bulk flow unless either side exposes
+        # specials. Specials are never silently appended to a bulk batch.
+        mode = "bulk"
+        if specials or target_specials:
+            mode = self._choose_import_mode(
+                len(regular), len(specials), bool(target_specials)
+            )
+            if mode is None:
+                self.grid.SetFocus()
+                return
+
+        if mode == "bulk":
+            if not regular:
+                self.announce.announce(
+                    "That image has no ordinary channels to import."
+                )
+                self.grid.SetFocus()
+                return
+            self._import_results(src_radio, len(regular))
+            return
+
+        source = self._choose_memory_location(
+            regular + specials,
+            title="Choose source memory",
+            prompt=(
+                "Choose exactly one memory. Named special memories are marked "
+                "Special and are never part of bulk import."
+            ),
+            action_label="Select",
+        )
+        if source is None:
+            self.grid.SetFocus()
+            return
+        batch = migration.batch_from_identifiers(
+            src_radio, [source.identifier]
+        )
+
+        destination_type = "regular"
+        if target_specials:
+            destination_type = self._choose_destination_type(source.label)
+            if destination_type is None:
+                self.grid.SetFocus()
+                return
+        if destination_type == "regular":
+            self._import_batch(batch, 1)
+            return
+
+        default_special = (
+            source.identifier
+            if isinstance(source.identifier, str)
+            and any(
+                location.identifier == source.identifier
+                for location in target_specials
+            )
+            else None
+        )
+        destination = self._choose_memory_location(
+            target_specials,
+            title="Choose destination special memory",
+            prompt=(
+                "Choose the exact target special memory. VRP does not assume "
+                "that similarly named call, scan-limit, VFO, or home memories "
+                "mean the same thing on different radios."
+            ),
+            action_label="Import",
+            current_identifier=default_special,
+        )
+        if destination is None:
+            self.grid.SetFocus()
+            return
+        if not destination.empty and not self._confirm_special_overwrite(
+            destination
+        ):
+            self.grid.SetFocus()
+            return
+        self._import_batch_to_special(batch, str(destination.identifier))
+
+    def _choose_import_mode(
+        self, regular_count: int, special_count: int, target_has_specials: bool
+    ) -> str | None:
+        from vrp.special_memory_dialogs import ImportModeDialog
+
+        dlg = ImportModeDialog(
+            self,
+            regular_count,
+            special_count,
+            target_has_specials=target_has_specials,
+        )
+        try:
+            return dlg.get_mode() if dlg.ShowModal() == wx.ID_OK else None
+        finally:
+            dlg.Destroy()
+
+    def _choose_destination_type(self, source_label: str) -> str | None:
+        from vrp.special_memory_dialogs import DestinationTypeDialog
+
+        dlg = DestinationTypeDialog(self, source_label)
+        try:
+            return (
+                dlg.get_destination_type()
+                if dlg.ShowModal() == wx.ID_OK
+                else None
+            )
+        finally:
+            dlg.Destroy()
+
+    def _choose_memory_location(
+        self,
+        locations,
+        *,
+        title: str,
+        prompt: str,
+        action_label: str,
+        current_identifier=None,
+    ):
+        from vrp.special_memory_dialogs import MemoryPickerDialog
+
+        dlg = MemoryPickerDialog(
+            self,
+            locations,
+            title=title,
+            prompt=prompt,
+            action_label=action_label,
+            current_identifier=current_identifier,
+        )
+        try:
+            return dlg.get_selection() if dlg.ShowModal() == wx.ID_OK else None
+        finally:
+            dlg.Destroy()
+
+    def _confirm_special_overwrite(self, destination) -> bool:
+        dlg = wx.MessageDialog(
+            self,
+            (
+                f"{destination.label} is already programmed. Overwrite this "
+                "exact named special memory?"
+            ),
+            "Special memory is not empty",
+            wx.YES_NO | wx.NO_DEFAULT | wx.ICON_WARNING,
+        )
+        dlg.SetYesNoLabels("Overwrite", "Cancel")
+        try:
+            return dlg.ShowModal() == wx.ID_YES
+        finally:
+            dlg.Destroy()
 
     def _import_results(self, src_radio, count: int, numbers=None) -> None:
         """Shared import flow: pick destination, import, refresh grid, focus.
@@ -1714,7 +1878,14 @@ class MainWindow(wx.Frame):
         ``numbers`` optionally restricts the import to specific source channel
         numbers (the rows checked in the results picker); None imports all.
         """
-        from chirp_backend import memory_ops, migration
+        from chirp_backend import migration
+
+        batch = migration.batch_from_radio(src_radio, numbers=numbers)
+        self._import_batch(batch, count)
+
+    def _import_batch(self, batch, count: int) -> None:
+        """Pick a regular destination and apply a prepared migration batch."""
+        from chirp_backend import memory_ops
         from vrp.query_dialogs import ImportDestinationDialog
 
         low, high = radio_backend.get_state().memory_bounds
@@ -1729,7 +1900,6 @@ class MainWindow(wx.Frame):
             self.grid.SetFocus()
             return
 
-        batch = migration.batch_from_radio(src_radio, numbers=numbers)
         ok, message, affected, report = memory_ops.apply_migration_batch(
             batch, dest, overwrite
         )
@@ -1742,6 +1912,25 @@ class MainWindow(wx.Frame):
             self.announce.announce(message, assertive=True)
         if report.has_issues or report.warning_count:
             self._show_migration_report(report)
+
+    def _import_batch_to_special(self, batch, destination_name: str) -> None:
+        """Apply one prepared source memory to one explicit named special."""
+        from chirp_backend import memory_ops
+
+        ok, message, _affected, report = (
+            memory_ops.apply_migration_batch_to_special(
+                batch, destination_name, overwrite=True
+            )
+        )
+        if ok:
+            self.announce.announce(
+                f"{message} Destination special memory {destination_name}."
+            )
+        else:
+            self.announce.announce(message, assertive=True)
+        if report.has_issues or report.warning_count:
+            self._show_migration_report(report)
+        self.grid.SetFocus()
 
     def _first_empty_channel(self) -> int:
         low, high = radio_backend.get_state().memory_bounds

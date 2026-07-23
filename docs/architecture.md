@@ -53,6 +53,7 @@ main.py  (entry; launches the native UI)
        ├─ native wx dialogs (input/editing — first-class NVDA support):
        │    edit_dialog · ops_dialog · find_dialog · serial_dialogs ·
        │    settings_dialog · bank_dialog · query_dialogs · prefs_dialog ·
+       │    subdevice_dialog · special_memory_dialogs ·
        │    info_dialog (including migration issue reports)
        ├─ vrp/native/announce.py : Announcer — writes the status bar (field 0;
        │    field 1 permanently holds the CHIRP attribution) and speaks via
@@ -122,7 +123,7 @@ Cross-model channel transfer is one generic pipeline, not a matrix of radio
 pairs:
 
 ```text
-source image / CSV / query / clipboard snapshots
+ source image / CSV / query / clipboard snapshots or one memory identifier
                   │
                   ▼
  migration.MigrationBatch
@@ -140,12 +141,17 @@ source image / CSV / query / clipboard snapshots
   per-channel result model. It uses CHIRP's `Memory`/`DVMemory`,
   `RadioFeatures`, `directory.radio_class_id`, and `import_logic.import_mem`.
 - `chirp_backend.memory_ops.apply_migration_batch` supplies the active target
-  radio and wraps all successful writes in one undo transaction. The older
-  `import_memories` API is a compatibility wrapper around this path.
+  radio and wraps all successful writes in one undo transaction.
+  `apply_migration_batch_to_special` does the same for one explicitly selected
+  named destination. The older `import_memories` API is a compatibility wrapper
+  around the ordinary path.
 - `MainWindow._import_results` (File Import, RepeaterBook, Frequency lists) and
-  cross-image `on_paste` both use this engine. Same-document-and-section Paste
-  continues to use raw `paste_block`, because only that exact context may safely
-  erase/move sources or shift existing rows to make room.
+  cross-image `on_paste` use the ordinary engine. File Import additionally
+  offers a one-memory path when source or target exposes specials: the user
+  explicitly selects a regular/special source and a numbered/named-special
+  destination. Same-document-and-section Paste continues to use raw
+  `paste_block`, because only that exact context may safely erase/move sources
+  or shift existing rows to make room.
 - A CHIRP subdevice parent is retained as `RadioState.physical_radio` for Save,
   Settings, prompts, and Upload. The selected child remains `RadioState.radio`
   for the memory grid, banks, export, and migration. `load_image_set` discovers
@@ -162,9 +168,14 @@ source image / CSV / query / clipboard snapshots
 - Migration is intentionally partial: incompatible, occupied, failed, and
   out-of-space rows are retained in `MigrationReport`, while compatible rows
   still write. Issue/warning reports use the read-only, copyable `InfoDialog`.
-- Current migration boundary: ordinary numbered memories. Radio settings, bank
-  memberships, and special memories are not transferred between models;
-  subdevice selection itself is implemented.
+- Ordinary bulk migration is deliberately numeric-only. Named special memories
+  transfer only through the explicit one-source/one-target File Import flow;
+  same-name targets may be preselected but never applied automatically.
+  Special→regular, regular→special, and special→special all use CHIRP import
+  conversion and remain one-step undoable.
+- Current migration boundary: memory contents. Radio settings and bank
+  memberships are not transferred between models; subdevice selection and
+  explicit named-special transfer are implemented.
 
 See
 `docs/superpowers/plans/2026-07-21-cross-radio-migration.md` for decisions,

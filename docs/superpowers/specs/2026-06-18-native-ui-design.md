@@ -4,11 +4,12 @@
 **Date:** 2026-06-18
 **Branch:** `feat/native-ui` (off `main`)
 
-> **Historical spec / current-state note (2026-07-21):** the native UI is the
+> **Historical spec / current-state note (2026-07-22):** the native UI is the
 > sole UI and the webview has been removed. The clipboard deferred here later
 > landed, and now supports generic cross-image/section radio migration plus an
-> accessible static/dynamic memory-section chooser. Current behavior and
-> remaining special-memory/bank-mapping work live in
+> accessible static/dynamic memory-section chooser and explicit one-memory
+> transfer to/from named special channels. Current behavior and the remaining
+> bank-mapping, D-STAR, and acceptance work live in
 > `docs/superpowers/plans/2026-07-21-cross-radio-migration.md`.
 
 ## Goal

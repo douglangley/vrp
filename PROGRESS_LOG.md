@@ -6,6 +6,45 @@ architecture, keyboard map, and CHIRP feature-coverage checklist.
 
 ---
 
+## 2026-07-22 — Explicit special-memory migration (Phase 3)
+
+**Outcome:** File ▸ Import can now transfer one explicitly selected regular or
+named special memory to either a numbered channel or a named special memory.
+Ordinary bulk import remains numeric-only: it never silently includes call
+channels, scan limits, VFOs, home channels, weather memories, or other
+driver-defined specials. A same-name destination may be preselected, but the
+user must still confirm the mapping; an occupied special requires a separate
+overwrite confirmation.
+
+**CHIRP-compatible backend.** `chirp_backend/migration.py` now catalogs regular
+and special memory identifiers, builds a one-memory batch from either kind, and
+routes special→regular, regular→special, and special→special conversion through
+CHIRP `import_logic.import_mem`. Named targets preserve the destination
+driver's virtual number, `extd_number`, and real immutable fields. Foreign
+driver extras are discarded as in ordinary cross-model migration. Known driver
+limitations—invalid immutable declarations, special slots that cannot be
+reread by virtual number, and plain out-of-band setter exceptions—produce
+per-memory incompatibility results instead of crashes.
+
+**Accessible UX and history.** New native dialogs provide explicit bulk-versus-
+single and numbered-versus-special choices plus a filterable source/target
+memory picker with adjacent labels, match counts, keyboard operation, and
+Escape. Same-name special mapping is only a convenience preselection. The
+single write is one undo/redo transaction; undo restores an empty or populated
+special by name, and edits survive Save/reopen through the physical parent
+image.
+
+**Verification:** full suite **440 passed**. The new opt-in special audit swept
+all **1,989 named special slots across 70 radio targets from 358 pinned
+images**: 1,007 imports succeeded, 982 returned expected incompatibilities, and
+**0 unexpected failures**. The ordinary audit remains **385 targets: 276
+imported, 109 expected incompatibilities, 0 unexpected failures**. The vendored
+`chirp/` tree remains unmodified.
+
+**Next:** Phase 4 explicit bank mapping and undo policy, followed by Phase 5
+D-STAR call-list side-effect tests and Phase 6 NVDA/VoiceOver and hardware
+acceptance.
+
 ## 2026-07-21 — Generic cross-radio channel migration (Phase 2)
 
 **Outcome:** CHIRP images that expose multiple memory devices—sides, bands,

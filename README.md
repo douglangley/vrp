@@ -122,6 +122,9 @@ Windows (exposed to MSAA/UIA so **NVDA** reads it):
   frequency-list import
 - Direct channel migration from another radio image or CHIRP CSV, with
   overwrite/skip, partial success, accessible details, and one-step undo
+- Explicit one-memory transfer between regular channels and driver-defined
+  named specials (call, home, scan-limit, VFO, and similar slots); bulk import
+  remains numeric-only and never silently includes specials
 - Multi-side/zone radio images: accessible memory-section selection for Open,
   Import, Download, and later switching, while saving/uploading the full image
 - High contrast and forced-colors (Windows High Contrast) support
@@ -148,6 +151,9 @@ vrp/
   find_dialog.py          Native wx Find dialog.
   serial_dialogs.py       Native wx Download / Upload / favorites / progress dialogs.
   subdevice_dialog.py      Filterable native memory-section chooser.
+  special_memory_dialogs.py
+                         Explicit import mode/destination choices and a
+                         filterable regular/special memory chooser.
   settings_dialog.py      Native wx radio settings editor, Treebook.
   bank_dialog.py          Native wx dialog to assign a channel to banks.
   query_dialogs.py        Native wx query-source param + import dialogs.
@@ -176,6 +182,8 @@ tests/                   Unit tests (no radio hardware needed).
 tools/
   update_chirp.py        Fetches/tests/pins a new CHIRP commit.
   audit_migrations.py    Sweeps generic migration across pinned CHIRP images.
+  audit_special_migrations.py
+                         Sweeps every named special in pinned CHIRP images.
 build.py                 PyInstaller build script.
 pyproject.toml           uv-managed project definition (Python 3.11 pinned).
 ```

@@ -113,6 +113,8 @@ obscure it. Any future help/docs page must carry it too.
   - info_dialog.py     — read-only multiline edit box for reviewing text (Radio
                          Info, "Radio details…", migration issue reports);
                          navigable + copyable
+  - special_memory_dialogs.py — explicit import-mode/destination choices and
+                         filterable regular/special memory picker
   - about_dialog.py    — Help ▸ About: build info + the CHIRP acknowledgement in
                          two read-only edit boxes (navigable/copyable, unlike
                          wx.adv.AboutBox's static text)
@@ -140,7 +142,8 @@ obscure it. Any future help/docs page must carry it too.
                          `_build_help_menu`.
 - tests/               — unit tests (no hardware needed)
 - tools/               — update_chirp.py (CHIRP version bump),
-                         audit_migrations.py (all pinned driver fixtures),
+                         audit_migrations.py + audit_special_migrations.py
+                         (all pinned driver fixtures and named special slots),
                          release helpers, and throwaway spikes
 - build.py             — PyInstaller build script
 - chirp/               — upstream CHIRP library (DO NOT EDIT)
@@ -231,7 +234,7 @@ months.
 - mem.empty == True means the channel slot is unused
 - mem.immutable is a list of field names that cannot be changed for that memory
 
-### Cross-radio migration invariants (2026-07-21)
+### Cross-radio migration invariants (updated 2026-07-22)
 
 - Cross-model channel transfer is **generic**, never a pairwise model matrix.
   Build a `chirp_backend.migration.MigrationBatch` containing source
@@ -247,6 +250,13 @@ months.
   must converge on `memory_ops.apply_migration_batch`. Keep
   `import_memories` only as the compatibility wrapper. Never add a separate
   converter to one of those entry points.
+- Ordinary bulk batches enumerate numeric channels only. Named specials are
+  never silently included. File Import's explicit one-memory path may select a
+  regular or special source and map it to a numbered or named-special target;
+  named writes use `apply_migration_batch_to_special`.
+- Same-name special targets may be preselected but never auto-applied. Preserve
+  the target special's virtual number, `extd_number`, and real immutable values,
+  and require a separate confirmation before overwriting an occupied special.
 - Preserve partial success and every per-channel reason in `MigrationReport`.
   A UI issue report must use the navigable/copyable `InfoDialog`, not a long
   static `MessageBox`.
@@ -266,9 +276,11 @@ months.
   Open, Import, post-Download, and Radio ▸ Select memory section… share the
   accessible `SubdeviceDialog`; never expose generated child class names as
   labels—use CHIRP `VARIANT` and channel bounds.
-- Current migration scope is ordinary numbered memories. Banks, radio-wide
-  settings, and special memories are follow-ups; never silently claim they
-  moved. Phase 2 subdevice selection is complete in commit `00af255`. See
+- Current migration scope is ordinary numbered memories plus explicitly mapped
+  one-at-a-time special memories. Banks and radio-wide settings remain
+  follow-ups; never silently claim they moved. Phase 2 subdevice selection is
+  complete in commit `00af255`; Phase 3 special-memory migration is complete.
+  See
   `docs/superpowers/plans/2026-07-21-cross-radio-migration.md`.
 
 ## Memory Operations Reference
@@ -276,8 +288,9 @@ months.
 Ordinary operations are implemented in `chirp_backend/memory_ops.py`. When
 adding new operations, follow the same pattern: pure functions taking a radio
 object + parameters, returning `(success: bool, message: str,
-affected_channels: list)`. `apply_migration_batch` deliberately returns a
-fourth `MigrationReport` so the UI never loses itemised incompatibilities.
+affected_memory_identifiers: list)`. `apply_migration_batch` and
+`apply_migration_batch_to_special` deliberately return a fourth
+`MigrationReport` so the UI never loses itemised incompatibilities.
 
 Operations that modify the radio must call radio.set_memory() or
 radio.erase_memory() — never modify the memory map directly.
@@ -326,11 +339,13 @@ venv and errors clearly if pytest is missing. The run scripts use
 `uv sync --inexact`, so launching the app no longer prunes pytest from the venv.
 Tests use chirp/tests/images/ image files — no radio hardware needed.
 Every memory operation in memory_ops.py must have a corresponding test.
-After migration or CHIRP-pin changes, also run the opt-in broad audit:
-`.venv\Scripts\python.exe tools\audit_migrations.py`. The 2026-07-21 baseline
-is 385 targets from 358 pinned images, with zero unexpected failures; normal
-band/feature incompatibilities are expected and must remain classified rather
-than treated as crashes.
+After migration or CHIRP-pin changes, also run both opt-in broad audits:
+`.venv\Scripts\python.exe tools\audit_migrations.py` and
+`.venv\Scripts\python.exe tools\audit_special_migrations.py`. The baselines are
+385 ordinary targets and 1,989 named special slots across 70 targets from 358
+pinned images, both with zero unexpected failures. Normal band/feature/driver
+incompatibilities are expected and must remain classified rather than treated
+as crashes.
 
 ## Running
 
