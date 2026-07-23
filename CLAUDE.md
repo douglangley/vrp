@@ -95,6 +95,7 @@ obscure it. Any future help/docs page must carry it too.
                          sections (multi-side/VFO/band/zone images)
   - settings_dialog.py — native wx radio settings editor, Treebook
   - bank_dialog.py     — native wx dialog to assign a channel to banks
+  - bank_mapping_dialog.py — filterable explicit cross-radio bank mapping
   - query_dialogs.py   — native wx ImportDestinationDialog (shared by Import
                          from File + query import) and RepeaterBookQueryDialog
                          (country/state + filters); RepeaterBook backend is
@@ -129,7 +130,8 @@ obscure it. Any future help/docs page must carry it too.
                          radio (incl. parent/selected-subdevice ownership,
                          context identity + describe_model),
                          migration (generic cross-radio conversion + detailed
-                         reports), memory_ops, undo (channel-edit undo/redo),
+                         reports), memory_ops, undo (channel + auxiliary bank
+                         state undo/redo),
                          bandplan (suggested repeater offset + band defaults, by
                          region), col_defs, bank_ops, serial_trace, stock_configs,
                          repeaterbook (RepeaterBook query via CHIRP's mirror;
@@ -142,8 +144,9 @@ obscure it. Any future help/docs page must carry it too.
                          `_build_help_menu`.
 - tests/               — unit tests (no hardware needed)
 - tools/               — update_chirp.py (CHIRP version bump),
-                         audit_migrations.py + audit_special_migrations.py
-                         (all pinned driver fixtures and named special slots),
+                         audit_migrations.py + audit_special_migrations.py +
+                         audit_bank_migrations.py (all pinned driver fixtures,
+                         named special slots, and bank models),
                          release helpers, and throwaway spikes
 - build.py             — PyInstaller build script
 - chirp/               — upstream CHIRP library (DO NOT EDIT)
@@ -234,7 +237,7 @@ months.
 - mem.empty == True means the channel slot is unused
 - mem.immutable is a list of field names that cannot be changed for that memory
 
-### Cross-radio migration invariants (updated 2026-07-22)
+### Cross-radio migration invariants (updated 2026-07-23)
 
 - Cross-model channel transfer is **generic**, never a pairwise model matrix.
   Build a `chirp_backend.migration.MigrationBatch` containing source
@@ -276,10 +279,26 @@ months.
   Open, Import, post-Download, and Radio ▸ Select memory section… share the
   accessible `SubdeviceDialog`; never expose generated child class names as
   labels—use CHIRP `VARIANT` and channel bounds.
-- Current migration scope is ordinary numbered memories plus explicitly mapped
-  one-at-a-time special memories. Banks and radio-wide settings remain
-  follow-ups; never silently claim they moved. Phase 2 subdevice selection is
-  complete in commit `00af255`; Phase 3 special-memory migration is complete.
+- Capture source bank metadata while the source image/section is active.
+  Cross-image clipboard state stores that complete `MigrationBatch`; do not try
+  to reread source banks after the context changes.
+- Bank mapping is explicit. Show only used source banks; unique non-empty exact
+  names may be suggested but require confirmation, position matching is
+  user-invoked, and unmapped source banks are omitted. Never rename destination
+  banks or silently emulate CHIRP's positional `import_bank`.
+- When a bank plan is enabled, replace each successfully imported channel's
+  memberships exactly. Unbanked sources require a clear-versus-keep choice;
+  fixed/no-bank targets require channels-only confirmation. Verify every bank
+  write and restore exact membership/order on failure, retaining the memory
+  import with a report warning.
+- Bank state participates in the same Undo/Redo transaction as its memory
+  write through `UndoManager` auxiliary snapshots. Direct Channel banks edits
+  are undoable too. Preserve support for drivers whose live behavior allows
+  multiple memberships even when their class hierarchy says otherwise.
+- Current migration scope is ordinary numbered memories, explicitly mapped
+  one-at-a-time special memories, and explicitly mapped ordinary bank
+  memberships. Radio-wide settings and bank names remain out of scope; never
+  silently claim they moved. Phases 2–4 are complete.
   See
   `docs/superpowers/plans/2026-07-21-cross-radio-migration.md`.
 
@@ -339,13 +358,14 @@ venv and errors clearly if pytest is missing. The run scripts use
 `uv sync --inexact`, so launching the app no longer prunes pytest from the venv.
 Tests use chirp/tests/images/ image files — no radio hardware needed.
 Every memory operation in memory_ops.py must have a corresponding test.
-After migration or CHIRP-pin changes, also run both opt-in broad audits:
+After migration or CHIRP-pin changes, also run all opt-in broad audits:
 `.venv\Scripts\python.exe tools\audit_migrations.py` and
-`.venv\Scripts\python.exe tools\audit_special_migrations.py`. The baselines are
-385 ordinary targets and 1,989 named special slots across 70 targets from 358
-pinned images, both with zero unexpected failures. Normal band/feature/driver
-incompatibilities are expected and must remain classified rather than treated
-as crashes.
+`.venv\Scripts\python.exe tools\audit_special_migrations.py`, plus
+`.venv\Scripts\python.exe tools\audit_bank_migrations.py`. The baselines are
+385 ordinary targets; 1,989 named special slots across 70 targets; and 70 bank
+models (54 mutable, 16 fixed) from 358 pinned images, all with zero unexpected
+failures. Normal band/feature/driver incompatibilities are expected and must
+remain classified rather than treated as crashes.
 
 ## Running
 

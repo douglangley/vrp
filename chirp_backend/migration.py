@@ -79,6 +79,11 @@ class MigrationBatch:
     entries: list[MigrationEntry] = field(default_factory=list)
     source_document_id: str | None = None
     read_errors: list[MigrationReadError] = field(default_factory=list)
+    source_banks: tuple[object, ...] = ()
+    source_bank_memberships: dict[int | str, tuple[int, ...]] = field(
+        default_factory=dict
+    )
+    bank_read_errors: dict[int | str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -89,6 +94,8 @@ class MigrationItemResult:
     message: str = ""
     warnings: tuple[str, ...] = ()
     overwritten: bool = False
+    bank_status: str = ""
+    bank_message: str = ""
 
 
 @dataclass
@@ -131,6 +138,17 @@ class MigrationReport:
         return sum(len(item.warnings) for item in self.items)
 
     @property
+    def bank_updated(self) -> int:
+        return self._count_bank_status("updated")
+
+    @property
+    def bank_failed(self) -> int:
+        return self._count_bank_status("failed")
+
+    def _count_bank_status(self, status: str) -> int:
+        return sum(item.bank_status == status for item in self.items)
+
+    @property
     def affected(self) -> list[int | str]:
         return [
             item.destination_number
@@ -162,6 +180,8 @@ class MigrationReport:
             parts.append(f"{self.out_of_space} did not fit")
         if self.warning_count:
             parts.append(f"{self.warning_count} warning(s)")
+        if self.bank_updated:
+            parts.append(f"banks applied to {self.bank_updated} channel(s)")
         return ", ".join(parts) + "."
 
     def details_text(self) -> str:
@@ -177,9 +197,53 @@ class MigrationReport:
                 route += f" -> destination {item.destination_number}"
             detail = item.message or item.status.replace("_", " ")
             lines.append(f"{route}: {item.status.replace('_', ' ')} — {detail}")
+            if item.bank_status:
+                lines.append(
+                    f"  Banks: {item.bank_status.replace('_', ' ')} — "
+                    f"{item.bank_message}"
+                )
             for warning in item.warnings:
                 lines.append(f"  Warning: {warning}")
         return "\n".join(lines).rstrip()
+
+
+def _capture_bank_metadata(source_radio, batch: MigrationBatch) -> None:
+    """Attach source-bank identities and per-entry memberships to a batch."""
+    from chirp_backend import bank_ops
+
+    catalog = bank_ops.describe_banks(source_radio)
+    if not catalog.available or not catalog.banks:
+        return
+    batch.source_banks = catalog.banks
+    position_by_index = {bank.index: bank.position for bank in catalog.banks}
+    for entry in batch.entries:
+        if not isinstance(entry.source_number, int):
+            continue
+        try:
+            snapshot = bank_ops.capture_bank_membership(
+                source_radio, entry.source_number
+            )
+            if snapshot is None:
+                continue
+            positions = []
+            for membership in snapshot.memberships:
+                if membership.index not in position_by_index:
+                    raise ValueError(
+                        f"Bank {membership.index} is not in the source catalog"
+                    )
+                positions.append(position_by_index[membership.index])
+            batch.source_bank_memberships[entry.source_number] = tuple(positions)
+        except Exception as exc:  # noqa: BLE001 - retain a per-channel reason
+            batch.bank_read_errors[entry.source_number] = str(exc)
+
+
+def used_source_banks(batch: MigrationBatch) -> tuple[object, ...]:
+    """Return only source banks referenced by selected batch entries."""
+    from chirp_backend import bank_ops
+
+    return bank_ops.with_member_counts(
+        batch.source_banks, batch.source_bank_memberships
+    )
 
 
 def batch_from_memories(
@@ -189,6 +253,9 @@ def batch_from_memories(
     source_radio_id: str,
     source_label: str,
     source_document_id: str | None = None,
+    source_banks=(),
+    source_bank_memberships=None,
+    bank_read_errors=None,
 ) -> MigrationBatch:
     """Build a migration batch from clipboard-style memory snapshots."""
     entries = [
@@ -202,6 +269,9 @@ def batch_from_memories(
         source_features=source_features,
         entries=entries,
         source_document_id=source_document_id,
+        source_banks=tuple(source_banks),
+        source_bank_memberships=dict(source_bank_memberships or {}),
+        bank_read_errors=dict(bank_read_errors or {}),
     )
 
 
@@ -240,6 +310,7 @@ def batch_from_radio(
         if getattr(memory, "empty", False) and not include_empty:
             continue
         batch.entries.append(MigrationEntry(number, memory.dupe()))
+    _capture_bank_metadata(source_radio, batch)
     return batch
 
 
@@ -347,7 +418,46 @@ def batch_from_identifiers(
         if getattr(memory, "empty", False) and not include_empty:
             continue
         batch.entries.append(MigrationEntry(identifier, memory.dupe()))
+    _capture_bank_metadata(source_radio, batch)
     return batch
+
+
+def _apply_bank_mapping(
+    target_radio,
+    batch: MigrationBatch,
+    source_number: int | str,
+    destination_number: int,
+    bank_mapping: dict[int, object],
+) -> tuple[str, str, str | None]:
+    """Apply one imported row's explicit bank plan.
+
+    Returns ``(status, message, warning)``. Bank failures do not roll back a
+    compatible memory write; they are retained as a detailed migration warning.
+    """
+    from chirp_backend import bank_ops
+
+    if source_number in batch.bank_read_errors:
+        message = (
+            "Source bank memberships could not be read: "
+            f"{batch.bank_read_errors[source_number]}"
+        )
+        return "failed", message, f"Bank mapping failed: {message}"
+    positions = batch.source_bank_memberships.get(source_number, ())
+    desired = [
+        bank_mapping[position]
+        for position in positions
+        if position in bank_mapping
+    ]
+    ok, message, _changed = bank_ops.replace_bank_memberships(
+        target_radio, destination_number, desired
+    )
+    if not ok:
+        return "failed", message, f"Bank mapping failed: {message}"
+    if desired:
+        detail = f"Mapped to {len(set(desired))} destination bank(s)"
+    else:
+        detail = "No mapped source banks; destination memberships cleared"
+    return "updated", detail, None
 
 
 def apply_batch(
@@ -356,6 +466,7 @@ def apply_batch(
     destination: int,
     *,
     overwrite: bool = True,
+    bank_mapping: dict[int, object] | None = None,
 ) -> MigrationReport:
     """Convert and write a batch to consecutive target slots.
 
@@ -445,6 +556,18 @@ def apply_batch(
                     )
                 warnings = tuple(str(msg) for msg in validation_warnings)
             target_radio.set_memory(converted)
+            bank_status = ""
+            bank_message = ""
+            if bank_mapping is not None:
+                bank_status, bank_message, bank_warning = _apply_bank_mapping(
+                    target_radio,
+                    batch,
+                    entry.source_number,
+                    dest,
+                    bank_mapping,
+                )
+                if bank_warning:
+                    warnings += (bank_warning,)
         except (
             import_logic.DestNotCompatible,
             chirp_common.ImmutableValueError,
@@ -482,6 +605,8 @@ def apply_batch(
                     "Imported",
                     warnings,
                     overwritten=was_occupied,
+                    bank_status=bank_status,
+                    bank_message=bank_message,
                 )
             )
         dest += 1

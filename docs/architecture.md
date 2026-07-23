@@ -53,7 +53,7 @@ main.py  (entry; launches the native UI)
        ├─ native wx dialogs (input/editing — first-class NVDA support):
        │    edit_dialog · ops_dialog · find_dialog · serial_dialogs ·
        │    settings_dialog · bank_dialog · query_dialogs · prefs_dialog ·
-       │    subdevice_dialog · special_memory_dialogs ·
+       │    subdevice_dialog · special_memory_dialogs · bank_mapping_dialog ·
        │    info_dialog (including migration issue reports)
        ├─ vrp/native/announce.py : Announcer — writes the status bar (field 0;
        │    field 1 permanently holds the CHIRP attribution) and speaks via
@@ -127,7 +127,7 @@ pairs:
                   │
                   ▼
  migration.MigrationBatch
- (Memory snapshots + source RadioFeatures + radio/source-context identity)
+ (Memory snapshots + source features/identity + optional bank memberships)
                   │
                   ▼
  chirp.import_logic.import_mem(target, source_features, memory,
@@ -165,6 +165,20 @@ pairs:
   undo history.
 - Driver-private `Memory.extra` values are kept only when CHIRP radio class IDs
   match. Cross-driver extras are cleared before conversion/write.
+- A batch captured from a bank-capable source includes its ordered bank catalog
+  and per-channel memberships. For ordinary File Import and cross-image Paste,
+  `BankMappingDialog` shows only used source banks and requires an explicit
+  mapping confirmation. Unique exact-name matches may be suggested; position
+  matching is opt-in, unmapped banks are omitted, and destination bank names
+  are never renamed.
+- When bank transfer is enabled, each successful channel gets exactly the
+  mapped target memberships. `bank_ops.replace_bank_memberships` validates the
+  plan, verifies the driver write, and restores the exact prior memberships and
+  index ordering after a failure. A bank failure becomes a per-channel warning
+  without discarding the compatible memory import.
+- `UndoManager` accepts optional auxiliary snapshot/restore callables. Mutable
+  bank radios use them so the memory and bank changes from an import—and direct
+  Channel banks edits—undo and redo together.
 - Migration is intentionally partial: incompatible, occupied, failed, and
   out-of-space rows are retained in `MigrationReport`, while compatible rows
   still write. Issue/warning reports use the read-only, copyable `InfoDialog`.
@@ -173,9 +187,10 @@ pairs:
   same-name targets may be preselected but never applied automatically.
   Special→regular, regular→special, and special→special all use CHIRP import
   conversion and remain one-step undoable.
-- Current migration boundary: memory contents. Radio settings and bank
-  memberships are not transferred between models; subdevice selection and
-  explicit named-special transfer are implemented.
+- Current migration boundary: memory contents plus explicitly mapped ordinary
+  channel bank memberships. Radio-wide settings and bank names are not
+  transferred; subdevice selection and explicit named-special transfer are
+  implemented.
 
 See
 `docs/superpowers/plans/2026-07-21-cross-radio-migration.md` for decisions,

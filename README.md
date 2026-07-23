@@ -122,6 +122,9 @@ Windows (exposed to MSAA/UIA so **NVDA** reads it):
   frequency-list import
 - Direct channel migration from another radio image or CHIRP CSV, with
   overwrite/skip, partial success, accessible details, and one-step undo
+- Explicit cross-radio bank-membership mapping for ordinary imports and
+  cross-image Paste, with exact-name suggestions, opt-in position matching,
+  per-channel rollback, and memory-plus-bank Undo/Redo
 - Explicit one-memory transfer between regular channels and driver-defined
   named specials (call, home, scan-limit, VFO, and similar slots); bulk import
   remains numeric-only and never silently includes specials
@@ -156,6 +159,7 @@ vrp/
                          filterable regular/special memory chooser.
   settings_dialog.py      Native wx radio settings editor, Treebook.
   bank_dialog.py          Native wx dialog to assign a channel to banks.
+  bank_mapping_dialog.py  Filterable explicit cross-radio bank mapper.
   query_dialogs.py        Native wx query-source param + import dialogs.
   prefs_dialog.py         Native wx Preferences dialog.
   info_dialog.py          Read-only multiline edit box (Radio Info, model and
@@ -171,9 +175,9 @@ chirp_backend/
   memory_ops.py          Field edits + range operations: set/update channel,
                          move, copy, migrate, delete+shift, sort, arrange,
                          find/goto.
-  undo.py                Channel-edit undo/redo (UndoManager).
+  undo.py                Channel and auxiliary bank-state undo/redo.
   col_defs.py            Column definitions mirroring CHIRP's column hierarchy.
-  bank_ops.py            Bank membership operations (assign channels to banks).
+  bank_ops.py            Bank discovery, atomic membership replacement/mapping.
   bandplan.py            Suggested repeater offset + band defaults, by region.
   repeaterbook.py        RepeaterBook query through CHIRP's mirror.
   stock_configs.py       Finds/opens pinned CHIRP stock frequency lists.
@@ -184,6 +188,8 @@ tools/
   audit_migrations.py    Sweeps generic migration across pinned CHIRP images.
   audit_special_migrations.py
                          Sweeps every named special in pinned CHIRP images.
+  audit_bank_migrations.py
+                         Verifies mutable/fixed bank behavior and rollback.
 build.py                 PyInstaller build script.
 pyproject.toml           uv-managed project definition (Python 3.11 pinned).
 ```

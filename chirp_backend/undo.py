@@ -46,16 +46,28 @@ class _Entry:
     label: str
     before: list
     after: list
+    before_aux: dict
+    after_aux: dict
 
 
 class UndoManager:
     """A bounded undo + redo history over injected radio read/write callables."""
 
-    def __init__(self, get_memory, set_memory, erase_memory,
-                 max_depth: int = DEFAULT_MAX_DEPTH) -> None:
+    def __init__(
+        self,
+        get_memory,
+        set_memory,
+        erase_memory,
+        max_depth: int = DEFAULT_MAX_DEPTH,
+        *,
+        get_aux_state=None,
+        set_aux_state=None,
+    ) -> None:
         self._get = get_memory
         self._set = set_memory
         self._erase = erase_memory
+        self._get_aux = get_aux_state
+        self._set_aux = set_aux_state
         self._max = max_depth
         self._undo: list[_Entry] = []
         self._redo: list[_Entry] = []
@@ -63,6 +75,7 @@ class UndoManager:
         self._depth = 0
         self._label: str | None = None
         self._before: dict[int | str, object] = {}
+        self._before_aux: dict[int | str, object] = {}
         self._order: list[int | str] = []
         self._applying = False  # True while restoring (suppresses recording)
 
@@ -87,6 +100,7 @@ class UndoManager:
         if outermost:
             self._label = label
             self._before = {}
+            self._before_aux = {}
             self._order = []
         self._depth += 1
         return outermost
@@ -108,6 +122,13 @@ class UndoManager:
         except Exception:  # noqa: BLE001 — can't snapshot: skip (best effort)
             LOG.exception("undo: failed to snapshot channel %s", number)
             return
+        if self._get_aux is not None:
+            try:
+                state = self._get_aux(number)
+                if state is not None:
+                    self._before_aux[number] = state
+            except Exception:  # noqa: BLE001 - memory undo still remains useful
+                LOG.exception("undo: failed to snapshot auxiliary state for %s", number)
         self._order.append(number)
 
     def commit(self) -> None:
@@ -121,12 +142,30 @@ class UndoManager:
             return
         before = [self._before[n] for n in self._order]
         after = []
+        after_aux = {}
         for n in self._order:
             try:
                 after.append(self._get(n).dupe())
             except Exception:  # noqa: BLE001
                 LOG.exception("undo: failed to capture after-image for %s", n)
-        self._undo.append(_Entry(self._label or "", before, after))
+            if n in self._before_aux and self._get_aux is not None:
+                try:
+                    state = self._get_aux(n)
+                    if state is not None:
+                        after_aux[n] = state
+                except Exception:  # noqa: BLE001
+                    LOG.exception(
+                        "undo: failed to capture auxiliary after-state for %s", n
+                    )
+        self._undo.append(
+            _Entry(
+                self._label or "",
+                before,
+                after,
+                dict(self._before_aux),
+                after_aux,
+            )
+        )
         if len(self._undo) > self._max:
             self._undo.pop(0)
         self._redo.clear()
@@ -142,6 +181,7 @@ class UndoManager:
     def _reset_txn(self) -> None:
         self._label = None
         self._before = {}
+        self._before_aux = {}
         self._order = []
 
     # -- undo / redo --------------------------------------------------
@@ -153,7 +193,7 @@ class UndoManager:
         if not self._undo:
             return None
         entry = self._undo.pop()
-        self._apply(entry.before)
+        self._apply(entry.before, entry.before_aux)
         self._redo.append(entry)
         return entry.label, [
             getattr(m, "extd_number", "") or m.number for m in entry.before
@@ -166,17 +206,18 @@ class UndoManager:
         if not self._redo:
             return None
         entry = self._redo.pop()
-        self._apply(entry.after)
+        self._apply(entry.after, entry.after_aux)
         self._undo.append(entry)
         return entry.label, [
             getattr(m, "extd_number", "") or m.number for m in entry.after
         ]
 
-    def _apply(self, images: list) -> None:
+    def _apply(self, images: list, aux_states: dict) -> None:
         """Write a set of snapshots back to the radio without recording them.
         An empty ordinary snapshot erases its slot. Named special snapshots and
         populated ordinary snapshots are set from a dupe, so the stored
-        snapshot stays pristine for a later undo/redo."""
+        snapshot stays pristine for a later undo/redo. Optional auxiliary state
+        (currently bank memberships/order) is restored after memory contents."""
         self._applying = True
         try:
             for mem in images:
@@ -187,6 +228,15 @@ class UndoManager:
                     self._erase(mem.number)
                 else:
                     self._set(mem.dupe())
+            if self._set_aux is not None:
+                for number, state in aux_states.items():
+                    try:
+                        self._set_aux(number, state)
+                    except Exception:  # noqa: BLE001 - restore remaining entries
+                        LOG.exception(
+                            "undo: failed to restore auxiliary state for %s",
+                            number,
+                        )
         finally:
             self._applying = False
 

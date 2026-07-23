@@ -1,10 +1,11 @@
 # Plan — Generic cross-radio channel migration
 
-> **Status:** Phases 1–3 implemented and verified through 2026-07-22 on branch
+> **Status:** Phases 1–4 implemented and verified through 2026-07-23 on branch
 > `feature/cross-radio-migration` (Phase 1 commit `69cf9b1`; Phase 2 commit
-> `00af255`). The generic migration engine, subdevice-aware image UX, and
-> explicit single special-memory workflow are complete. The remaining phases
-> cover banks, D-STAR side effects, and broader hands-on testing.
+> `00af255`; Phase 3 commit `56f6fd5`). The generic migration engine,
+> subdevice-aware image UX, explicit single special-memory workflow, and
+> explicit bank mapping are complete. The remaining phases cover D-STAR side
+> effects and broader hands-on testing.
 
 ## Goal
 
@@ -85,16 +86,23 @@ Therefore VRP must use that generic pipeline, not invent pairwise migrations.
   report display.
 - `vrp/special_memory_dialogs.py` — accessible import-mode, destination-type,
   and filterable regular/special memory pickers.
+- `vrp/bank_mapping_dialog.py` — filterable, explicit source-to-destination
+  bank mapping and destination-bank picker.
 - `tests/test_migration.py`, `tests/test_clipboard.py`,
   `tests/test_export_csv.py`, `tests/test_memory_ops.py` — real-driver and UI
   regressions.
 - `tests/test_special_migration.py`, `tests/test_special_memory_dialogs.py`,
   `tests/test_special_import_ui.py` — special conversion, persistence,
   accessibility, and UI-policy regressions.
+- `tests/test_bank_migration.py`, `tests/test_bank_mapping_dialog.py`, and
+  `tests/test_bank_import_ui.py` — real-driver bank mapping, rollback,
+  undo/persistence, accessible dialog, clipboard, and import-policy coverage.
 - `tools/audit_migrations.py` — opt-in sweep across every pinned CHIRP image and
   exposed subdevice.
 - `tools/audit_special_migrations.py` — opt-in sweep of a representative source
   memory into every named special slot exposed by the pinned fixture corpus.
+- `tools/audit_bank_migrations.py` — opt-in mutable-write/verify/exact-rollback
+  and fixed-bank rejection sweep across every pinned bank model.
 
 ## Decisions implemented in Phase 2
 
@@ -169,9 +177,42 @@ clipboard test modules.
    Escape. The import-mode and destination-type choices are explicit native
    radio controls.
 
-## Verification baseline after Phase 3 (2026-07-22)
+## Decisions implemented in Phase 4
 
-- Full VRP suite: **440 passed**.
+1. **Bank transfer is explicit.** Only banks used by the selected source
+   channels appear. Unique, non-empty exact-name matches are suggestions; the
+   user confirms them in the mapping dialog. Position mapping is available
+   only through an explicit **Match by position** action. VRP never silently
+   uses CHIRP's index/position policy.
+2. **Unmapped means omitted.** A source bank left as **Do not import** creates
+   no target membership. Destination bank names are never renamed.
+3. **Replacement semantics are stated before import.** When bank transfer is
+   enabled, every successfully imported channel receives exactly its mapped
+   memberships, replacing existing target memberships. If all selected source
+   channels are unbanked, the user explicitly chooses whether to clear or keep
+   destination memberships.
+4. **Unsupported targets require consent.** A destination with no banks, fixed
+   banks, or unreadable bank metadata gets an explicit **Import channels only**
+   confirmation. Cancel performs no writes.
+5. **Per-channel atomicity.** A driver rejection or verification mismatch
+   rolls that channel's bank state back to its exact prior memberships and
+   indexed ordering. The compatible memory remains imported and the report
+   contains a bank warning; bank failures never silently drop memberships.
+6. **One undo/redo transaction.** `UndoManager` can snapshot auxiliary state.
+   Migration memory writes and mapped bank memberships share one transaction;
+   Undo/Redo restores both, including indexed ordering. The existing
+   **Channel banks** editor is now undoable through the same mechanism.
+7. **Clipboard metadata is durable.** Copy/Cut captures its `MigrationBatch`
+   while the source section is active, so cross-image or cross-section Paste
+   retains source memberships after the source radio is no longer active.
+8. **Driver behavior is authoritative.** VRP discovers actual `BankModel`
+   instances and verifies live memberships. It does not assume class names
+   accurately describe multi-membership capacity; real drivers that permit
+   multiple banks through a plain `BankModel` remain supported.
+
+## Verification baseline after Phase 4 (2026-07-23)
+
+- Full VRP suite: **464 passed**.
 - Subdevice backend coverage: all **23 pinned parent fixtures** expand to their
   expected **50 child views**; both static FT-8800 and dynamic TK-3180K2 edits
   survive parent Save/reopen.
@@ -188,12 +229,16 @@ clipboard test modules.
 - Special-memory audit: **1,989 named slots across 70 radio targets from 358
   image files**; 1,007 imported, 982 returned expected incompatibilities, and
   **0 unexpected failures**.
+- Bank audit: **70 bank models across 63 image files from 358 pinned images**;
+  all **54 mutable models** passed write/verify/exact-rollback, all **16 fixed
+  models** rejected reassignment, and there were **0 unexpected failures**.
 
-Run both audits from the repository root:
+Run all audits from the repository root:
 
 ```powershell
 .\.venv\Scripts\python.exe tools\audit_migrations.py
 .\.venv\Scripts\python.exe tools\audit_special_migrations.py
+.\.venv\Scripts\python.exe tools\audit_bank_migrations.py
 ```
 
 ## Remaining work
@@ -209,13 +254,11 @@ Implemented as described above. Special memories remain outside the ordinary
 grid and bulk clipboard path; File Import is the deliberate one-memory entry
 point. Physical-radio and screen-reader hand passes remain Phase 6 acceptance.
 
-### Phase 4 — Banks and mapping metadata
+### Phase 4 — Banks and mapping metadata — complete
 
-- Choose whether bank membership maps by index, bank name, or explicit user
-  mapping. CHIRP's `import_bank` is index-based and silently ignores missing
-  destination banks; that is too implicit for VRP's detailed-report standard.
-- Keep bank changes in the same undo story, or clearly report that they are not
-  undoable before enabling them.
+Implemented as described above. Bank names remain destination-owned; this
+phase maps membership only. NVDA/VoiceOver hand passes remain Phase 6
+acceptance.
 
 ### Phase 5 — D-STAR and validation side effects
 
@@ -251,9 +294,9 @@ point. Physical-radio and screen-reader hand passes remain Phase 6 acceptance.
 1. Check out `feature/cross-radio-migration` and confirm it tracks
    `origin/feature/cross-radio-migration`.
 2. Run `uv sync --extra dev`, then `uv run python -m pytest`.
-3. Run `tools/audit_migrations.py` and `tools/audit_special_migrations.py` after
-   any CHIRP pin or migration change.
-4. Start with Phase 4 explicit bank mapping and decide the matching and undo
-   policy before writing bank memberships.
+3. Run `tools/audit_migrations.py`, `tools/audit_special_migrations.py`, and
+   `tools/audit_bank_migrations.py` after any CHIRP pin or migration change.
+4. Start Phase 5 with real D-STAR fixtures and inventory every
+   `requires_call_lists` side effect before deciding its transaction policy.
 5. Keep `chirp/` unmodified and add a real pinned fixture for every new edge
    case.

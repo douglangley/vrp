@@ -37,7 +37,7 @@ update (`git pull` ./chirp) in case new dialogs appear.
 | Delete / Delete + shift         | 3         | ☑      |
 | Insert / Move / Sort / Arrange  | 3         | ☑ (Sort: any column + synthetic Transmit frequency, non-contiguous-safe; also a quick Sort submenu in the row context menu) |
 | Cut / Paste (clipboard)         | 3         | ☑ (same-image move/make-room; cross-image Paste uses generic migration and cross-image Cut safely becomes Copy) |
-| Undo / Redo (channel ops)       | —         | ☑      |
+| Undo / Redo (channel + bank ops)| —         | ☑      |
 | Find / Find Next                | 3         | ☑      |
 | Goto channel                    | 3         | ☑      |
 | Preferences                     | config    | ☑      |
@@ -70,14 +70,14 @@ update (`git pull` ./chirp) in case new dialogs appear.
 | Memory editor grid (read)        | 1         | ☑      |
 | Memory editor grid (edit fields) | 2         | ☑      |
 | Radio settings editor            | 5         | ☑ (NVDA pass owed) |
-| Banks editor (assign membership) | 6         | ☑ (NVDA pass owed) |
+| Banks editor (assign membership) | 6 / migration 4 | ☑ (undoable; explicit cross-radio mapping; NVDA pass owed) |
 | Radio info                       | 8         | ☑      |
 | About                            | 0         | ☑      |
 
 ## Notes
 
-- **Cross-radio channel migration (VRP-only integration):** Phases 1–3 are
-  complete through 2026-07-22. `chirp_backend/migration.py` routes ordinary and
+- **Cross-radio channel migration (VRP-only integration):** Phases 1–4 are
+  complete through 2026-07-23. `chirp_backend/migration.py` routes ordinary and
   explicitly selected named-special `Memory`/`DVMemory` objects through CHIRP
   `import_logic`, clears foreign driver-private extras, validates/writes
   compatible memories, and reports every occupied/incompatible/failed/
@@ -89,9 +89,14 @@ update (`git pull` ./chirp) in case new dialogs appear.
   the accessible chooser selects the memory child while the physical parent
   retains Save/Settings/Upload ownership. Fixture coverage spans all 23 pinned
   parents and 50 child views. Audit baselines: 385 ordinary targets and 1,989
-  named special slots across 70 targets from 358 pinned images, both with zero
-  unexpected failures. Still open: bank membership, D-STAR call-list
-  side-effect tests, and screen-reader hand passes. See
+  named special slots across 70 targets from 358 pinned images. Ordinary File
+  Import and cross-image Paste also capture source memberships and offer an
+  explicit filterable source-bank mapping; exact-name matches are suggestions,
+  position matching is opt-in, bank writes are verified/rolled back per
+  channel, and memory plus bank changes share Undo/Redo. The bank audit covers
+  70 models (54 mutable and 16 fixed). All three audits have zero unexpected
+  failures. Still open: D-STAR call-list side-effect tests and screen-reader
+  hand passes. See
   `docs/superpowers/plans/2026-07-21-cross-radio-migration.md`.
 - **Favorite radios (VRP-only, not a CHIRP feature):** Radio ▸ Favorite radios…
   manages a starred-radio list (`vrp/serial_dialogs.py` `FavoritesDialog`,

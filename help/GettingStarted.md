@@ -221,11 +221,23 @@ from File** can also transfer one explicitly selected regular or special memory
 to a numbered channel or named special on the destination. It never silently
 includes call channels, scan limits, VFOs, home channels, or other specials in
 a bulk import. A same-name target is only preselected for you to confirm, and
-an occupied special asks separately before overwrite. Radio-wide settings and
-bank membership are not copied. When an image has multiple sides, VFOs, bands,
-or zones, Open and Import show a filterable **Memory section** chooser. **Radio
-▸ Select memory section…** switches the grid later; Save and Upload still
-include the complete radio image.
+an occupied special asks separately before overwrite.
+
+If those ordinary source channels use banks, Import and cross-image Paste show
+a filterable **Map source banks** dialog. Exact names may be suggested; matching
+by position happens only when you choose it, and any source bank may be left as
+**Do not import**. The confirmed mapped memberships replace existing bank
+memberships on each imported channel, but bank names are not renamed. An
+unbanked selection asks whether to clear or keep target memberships. A target
+with no banks or fixed banks asks before importing channel contents only. A
+bank failure restores that channel's prior memberships and is shown in the
+details report. Channel plus bank changes are one Undo step. Radio-wide
+settings are not copied.
+
+When an image has multiple sides, VFOs, bands, or zones, Open and Import show a
+filterable **Memory section** chooser. **Radio ▸ Select memory section…**
+switches the grid later; Save and Upload still include the complete radio
+image.
 
 After any move, the moved channels stay selected at their new home, focus lands
 on the first of them, and the result is announced.
@@ -282,6 +294,7 @@ stops and asks: **Save**, **Don't save**, or **Cancel**.
   Import and cross-image Paste use the same CHIRP conversion and compatibility
   report. If either radio has named special memories, Import lets you choose
   ordinary bulk migration or explicitly map one regular/special memory.
+  Ordinary imports can also explicitly map used source banks.
   (There is no print command; Export to CSV is the accessible equivalent.)
 - **File ▸ Preferences** — how many recent files to show, which band plan region
   to use, whether entering a frequency should also fill in mode/step/tone, and

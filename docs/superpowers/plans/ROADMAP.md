@@ -11,7 +11,7 @@ Status marks: ☐ not started · ◐ in progress · ☑ done.
 
 ## Current priority
 
-- ◐ **Generic cross-radio migration.** Phases 1–3 landed through 2026-07-22:
+- ◐ **Generic cross-radio migration.** Phases 1–4 landed through 2026-07-23:
   direct
   cross-image Copy/Paste and `.img`/`.csv` Import share CHIRP's model-generic
   conversion, preserve partial success with per-channel accessible reports,
@@ -20,11 +20,14 @@ Status marks: ☐ not started · ◐ in progress · ☑ done.
   Import, post-Download, and later section switching; parent Save/Settings/
   Upload ownership is retained. File Import can explicitly map one regular or
   named special source to a numbered or named-special target; bulk import never
-  includes specials. Verified with 440 project tests, all 23 pinned subdevice
-  parents (50 views), the 385-target ordinary audit, and all 1,989 special slots
-  across 70 targets—both audits have zero unexpected failures. **Next:** explicit
-  bank mapping and undo policy, then D-STAR call-list tests and NVDA/VoiceOver
-  hand passes. Detailed status/resume plan:
+  includes specials. Ordinary import and cross-image Paste now offer explicit,
+  filterable bank mapping with exact-name suggestions, opt-in position
+  matching, per-channel rollback, and memory+bank Undo/Redo. Verified with 464
+  project tests, all 23 pinned subdevice parents (50 views), the 385-target
+  ordinary audit, all 1,989 special slots across 70 targets, and all 70 bank
+  models (54 mutable, 16 fixed)—all audits have zero unexpected failures.
+  **Next:** D-STAR call-list tests, then expanded source coverage and
+  NVDA/VoiceOver hand passes. Detailed status/resume plan:
   [2026-07-21-cross-radio-migration.md](2026-07-21-cross-radio-migration.md).
 
 - ☑ **Serial port hardware verification.** Both **Download and Upload are

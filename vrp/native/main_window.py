@@ -51,6 +51,7 @@ class _Clipboard:
     source_radio_id: str
     source_label: str
     source_document_id: str | None
+    migration_batch: object
 
 # Keyboard shortcuts table (combo, description).
 # Displayed by on_shortcuts (F1).
@@ -849,6 +850,11 @@ class MainWindow(wx.Frame):
             return
         numbers, mems = snap
         state = radio_backend.get_state()
+        batch = migration.batch_from_radio(
+            state.radio,
+            numbers=numbers,
+            source_document_id=state.context_id,
+        )
         self._clipboard = _Clipboard(
             "copy",
             mems,
@@ -857,6 +863,7 @@ class MainWindow(wx.Frame):
             migration.radio_id(state.radio),
             migration.radio_label(state.radio),
             state.context_id,
+            batch,
         )
         self.announce.announce(f"Copied {len(mems)} channel(s).")
 
@@ -870,6 +877,11 @@ class MainWindow(wx.Frame):
             return
         numbers, mems = snap
         state = radio_backend.get_state()
+        batch = migration.batch_from_radio(
+            state.radio,
+            numbers=numbers,
+            source_document_id=state.context_id,
+        )
         self._clipboard = _Clipboard(
             "cut",
             mems,
@@ -878,6 +890,7 @@ class MainWindow(wx.Frame):
             migration.radio_id(state.radio),
             migration.radio_label(state.radio),
             state.context_id,
+            batch,
         )
         self.announce.announce(f"Cut {len(mems)} channel(s). Paste to move them.")
 
@@ -909,14 +922,7 @@ class MainWindow(wx.Frame):
         )
 
         if not same_document:
-            batch = migration.batch_from_memories(
-                clip.mems,
-                clip.source_numbers,
-                clip.source_features,
-                clip.source_radio_id,
-                clip.source_label,
-                clip.source_document_id,
-            )
+            batch = clip.migration_batch
             occupied = []
             for k in range(dest, min(high, dest + len(batch.entries) - 1) + 1):
                 mem = radio_backend.get_memory(k)
@@ -933,8 +939,15 @@ class MainWindow(wx.Frame):
                     return
                 overwrite = choice
 
+            proceed, bank_mapping = self._choose_bank_mapping(batch)
+            if not proceed:
+                self.grid.SetFocus()
+                return
             ok, message, affected, report = memory_ops.apply_migration_batch(
-                batch, dest, overwrite
+                batch,
+                dest,
+                overwrite,
+                bank_mapping=bank_mapping,
             )
             if affected:
                 self.grid.reorder_refresh()
@@ -1872,6 +1885,107 @@ class MainWindow(wx.Frame):
         finally:
             dlg.Destroy()
 
+    def _confirm_import_without_banks(self, reason: str) -> bool:
+        """Confirm a channel-only import when source bank metadata cannot apply."""
+        dlg = wx.MessageDialog(
+            self,
+            (
+                f"{reason}\n\n"
+                "Continue importing the channel contents without changing "
+                "destination bank memberships?"
+            ),
+            "Bank memberships cannot be imported",
+            wx.OK | wx.CANCEL | wx.CANCEL_DEFAULT | wx.ICON_WARNING,
+        )
+        dlg.SetOKCancelLabels("Import channels only", "Cancel")
+        try:
+            return dlg.ShowModal() == wx.ID_OK
+        finally:
+            dlg.Destroy()
+
+    def _choose_unbanked_source_policy(self) -> tuple[bool, dict | None]:
+        """Choose whether an explicitly unbanked source clears target banks."""
+        dlg = wx.MessageDialog(
+            self,
+            (
+                "The selected source channels belong to no banks.\n\n"
+                "For successfully imported channels, clear existing destination "
+                "bank memberships or keep the destination memberships?"
+            ),
+            "Source channels have no bank memberships",
+            wx.YES_NO | wx.CANCEL | wx.CANCEL_DEFAULT | wx.ICON_QUESTION,
+        )
+        dlg.SetYesNoCancelLabels(
+            "Clear destination banks",
+            "Keep destination banks",
+            "Cancel",
+        )
+        try:
+            result = dlg.ShowModal()
+        finally:
+            dlg.Destroy()
+        if result == wx.ID_YES:
+            return True, {}
+        if result == wx.ID_NO:
+            return True, None
+        return False, None
+
+    def _choose_bank_mapping(self, batch) -> tuple[bool, dict | None]:
+        """Return ``(proceed, mapping)`` for optional explicit bank transfer."""
+        from chirp_backend import bank_ops, migration
+
+        source_banks = migration.used_source_banks(batch)
+        source_has_banks = bool(batch.source_banks)
+        if (
+            not source_banks
+            and not batch.bank_read_errors
+            and not source_has_banks
+        ):
+            return True, None
+
+        catalog = bank_ops.describe_banks(radio_backend.get_state().radio)
+        if not source_banks and batch.bank_read_errors:
+            return self._confirm_import_without_banks(
+                "The selected source channels' bank memberships could not be "
+                "read."
+            ), None
+        if not source_banks:
+            if not catalog.available:
+                return True, None
+            if not catalog.mutable:
+                return self._confirm_import_without_banks(
+                    catalog.message
+                    or "The destination radio's banks cannot be reassigned."
+                ), None
+            return self._choose_unbanked_source_policy()
+        if not catalog.available:
+            return self._confirm_import_without_banks(
+                "The destination radio has no banks."
+            ), None
+        if not catalog.mutable or not catalog.banks:
+            return self._confirm_import_without_banks(
+                catalog.message
+                or "The destination radio's banks cannot be reassigned."
+            ), None
+
+        from vrp.bank_mapping_dialog import BankMappingDialog
+
+        suggested = bank_ops.suggest_name_mapping(
+            source_banks, catalog.banks
+        )
+        dlg = BankMappingDialog(
+            self,
+            source_banks,
+            catalog.banks,
+            initial_mapping=suggested,
+        )
+        try:
+            if dlg.ShowModal() != wx.ID_OK:
+                return False, None
+            return True, dlg.get_mapping()
+        finally:
+            dlg.Destroy()
+
     def _import_results(self, src_radio, count: int, numbers=None) -> None:
         """Shared import flow: pick destination, import, refresh grid, focus.
 
@@ -1900,8 +2014,16 @@ class MainWindow(wx.Frame):
             self.grid.SetFocus()
             return
 
+        proceed, bank_mapping = self._choose_bank_mapping(batch)
+        if not proceed:
+            self.grid.SetFocus()
+            return
+
         ok, message, affected, report = memory_ops.apply_migration_batch(
-            batch, dest, overwrite
+            batch,
+            dest,
+            overwrite,
+            bank_mapping=bank_mapping,
         )
         if ok:
             self._load_into_grid()

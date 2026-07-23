@@ -173,8 +173,18 @@ chooser on Open and Import, and Radio ▸ Select memory section… switches the
 grid later. File Import can also map one explicitly selected regular or named
 special memory to a numbered channel or named special on the destination.
 Ordinary bulk migration never includes specials, and a same-name special is
-only preselected for confirmation—not written automatically. Radio-wide
-settings and bank membership are not migrated between models.
+only preselected for confirmation—not written automatically.
+
+When selected source channels use banks, ordinary File Import and cross-image
+Paste open a filterable **Map source banks** dialog. Exact non-empty bank names
+may be preselected, **Match by position** is available only as an explicit
+action, and any source bank can remain **Do not import**. Confirming a map makes
+the mapped banks replace existing memberships on each successfully imported
+channel; bank names themselves are not renamed. An entirely unbanked selection
+asks whether to clear or keep target memberships. A radio with no banks or
+fixed banks asks before continuing with channel contents only. Bank-driver
+failures restore that channel's prior memberships and appear in the details
+report. Radio-wide settings are not migrated between models.
 
 **Undo / redo** cover every channel operation — edit, delete, move, copy,
 cut/paste, sort, insert, arrange, import. `Ctrl+Z` undoes the last one and
@@ -184,7 +194,8 @@ they'd act on; the history is bounded (most-recent ops) and cleared when you
 load, close, download an image, or switch memory sections. Section switching
 preserves image edits and the unsaved-changes state. An imported named special
 is announced by name and restores correctly through Undo/Redo. Radio Settings
-and bank assignments are not yet undoable.
+are not undoable. Bank assignments, including cross-radio mapped memberships,
+are undoable together with their channel operation.
 
 ## Dialogs
 

@@ -371,6 +371,11 @@ def test_cross_section_cut_never_erases_same_number_in_other_side(win, monkeypat
     win.grid.focus_channel(destination)
     monkeypatch.setattr(
         win,
+        "_choose_unbanked_source_policy",
+        lambda: (True, None),
+    )
+    monkeypatch.setattr(
+        win,
         "_ask_paste_conflict",
         lambda *args: pytest.fail("empty destination should not conflict"),
     )

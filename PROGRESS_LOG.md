@@ -6,6 +6,49 @@ architecture, keyboard map, and CHIRP feature-coverage checklist.
 
 ---
 
+## 2026-07-23 — Explicit cross-radio bank mapping (Phase 4)
+
+**Outcome:** Cross-image Paste and ordinary File ▸ Import can now migrate bank
+membership without assuming that bank indexes or names mean the same thing on
+different radios. Only source banks used by the selected channels are shown.
+Unique exact-name matches are suggestions, position matching is an explicit
+button, every mapping is reviewable, and an unmapped source bank is omitted.
+Destination bank names are not changed.
+
+**Explicit safety policy.** When mapping is enabled, each successfully imported
+channel receives exactly its mapped memberships, replacing its prior target
+memberships. An entirely unbanked selection asks whether to clear or keep
+target memberships. No-bank and fixed-bank destinations require a separate
+**Import channels only** confirmation. Cancel occurs before memory writes.
+Bank-driver failures roll that channel back to its exact prior membership and
+ordering, leave the compatible memory import intact, and appear as warnings in
+the detailed report.
+
+**Backend and history.** `MigrationBatch` now captures source bank catalog and
+per-channel membership while the source image/section is active; the clipboard
+retains that complete batch across context changes. `bank_ops` discovers actual
+CHIRP bank models, supports opaque indexes and indexed ordering, verifies
+writes, and performs atomic rollback. `UndoManager` now supports optional
+auxiliary snapshots, so imported memories and banks are one Undo/Redo step.
+The existing Channel banks editor is consequently undoable too.
+
+**Accessible UX.** `vrp/bank_mapping_dialog.py` uses the shared native
+`RadioListView`, adjacent labels, filtering, match counts, explicit Map/Skip/
+exact-name/position/clear actions, and Escape. This remains usable for drivers
+with hundreds of banks without creating hundreds of checkbox controls.
+
+**Verification:** full suite **464 passed**. The ordinary audit remains **385
+targets: 276 imported, 109 expected incompatibilities, 0 unexpected failures**;
+the special audit remains **1,989 slots: 1,007 imported, 982 expected
+incompatibilities, 0 unexpected failures**. The new bank audit found **70 bank
+models across 63 image files from 358 pinned images**: all **54 mutable models**
+passed write/verify/exact-rollback, all **16 fixed models** rejected
+reassignment, and there were **0 unexpected failures**. The vendored `chirp/`
+tree remains unmodified.
+
+**Next:** Phase 5 D-STAR call-list and validation side effects, followed by
+Phase 6 broader source-corpus and NVDA/VoiceOver acceptance.
+
 ## 2026-07-22 — Explicit special-memory migration (Phase 3)
 
 **Outcome:** File ▸ Import can now transfer one explicitly selected regular or

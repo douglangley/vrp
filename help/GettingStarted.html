@@ -310,12 +310,25 @@
   <strong>Skip</strong>, or <strong>Cancel</strong>. Any incompatible channels are
   skipped individually, and a navigable, copyable details window explains why;
   compatible channels still paste.</p>
-  <p>Cross-radio migration currently covers regular numbered channels. It does
-  not copy radio-wide settings, bank membership, or special channels. When an
-  image has multiple sides, VFOs, bands, or zones, Open and Import show a
-  filterable <strong>Memory section</strong> chooser. <strong>Radio ▸ Select
-  memory section…</strong> switches the grid later; Save and Upload still include
-  the complete radio image.</p>
+  <p>Cross-radio bulk migration covers regular numbered channels.
+  <strong>File ▸ Import from File</strong> can also transfer one explicitly
+  selected regular or special memory to a numbered channel or named special.
+  It never silently includes call channels, scan limits, VFOs, home channels,
+  or other specials in bulk.</p>
+  <p>If ordinary source channels use banks, Import and cross-image Paste show a
+  filterable <strong>Map source banks</strong> dialog. Exact names may be
+  suggested; matching by position happens only when you choose it, and any
+  source bank may be left as <strong>Do not import</strong>. Confirmed mapped
+  memberships replace existing target memberships on each imported channel,
+  but bank names are not renamed. An unbanked selection asks whether to clear
+  or keep memberships. A target with no banks or fixed banks asks before
+  importing channel contents only. A bank failure restores that channel's old
+  memberships and appears in the report. Channel plus bank changes are one
+  Undo step. Radio-wide settings are not copied.</p>
+  <p>When an image has multiple sides, VFOs, bands, or zones, Open and Import
+  show a filterable <strong>Memory section</strong> chooser.
+  <strong>Radio ▸ Select memory section…</strong> switches the grid later; Save
+  and Upload still include the complete radio image.</p>
   <p>After any move, the moved channels stay selected at their new home, focus
   lands on the first of them, and the result is announced.</p>
   <p>Everything here is undoable — <strong>Ctrl+Z / Command+Z</strong> — and VRP

@@ -286,6 +286,7 @@ def apply_migration_batch(
     batch,
     destination: int,
     overwrite: bool = True,
+    bank_mapping: dict[int, object] | None = None,
 ):
     """Apply a prepared migration batch as one undoable operation.
 
@@ -302,7 +303,11 @@ def apply_migration_batch(
         return False, str(exc), [], report
 
     report = migration.apply_batch(
-        target, batch, destination, overwrite=overwrite
+        target,
+        batch,
+        destination,
+        overwrite=overwrite,
+        bank_mapping=bank_mapping,
     )
     from chirp_backend.radio import invalidate_cache
 
