@@ -382,11 +382,14 @@ After migration or CHIRP-pin changes, also run all opt-in broad audits:
 `.venv\Scripts\python.exe tools\audit_special_migrations.py`, plus
 `.venv\Scripts\python.exe tools\audit_bank_migrations.py` and
 `.venv\Scripts\python.exe tools\audit_dstar_migrations.py`. The baselines are
-385 ordinary targets; 1,989 named special slots across 70 targets; 70 bank
-models (54 mutable, 16 fixed); a 385-target DV sweep; and 960 actual-DV/
-required-call-list cases from 358 pinned images, all with zero unexpected
-failures. Normal band/feature/driver incompatibilities are expected and must
-remain classified rather than treated as crashes.
+2,310 ordinary-corpus migrations (six VHF/UHF/HF/AM/split/DV sources × 385
+targets); 1,989 named special slots across 70 targets; 70 bank models (54
+mutable, 16 fixed); a 385-target DV sweep; and 960 actual-DV/required-call-list
+cases from 358 pinned images, all with zero unexpected failures. Normal
+band/feature/driver incompatibilities are expected and must remain classified
+rather than treated as crashes. The screen-reader acceptance matrix is
+`docs/testing/2026-07-25-cross-radio-migration-accessibility.md`; never mark a
+reader/platform pass from automated evidence alone.
 
 ## Running
 

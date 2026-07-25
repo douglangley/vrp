@@ -99,8 +99,10 @@ update (`git pull` ./chirp) in case new dialogs appear.
   rejection, and included in memory Undo/Redo. The D-STAR audit covers a
   385-target sweep plus all 240 actual pinned DV memories against the four
   required-list targets (960 cases). All four audits have zero unexpected
-  failures. Still open: expanded source-corpus coverage and screen-reader hand
-  passes. See
+  failures. Phase 6's six-source ordinary audit covers 2,310
+  VHF/UHF/HF/AM/split/DV migrations (814 imported, 1,496 expected
+  incompatibilities) with zero unexpected failures. Still open: the versioned
+  NVDA and VoiceOver hand passes. See
   `docs/superpowers/plans/2026-07-21-cross-radio-migration.md`.
 - **Favorite radios (VRP-only, not a CHIRP feature):** Radio ▸ Favorite radios…
   manages a starred-radio list (`vrp/serial_dialogs.py` `FavoritesDialog`,

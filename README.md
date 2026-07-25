@@ -189,7 +189,8 @@ chirp_backend/
 tests/                   Unit tests (no radio hardware needed).
 tools/
   update_chirp.py        Fetches/tests/pins a new CHIRP commit.
-  audit_migrations.py    Sweeps generic migration across pinned CHIRP images.
+  audit_migrations.py    Sweeps six VHF/UHF/HF/AM/split/DV cases across every
+                         pinned CHIRP target.
   audit_special_migrations.py
                          Sweeps every named special in pinned CHIRP images.
   audit_bank_migrations.py

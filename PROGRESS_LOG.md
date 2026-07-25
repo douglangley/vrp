@@ -6,6 +6,43 @@ architecture, keyboard map, and CHIRP feature-coverage checklist.
 
 ---
 
+## 2026-07-25 — Expanded compatibility corpus (Phase 6 checkpoint)
+
+**Outcome:** The opt-in ordinary migration audit no longer extrapolates from
+one 443.1 MHz FM/DTCS channel. `tools/audit_migrations.py` now builds six
+independent sources: VHF/Tone, UHF/DTCS, HF/AM, airband AM, cross-band split,
+and a real IC-2200H D-STAR memory. Every source/target pairing starts from a
+freshly parsed fixture, successful writes must reread as populated, rejected
+writes must preserve the destination's meaningful state, and rollback warnings
+fail the audit. Repeatable `--source-channel` remains available for targeted
+Generic CSV debugging.
+
+**Verification:** full suite **479 passed**. All **2,310 migrations** across
+**385 radio targets from 358 pinned images** completed with zero unexpected
+failures: **814 imported** and **1,496 expected incompatibilities**. Per-case
+results were VHF/Tone 250/135, UHF/DTCS 276/109, HF/AM 11/374, airband AM
+104/281, split 160/225, and D-STAR 13/372 (imported/incompatible). HF/AM and
+split use actual IC-M710 and WP-9900 fixture memories. The unchanged
+special audit remains 1,007/982 across 1,989 slots; all 70 bank models remain
+clean; and the 960-case required-call-list D-STAR audit remains 482/478, all
+with zero unexpected failures.
+
+**Preview decision:** A generic pre-import “preview” is deferred. CHIRP
+conversion may mutate D-STAR call lists, validation without the destination
+setter cannot predict actual driver/bank failures, and a truthful non-mutating
+preview would require cloning complete parent, bank, and radio-global state.
+The transactional write, itemized report, and one-step Undo are the truthful
+safety path today.
+
+**Accessibility checkpoint:** A repeatable NVDA/VoiceOver matrix now lives in
+`docs/testing/2026-07-25-cross-radio-migration-accessibility.md`. NVDA was
+running on the Windows machine, but the automation connection was unavailable,
+so no interactive pass is claimed. VoiceOver requires a Mac. Phase 6 remains
+in progress until those hand passes are recorded.
+
+**Next:** run the matrix with NVDA and VoiceOver, record exact speech/focus
+results, and repair any on-device failures before marking Phase 6 complete.
+
 ## 2026-07-24 — Transactional D-STAR migration (Phase 5)
 
 **Outcome:** Cross-radio migration now treats required D-STAR master call lists

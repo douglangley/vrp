@@ -319,16 +319,28 @@ destination memories now roll back per channel and participate in the same
 transaction-wide Undo/Redo state as the imported memories. Successful additions
 are included in the migration report.
 
-### Phase 6 — Acceptance and stronger compatibility audit
+### Phase 6 — Acceptance and stronger compatibility audit — in progress
 
 - NVDA hand pass: cross-image Copy/Paste, cross-image Cut safety,
   Overwrite/Skip/Cancel, issue report navigation/copy, and Undo.
 - VoiceOver pass on the same flow.
-- Expand the audit source corpus beyond one 443.1 MHz Generic CSV channel to
-  representative VHF, UHF, HF/AM, split, tone/DTCS, and DV memories. Expected
-  incompatibilities remain valid; only unclassified failures fail the audit.
-- Consider a non-mutating preview once reports are useful before the user
-  confirms a large import.
+- **Automated corpus complete 2026-07-25.** The default audit now covers
+  VHF/Tone, UHF/DTCS, HF/AM, airband AM, cross-band split, and a real D-STAR
+  memory against all 385 targets: 2,310 migrations, 814 imported, 1,496
+  expected incompatibilities, and zero unexpected failures. HF/AM and split
+  come from real pinned IC-M710 and WP-9900 memories. The full suite is **479
+  passed**; special, bank, and required-call-list D-STAR audits retain their
+  zero-failure Phase 5 baselines.
+- **Hand-pass matrix prepared.** Exact fixtures, keyboard steps, expected
+  speech/focus, report copying, banks, specials, and multi-section safety are
+  recorded in
+  `docs/testing/2026-07-25-cross-radio-migration-accessibility.md`.
+  NVDA and VoiceOver results remain pending.
+- **Non-mutating preview considered and deferred.** CHIRP conversion itself can
+  mutate required call lists, while conversion/validation without a real
+  setter cannot predict driver and bank failures. A truthful preview needs a
+  complete disposable clone of parent, bank, and global state; the current
+  transactional result report plus Undo remains safer than a partial preview.
 
 ## Explicit non-goals
 
@@ -347,7 +359,7 @@ are included in the migration report.
 3. Run `tools/audit_migrations.py`, `tools/audit_special_migrations.py`,
    `tools/audit_bank_migrations.py`, and `tools/audit_dstar_migrations.py` after
    any CHIRP pin or migration change.
-4. Start Phase 6 by expanding the ordinary audit source corpus, then run the
-   NVDA/VoiceOver acceptance matrix.
+4. Run and record the NVDA/VoiceOver matrix in
+   `docs/testing/2026-07-25-cross-radio-migration-accessibility.md`.
 5. Keep `chirp/` unmodified and add a real pinned fixture for every new edge
    case.
