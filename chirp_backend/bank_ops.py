@@ -36,6 +36,7 @@ class BankDescriptor:
     name: str
     label: str
     member_count: int = 0
+    renameable: bool = False
 
 
 @dataclass(frozen=True)
@@ -48,6 +49,17 @@ class BankCatalog:
     indexed: bool
     banks: tuple[BankDescriptor, ...] = ()
     message: str = ""
+    renameable: bool = False
+
+
+@dataclass(frozen=True)
+class BankChannel:
+    """One channel found in a bank, for the read-only overview."""
+
+    number: int
+    name: str
+    frequency: int
+    order: object | None = None
 
 
 @dataclass(frozen=True)
@@ -110,6 +122,17 @@ def _bank_label(bank) -> str:
     return f"Bank {idx}: {name}" if name else f"Bank {idx}"
 
 
+def _renameable(bank) -> bool:
+    """Match CHIRP's own capability test rather than the ``NamedBank`` class.
+
+    ``chirp_common.NamedBank`` supplies a base ``set_name`` that only assigns
+    ``self._name``; the drivers that truly persist a name override it. Real
+    behavior is therefore confirmed by rereading after a write, never by the
+    class hierarchy — the same rule the membership code already follows.
+    """
+    return hasattr(bank, "set_name")
+
+
 def describe_banks(radio) -> BankCatalog:
     """Return a safe, stable catalog for source capture or target selection."""
     from chirp import chirp_common as cc
@@ -136,6 +159,7 @@ def describe_banks(radio) -> BankCatalog:
             bank.get_index(),
             _clean_name(bank.get_name()),
             _bank_label(bank),
+            renameable=_renameable(bank),
         )
         for position, bank in enumerate(mappings)
     )
@@ -150,6 +174,7 @@ def describe_banks(radio) -> BankCatalog:
             if mode == "fixed"
             else ""
         ),
+        renameable=any(bank.renameable for bank in banks),
     )
 
 
@@ -339,6 +364,185 @@ def restore_bank_membership(
     )
     if not ok:
         raise RuntimeError(message)
+
+
+def capture_bank_names(radio) -> tuple[str, ...] | None:
+    """Snapshot every bank name for radio-wide Undo/Redo.
+
+    ``None`` means no safe snapshot, which callers treat as fail-closed: a
+    rename that cannot be undone is not performed.
+    """
+    model = bank_model_for(radio)
+    if model is None:
+        return None
+    try:
+        return tuple(_clean_name(bank.get_name()) for bank in model.get_mappings())
+    except Exception:  # noqa: BLE001
+        LOG.exception("Could not snapshot bank names")
+        return None
+
+
+def restore_bank_names(radio, snapshot: tuple[str, ...]) -> None:
+    """Restore an Undo/Redo bank-name snapshot, skipping unnameable banks."""
+    model = bank_model_for(radio)
+    if model is None:
+        raise RuntimeError("This radio has no banks.")
+    mappings = list(model.get_mappings())
+    if len(mappings) != len(snapshot):
+        raise RuntimeError(
+            f"Bank count changed: expected {len(snapshot)}, found {len(mappings)}"
+        )
+    for bank, name in zip(mappings, snapshot):
+        if not _renameable(bank) or _clean_name(bank.get_name()) == name:
+            continue
+        bank.set_name(name)
+
+
+def _read_bank_name(radio, position: int) -> str | None:
+    """Reread one bank's name through a fresh model, so a write is confirmed."""
+    model = bank_model_for(radio)
+    if model is None:
+        return None
+    try:
+        mappings = list(model.get_mappings())
+    except Exception:  # noqa: BLE001
+        LOG.exception("Could not reread bank names")
+        return None
+    if not 0 <= position < len(mappings):
+        return None
+    return _clean_name(mappings[position].get_name())
+
+
+@undo.records
+def rename_bank(position: int, new_name: str) -> tuple[bool, str, str]:
+    """Rename one bank on the active radio as one Undo/Redo transaction.
+
+    Returns ``(ok, message, stored_name)``. The write is confirmed by rereading
+    the bank, because a driver may silently truncate, filter, or ignore it.
+    """
+    radio = _radio()
+    if radio is None:
+        return False, "No radio image is open.", ""
+    model = _bank_model()
+    if model is None:
+        return False, "This radio has no banks.", ""
+    try:
+        mappings = list(model.get_mappings())
+    except Exception as exc:  # noqa: BLE001
+        return False, f"Could not read this radio's banks: {exc}", ""
+    if not 0 <= position < len(mappings):
+        return False, "That bank is no longer available.", ""
+
+    bank = mappings[position]
+    before = _clean_name(bank.get_name())
+    if not _renameable(bank):
+        return False, f"{_bank_label(bank)} cannot be renamed on this radio.", before
+
+    desired = _clean_name(new_name)
+    if desired == before:
+        return True, "The bank name did not change.", before
+
+    from chirp_backend.radio import get_state, get_undo_manager
+
+    # Fail closed: a rename we could not capture is a rename we cannot undo.
+    manager = get_undo_manager()
+    if manager is not None and not manager.record_global():
+        return (
+            False,
+            "Could not save undo state, so the bank was not renamed.",
+            before,
+        )
+
+    try:
+        bank.set_name(desired)
+    except Exception as exc:  # noqa: BLE001
+        return False, f"The radio rejected that bank name: {exc}", before
+
+    stored = _read_bank_name(radio, position)
+    if stored is None:
+        return False, "Could not confirm the new bank name.", before
+    if stored == before:
+        return (
+            False,
+            "This driver did not store the new bank name.",
+            before,
+        )
+
+    get_state().is_modified = True
+    if stored != desired:
+        # Truncation/filtering is a success, but the user must hear the truth.
+        # Kept short: @undo.records reuses this message as the history label.
+        return (
+            True,
+            f"Bank renamed to {stored}, shortened by the radio.",
+            stored,
+        )
+    return True, f"Bank renamed to {stored}.", stored
+
+
+def scan_bank_channels(radio) -> tuple[bool, str, dict[int, tuple[BankChannel, ...]]]:
+    """Map every bank position to its channels in one pass over the memories.
+
+    Deliberately built from ``get_memory_mappings`` rather than CHIRP's
+    ``MappingModel.get_mapping_memories``: ``StaticBankModel``'s implementation
+    of the latter computes a float ``count`` and raises ``TypeError`` from
+    ``range()`` (``chirp_common.py``), and ``chirp/`` is never edited. Asking
+    each memory which banks it is in works for fixed, single, and multi models
+    alike.
+    """
+    from chirp import chirp_common as cc
+
+    model = bank_model_for(radio)
+    if model is None:
+        return False, "This radio has no banks.", {}
+    try:
+        mappings = list(model.get_mappings())
+        low, high = radio.get_features().memory_bounds
+    except Exception as exc:  # noqa: BLE001
+        return False, f"Could not read this radio's banks: {exc}", {}
+
+    position_of = {bank.get_index(): position for position, bank in enumerate(mappings)}
+    indexed = isinstance(model, cc.MappingModelIndexInterface)
+    found: dict[int, list[BankChannel]] = {
+        position: [] for position in range(len(mappings))
+    }
+    unreadable = 0
+    for number in range(low, high + 1):
+        try:
+            memory = radio.get_memory(number)
+            if getattr(memory, "empty", False):
+                continue
+            member_of = list(model.get_memory_mappings(memory))
+        except Exception:  # noqa: BLE001 - one bad channel must not end the scan
+            unreadable += 1
+            continue
+        for mapping in member_of:
+            position = position_of.get(mapping.get_index())
+            if position is None:
+                continue
+            order = None
+            if indexed:
+                try:
+                    # Drivers hand back bitwise field objects; a plain int is
+                    # what the UI can speak and sort.
+                    order = int(model.get_memory_index(memory, mapping))
+                except Exception:  # noqa: BLE001
+                    order = None
+            found[position].append(
+                BankChannel(
+                    number,
+                    _clean_name(getattr(memory, "name", "")),
+                    int(getattr(memory, "freq", 0) or 0),
+                    order,
+                )
+            )
+
+    message = (
+        f"{unreadable} channel(s) could not be read." if unreadable else ""
+    )
+    return True, message, {
+        position: tuple(channels) for position, channels in found.items()
+    }
 
 
 def with_member_counts(

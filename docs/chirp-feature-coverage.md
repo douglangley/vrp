@@ -71,6 +71,7 @@ update (`git pull` ./chirp) in case new dialogs appear.
 | Memory editor grid (edit fields) | 2         | ☑      |
 | Radio settings editor            | 5         | ☑ (NVDA pass owed) |
 | Banks editor (assign membership) | 6 / migration 4 | ☑ (undoable; explicit cross-radio mapping; NVDA pass owed) |
+| Bank renaming + channels-in-a-bank | 6.1     | ☑ (verified write, undoable; NVDA pass owed) |
 | Radio info                       | 8         | ☑      |
 | About                            | 0         | ☑      |
 

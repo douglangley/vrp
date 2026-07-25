@@ -563,16 +563,45 @@ def _install_undo(radio) -> None:
                 bank_ops.restore_bank_membership(radio, number, snapshot)
                 _state.is_modified = True
 
-        capture_call_lists = None
-        restore_call_lists = None
-        if dstar_ops.requires_call_lists(radio):
+        # Radio-wide undo state is a composite: D-STAR required call lists and
+        # bank names are independent, and a radio may have either or both. Each
+        # part is snapshotted only when this radio actually has it, and each is
+        # restored independently so one failure cannot abandon the other.
+        wants_call_lists = dstar_ops.requires_call_lists(radio)
+        wants_bank_names = bank_catalog.renameable
 
-            def capture_call_lists():
-                return dstar_ops.capture_call_lists(radio)
+        capture_global = None
+        restore_global = None
+        if wants_call_lists or wants_bank_names:
 
-            def restore_call_lists(snapshot):
-                dstar_ops.restore_call_lists(radio, snapshot)
-                _state.is_modified = True
+            def capture_global():
+                snapshot = {}
+                if wants_call_lists:
+                    # Raises rather than returning None; record_global() turns
+                    # that into a False result, which is the fail-closed path.
+                    snapshot["calls"] = dstar_ops.capture_call_lists(radio)
+                if wants_bank_names:
+                    names = bank_ops.capture_bank_names(radio)
+                    if names is None:
+                        return None  # fail closed; the caller refuses the write
+                    snapshot["bank_names"] = names
+                return snapshot or None
+
+            def restore_global(snapshot):
+                if not isinstance(snapshot, dict):
+                    return
+                if "calls" in snapshot:
+                    try:
+                        dstar_ops.restore_call_lists(radio, snapshot["calls"])
+                        _state.is_modified = True
+                    except Exception:  # noqa: BLE001 - still restore bank names
+                        LOG.exception("undo: failed to restore D-STAR call lists")
+                if "bank_names" in snapshot:
+                    try:
+                        bank_ops.restore_bank_names(radio, snapshot["bank_names"])
+                        _state.is_modified = True
+                    except Exception:  # noqa: BLE001 - undo must not crash
+                        LOG.exception("undo: failed to restore bank names")
 
         _undo = UndoManager(
             get_memory=lambda n: orig_get(n),
@@ -580,8 +609,8 @@ def _install_undo(radio) -> None:
             erase_memory=restore_erase,
             get_aux_state=capture_banks,
             set_aux_state=restore_banks,
-            get_global_state=capture_call_lists,
-            set_global_state=restore_call_lists,
+            get_global_state=capture_global,
+            set_global_state=restore_global,
         )
     except Exception:  # noqa: BLE001 — undo is best-effort; never block loading
         LOG.exception("Could not install undo recorder; undo disabled for this radio")

@@ -45,6 +45,7 @@ arrow keys move across top-level menus; NVDA reads it like any native app menu.
 | Radio | Radio Info… | — | needs a loaded radio; opens a read-only, navigable, copyable edit box |
 | Radio | Settings… | `Ctrl+Shift+P` | needs a loaded radio |
 | Radio | Select memory section… | — | enabled for a loaded multi-side/zone image; filter and show another section |
+| Radio | Manage banks… | — | needs a loaded radio; rename a bank (where the driver stores names) and review a bank's channels read-only with Go to channel |
 | Channels | Edit channel… | `Ctrl+E` | needs a loaded radio; all fields (also `Enter` / double-click on the grid) |
 | Channels | Edit cell… | `F2` | needs a loaded radio; edits the focused cell (the column at the Left/Right cursor) |
 | Channels | Delete channel(s) | `Del` | needs a loaded radio; clears the selected channel(s) |

@@ -144,9 +144,10 @@ class UndoManager:
     def record_global(self) -> bool:
         """Capture radio-wide pre-state once for the open transaction.
 
-        This is opt-in because radio-wide state may be expensive and only
-        D-STAR migration currently needs it. Returns ``False`` if no safe
-        snapshot could be made, allowing the caller to refuse a mutation.
+        This is opt-in because radio-wide state may be expensive. D-STAR
+        migration (required call lists) and bank renaming both use it. Returns
+        ``False`` if no safe snapshot could be made, allowing the caller to
+        refuse a mutation.
         """
         if self._depth == 0 or self._applying:
             return False
@@ -171,7 +172,10 @@ class UndoManager:
         self._depth -= 1
         if self._depth > 0:
             return  # inner transaction; the outermost commits
-        if not self._order:  # nothing was written
+        # An op that only changed radio-wide state (a bank rename) writes no
+        # memory, so ``_order`` stays empty while ``_global_recorded`` is set.
+        # That is still a real undoable entry.
+        if not self._order and not self._global_recorded:  # nothing was written
             self._reset_txn()
             return
         before = [self._before[n] for n in self._order]
@@ -266,8 +270,8 @@ class UndoManager:
         An empty ordinary snapshot erases its slot. Named special snapshots and
         populated ordinary snapshots are set from a dupe, so the stored
         snapshot stays pristine for a later undo/redo. Optional radio-wide state
-        (currently D-STAR call lists) is restored *before* memory contents so
-        list-indexed DV drivers can write safely. Per-memory auxiliary state
+        (D-STAR call lists and bank names) is restored *before* memory contents
+        so list-indexed DV drivers can write safely. Per-memory auxiliary state
         (currently bank memberships/order) is restored afterward."""
         self._applying = True
         try:

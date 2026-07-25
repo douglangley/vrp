@@ -372,6 +372,13 @@ class MainWindow(wx.Frame):
             self.on_select_subdevice,
             needs_radio=True,
         )
+        self._add(
+            m,
+            "manage_banks",
+            "Mana&ge banks…",
+            self.on_manage_banks,
+            needs_radio=True,
+        )
         self._add(m, "radio_info", "Radio &Info…", self.on_radio_info, needs_radio=True)
         m.AppendSeparator()
         # Query Source submenu (online repeater directories). Gated on a loaded
@@ -1101,6 +1108,7 @@ class MainWindow(wx.Frame):
         dlg = ChannelBanksDialog(self, state)
         applied = dlg.ShowModal() == wx.ID_OK and not state["read_only"]
         desired = dlg.get_desired_indexes() if applied else None
+        manage = dlg.manage_requested
         dlg.Destroy()
 
         if desired is not None:
@@ -1112,6 +1120,93 @@ class MainWindow(wx.Frame):
                 wx.MessageBox(message, "Banks", wx.OK | wx.ICON_ERROR, self)
         # Return focus to the channel row.
         self.grid.select_channels([number])
+        if manage:
+            self.on_manage_banks()
+
+    def _read_bank_overview(self) -> tuple:
+        """Return ``(catalog, channels_by_position)`` for the active radio."""
+        from chirp_backend import bank_ops
+
+        radio = radio_backend.get_state().radio
+        catalog = bank_ops.describe_banks(radio)
+        _ok, _message, channels = bank_ops.scan_bank_channels(radio)
+        return catalog, channels
+
+    def on_manage_banks(self, _evt=None) -> None:
+        """Radio > Manage banks — rename a bank and review its channels."""
+        from chirp_backend import bank_ops
+        from vrp.bank_manager_dialog import BankManagerDialog
+
+        catalog, channels = self._read_bank_overview()
+        if not catalog.available or not catalog.banks:
+            message = catalog.message or "This radio has no banks."
+            self.announce.announce(message, assertive=True)
+            wx.MessageBox(message, "Manage banks", wx.OK | wx.ICON_INFORMATION, self)
+            return
+
+        dlg = BankManagerDialog(self, catalog, channels)
+        dlg.Bind(wx.EVT_BUTTON, lambda _e: self._rename_bank(dlg), dlg.rename_button)
+        dlg.Bind(
+            wx.EVT_BUTTON, lambda _e: self._show_bank_channels(dlg), dlg.channels_button
+        )
+        dlg.ShowModal()
+        target = dlg.goto_channel
+        dlg.Destroy()
+        # Renames change the bank labels shown against channels; refresh first,
+        # then move focus, or the rebuild would discard it.
+        if bank_ops.describe_banks(radio_backend.get_state().radio) != catalog:
+            self.grid.rebuild()
+        if target is None:
+            self.grid.SetFocus()
+            return
+        self.grid.select_channels([target])
+        self.grid.focus_channel(target)
+        self.announce.announce(f"Channel {target}")
+
+    def _rename_bank(self, dlg) -> None:
+        """Prompt for and apply a new bank name, then re-read the dialog."""
+        from chirp_backend import bank_ops
+
+        bank = dlg.get_bank()
+        if bank is None:
+            return
+        prompt = wx.TextEntryDialog(
+            dlg, f"New name for {bank.label}:", "Rename bank", bank.name
+        )
+        proceed = prompt.ShowModal() == wx.ID_OK
+        value = prompt.GetValue()
+        prompt.Destroy()
+        if not proceed:
+            return
+
+        ok, message, _stored = bank_ops.rename_bank(bank.position, value)
+        if ok:
+            self.announce.announce(message)
+            catalog, channels = self._read_bank_overview()
+            dlg.refresh(catalog, channels)
+        else:
+            self.announce.announce(message, assertive=True)
+            wx.MessageBox(message, "Rename bank", wx.OK | wx.ICON_ERROR, dlg)
+        # Focus returns to the list the rename was launched from.
+        dlg.list.SetFocus()
+
+    def _show_bank_channels(self, dlg) -> None:
+        """Open the read-only channel list; Go to channel closes both dialogs."""
+        bank = dlg.get_bank()
+        if bank is None:
+            return
+        from vrp.bank_manager_dialog import BankChannelsDialog
+
+        sub = BankChannelsDialog(dlg, bank.label, dlg.channels_for(bank))
+        go = sub.ShowModal() == wx.ID_OK
+        number = sub.get_channel() if go else None
+        sub.Destroy()
+        if number is None:
+            dlg.list.SetFocus()
+            return
+        # The manager closes and its caller performs the navigation.
+        dlg.goto_channel = number
+        dlg.EndModal(wx.ID_CANCEL)
         self.grid.focus_channel(number)
 
     @staticmethod

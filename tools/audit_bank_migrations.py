@@ -48,6 +48,59 @@ def _indexes(snapshot):
     return tuple(item.index for item in snapshot.memberships)
 
 
+def _audit_rename(radio, catalog, label, counts, failures) -> None:
+    """Write/verify/exact-restore one bank name, mirroring the membership sweep.
+
+    A driver that exposes ``set_name`` but silently drops the write is a real
+    driver characteristic, counted rather than failed — VRP reports it to the
+    user at runtime. An inexact restore is always a failure.
+    """
+    if not catalog.renameable:
+        counts["names not supported"] += 1
+        return
+
+    snapshot = bank_ops.capture_bank_names(radio)
+    if snapshot is None:
+        failures.append(f"{label}: renameable banks but no name snapshot")
+        return
+
+    model = bank_ops.bank_model_for(radio)
+    try:
+        bank = model.get_mappings()[0]
+    except Exception as exc:  # noqa: BLE001
+        failures.append(f"{label}: could not read bank 0: {exc}")
+        return
+
+    original = snapshot[0]
+    probe = "QQBOT" if original == "ZZTOP" else "ZZTOP"
+    try:
+        bank.set_name(probe)
+    except Exception as exc:  # noqa: BLE001
+        failures.append(f"{label}: set_name raised: {exc}")
+        return
+
+    stored = bank_ops._read_bank_name(radio, 0)
+    if stored is None:
+        failures.append(f"{label}: could not reread bank 0 after rename")
+        return
+    if stored == original:
+        counts["name write ignored by driver"] += 1
+    else:
+        counts["names verified"] += 1
+
+    try:
+        bank_ops.restore_bank_names(radio, snapshot)
+    except Exception as exc:  # noqa: BLE001
+        failures.append(f"{label}: name restore raised: {exc}")
+        return
+    restored = bank_ops.capture_bank_names(radio)
+    if restored != snapshot:
+        failures.append(
+            f"{label}: name rollback mismatch, expected {snapshot!r}, "
+            f"got {restored!r}"
+        )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -84,6 +137,13 @@ def main() -> int:
                     continue
                 models += 1
                 target_images.add(image_path.name)
+                _audit_rename(
+                    radio,
+                    catalog,
+                    f"{image_path.name} section {section}",
+                    counts,
+                    failures,
+                )
                 number, before = _candidate(radio)
                 if number is None or before is None:
                     counts["no programmed candidate"] += 1

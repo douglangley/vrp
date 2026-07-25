@@ -89,7 +89,18 @@ Query sources (Phase 7):
 - ☐ RadioReference — purpose-built after RepeaterBook (credentials/login form).
 
 Smaller deferred items (chirp-feature-coverage.md "☐"/"◐" rows):
-- ☐ Bank renaming + "channels in a bank" overview (Phase 6.1).
+- ◐ **Bank renaming + "channels in a bank" overview (Phase 6.1).** Implemented
+  2026-07-25; only the NVDA hand pass is left. Radio ▸ Manage banks… renames a
+  bank where the driver actually stores names and lists a bank's channels
+  read-only with Go to channel; Ctrl+B keeps per-channel assignment and
+  cross-links to it. Every rename is confirmed by rereading the bank — the
+  pinned Kenwood TK-890 exposes `set_name` but stores nothing, and ID-880H
+  truncates to six characters, both of which are now reported rather than
+  hidden. Renames are undoable through a composite radio-wide snapshot shared
+  with D-STAR call lists. Migration still never renames a destination bank.
+  519 tests; the bank audit adds 36 verified renames across 70 models with zero
+  unexpected failures. Plan:
+  [2026-07-25-bank-names-and-overview.md](2026-07-25-bank-names-and-overview.md).
 - ☑ Cut/Paste clipboard (same-image row clipboard done 2026-06-27; generic
   cross-image conversion done 2026-07-21 — remaining metadata phases are linked
   under Current priority).

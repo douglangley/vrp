@@ -11,6 +11,7 @@ NVDA or VoiceOver can approve spoken output, focus order, and report navigation.
 | Windows + NVDA | Pass — user confirmed | 2026-07-25 on `a556e71`: the user confirmed the Windows side is working; the NVDA version and exact per-check speech/focus transcript were not supplied |
 | macOS + VoiceOver | Pending hand pass | A separate tester will run this later on a Mac |
 | Automated migration corpus | Pass | 2,310 migrations: 814 imported, 1,496 expected incompatibilities, zero failures |
+| Phase 6.1 bank names (section H) | Pending hand pass | Backend and dialogs landed 2026-07-25; no reader pass yet on either platform |
 
 Record the screen reader and version, VRP commit, Pass/Fail, exact speech, final
 focus, and any issue link for every numbered check. Do not turn “not run” into a
@@ -141,6 +142,33 @@ not supplied. macOS/VoiceOver pending.**
 
 Result: **Windows/NVDA covered by the user-confirmed pass; detailed transcript
 not supplied. macOS/VoiceOver pending.**
+
+## H. Bank names and channels-in-a-bank (Phase 6.1)
+
+Use the Icom ID-880H copy — it stores bank names and truncates them to six
+characters, which is what makes check 3 meaningful.
+
+1. Open **Radio ▸ Manage banks…**. Confirm the opening line is spoken and states
+   both the bank count and whether names can be changed on this radio.
+2. Arrow the bank list. Each row must speak its bank label *and* channel count
+   ("Bank A: Alpha, 2 channels"), not a bare index.
+3. Press **Rename…**, type `Repeaters`, and accept. ID-880H stores only
+   `Repeat`. The announcement must say **"Bank renamed to Repeat, shortened by
+   the radio."** — it must never claim the full name you typed. Focus returns to
+   the bank list and the row's label updates.
+4. Press `Ctrl+Z`, then `Ctrl+Y`. Each must be announced and must restore/reapply
+   the bank name. No channel row should change.
+5. Select a bank with channels, press **Show channels…**, and arrow the list.
+   Rows must speak channel number, frequency, and name. Press **Go to channel**;
+   both dialogs close and the grid lands on that channel with it announced.
+6. Escape out of both dialogs and confirm focus returns to the channel grid.
+7. Open a radio whose banks cannot be renamed (Icom IC-2720H). The opening line
+   must say names cannot be changed, and **Rename…** must be unavailable — the
+   spoken text, not only the greyed button, must convey it.
+8. From `Ctrl+B` on any channel, press **Manage banks…** and confirm the
+   per-channel dialog closes and the manager opens with focus in its filter.
+
+Result: **Not run**
 
 ## Platform-specific observations
 
