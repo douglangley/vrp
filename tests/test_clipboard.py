@@ -20,6 +20,18 @@ IMAGE = os.path.abspath(
         "Baofeng_UV-5R.img",
     )
 )
+MINI_IMAGE = os.path.abspath(
+    os.path.join(
+        os.path.dirname(__file__), "..", "chirp", "tests", "images",
+        "Baofeng_UV-5R_Mini.img",
+    )
+)
+FT8800_IMAGE = os.path.abspath(
+    os.path.join(
+        os.path.dirname(__file__), "..", "chirp", "tests", "images",
+        "Yaesu_FT-8800.img",
+    )
+)
 
 
 @pytest.fixture
@@ -270,3 +282,133 @@ def test_ask_paste_conflict_maps_buttons(win, monkeypatch):
     assert win._ask_paste_conflict(5, 5, 1) == "overwrite"
     assert win._ask_paste_conflict(5, 7, 3) == "move"
     assert win._ask_paste_conflict(5, 5, 1) is None
+
+
+def test_ask_migration_conflict_maps_buttons(win, monkeypatch):
+    """Cross-image conflicts offer overwrite/skip/cancel, never make-room."""
+    results = iter([wx.ID_YES, wx.ID_NO, wx.ID_CANCEL])
+    monkeypatch.setattr(wx.MessageDialog, "ShowModal", lambda self: next(results))
+    monkeypatch.setattr(wx.MessageDialog, "Destroy", lambda self: None)
+
+    assert win._ask_migration_conflict(5, 5, 1) is True
+    assert win._ask_migration_conflict(5, 7, 3) is False
+    assert win._ask_migration_conflict(5, 5, 1) is None
+
+
+def test_cross_image_copy_uses_migration_conversion(win, monkeypatch):
+    """A UV-5R PowerLevel/extra object cannot be written raw to a Mini. The
+    cross-document path must run CHIRP import logic first."""
+    low, high = radio_backend.get_state().memory_bounds
+    src = _first_nonempty(low, high)
+    win.grid.select_channels([src])
+    win.on_copy()
+    source_name = win._clipboard.mems[0].name
+
+    ok, message = radio_backend.load_image(MINI_IMAGE)
+    assert ok, message
+    win._load_into_grid()
+    low, high = radio_backend.get_state().memory_bounds
+    dest = _first_empty(low, high)
+    assert dest is not None
+    win.grid.focus_channel(dest)
+    monkeypatch.setattr(
+        win, "_ask_paste_conflict",
+        lambda *args: pytest.fail("empty destination should not conflict"),
+    )
+
+    win.on_paste()
+
+    pasted = radio_backend.get_memory(dest)
+    assert not pasted.empty
+    assert pasted.name == source_name
+
+
+def test_cross_image_cut_never_erases_same_number_in_destination(win, monkeypatch):
+    low, high = radio_backend.get_state().memory_bounds
+    src = _first_nonempty(low, high)
+    win.grid.select_channels([src])
+    win.on_cut()
+
+    ok, message = radio_backend.load_image(MINI_IMAGE)
+    assert ok, message
+    win._load_into_grid()
+    before = radio_backend.get_memory(1).dupe()
+    assert not before.empty
+    low, high = radio_backend.get_state().memory_bounds
+    dest = _first_empty(low, high)
+    assert dest is not None and dest != 1
+    win.grid.focus_channel(dest)
+    monkeypatch.setattr(
+        win, "_ask_paste_conflict",
+        lambda *args: pytest.fail("empty destination should not conflict"),
+    )
+
+    win.on_paste()
+
+    after = radio_backend.get_memory(1)
+    assert not after.empty
+    assert after.freq == before.freq
+    assert win._clipboard is not None
+    assert win._clipboard.mode == "copy"
+
+
+def test_cross_section_cut_never_erases_same_number_in_other_side(win, monkeypatch):
+    ok, message = radio_backend.load_image(FT8800_IMAGE, subdevice_index=0)
+    assert ok, message
+    win._load_into_grid()
+    low, high = radio_backend.get_state().memory_bounds
+    source = _first_nonempty(low, high)
+    assert source is not None
+    win.grid.select_channels([source])
+    win.on_cut()
+
+    ok, message = radio_backend.select_subdevice(1)
+    assert ok, message
+    win._load_into_grid()
+    same_number_before = radio_backend.get_memory(source).dupe()
+    destination = _first_empty(low, high)
+    assert destination is not None and destination != source
+    win.grid.focus_channel(destination)
+    monkeypatch.setattr(
+        win,
+        "_choose_unbanked_source_policy",
+        lambda: (True, None),
+    )
+    monkeypatch.setattr(
+        win,
+        "_ask_paste_conflict",
+        lambda *args: pytest.fail("empty destination should not conflict"),
+    )
+
+    win.on_paste()
+
+    same_number_after = radio_backend.get_memory(source)
+    assert same_number_after.freq == same_number_before.freq
+    assert same_number_after.name == same_number_before.name
+    assert win._clipboard.mode == "copy"
+
+
+def test_cross_image_skip_preserves_occupied_destination(win, monkeypatch):
+    low, high = radio_backend.get_state().memory_bounds
+    src = _first_nonempty(low, high)
+    win.grid.select_channels([src])
+    win.on_copy()
+
+    ok, message = radio_backend.load_image(MINI_IMAGE)
+    assert ok, message
+    win._load_into_grid()
+    low, high = radio_backend.get_state().memory_bounds
+    dest = _first_nonempty(low, high)
+    before = radio_backend.get_memory(dest).dupe()
+    reports = []
+    monkeypatch.setattr(win, "_ask_migration_conflict", lambda *args: False)
+    monkeypatch.setattr(
+        win, "_show_migration_report", lambda report, *args: reports.append(report)
+    )
+    win.grid.focus_channel(dest)
+
+    win.on_paste()
+
+    after = radio_backend.get_memory(dest)
+    assert after.freq == before.freq and after.name == before.name
+    assert reports and reports[0].occupied == 1

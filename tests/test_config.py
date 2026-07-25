@@ -17,8 +17,22 @@ def _point_config_base(monkeypatch, tmp_path):
 def test_defaults_on_missing_file(tmp_path):
     c = Config(path=str(tmp_path / "c.json"))
     assert c.get("recent_files_count") == 9
-    assert c.get("speak_status_messages") is False
+    assert c.get("speak_messages") is True
     assert c.recent() == []
+
+
+def test_speech_defaults_on_for_a_config_carrying_the_abandoned_key(tmp_path):
+    """The old speak_status_messages was never consulted, so a stored False
+    recorded no user choice — just the default being written out. Honouring it
+    would silence every existing user the moment the pref was wired up, so it
+    must be ignored, not migrated."""
+    path = tmp_path / "c.json"
+    path.write_text(
+        '{"version": 1, "speak_status_messages": false, "recent_files_count": 9}',
+        encoding="utf-8",
+    )
+    c = Config(path=str(path))
+    assert c.get("speak_messages") is True
 
 
 def test_set_persists_across_instances(tmp_path):

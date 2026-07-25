@@ -6,6 +6,699 @@ architecture, keyboard map, and CHIRP feature-coverage checklist.
 
 ---
 
+## 2026-07-25 — Phase 6.1 NVDA acceptance
+
+**Outcome:** The user confirmed **section H** of
+`docs/testing/2026-07-25-cross-radio-migration-accessibility.md` on
+Windows/NVDA at commit `ea153dd` — bank rename announcement and truncation
+wording, the bank and channel list readouts, Go to channel focus landing,
+Undo/Redo, the names-cannot-be-changed case, and the Ctrl+B cross-link. Phase
+6.1 is therefore complete.
+
+As with the Phase 6 sections A–G pass, the exact NVDA version and a per-check
+speech transcript were **not supplied**, and the acceptance record says so
+rather than inventing them. This is a human acceptance result, not an inference
+from the 519-test suite or the audits.
+
+**Still open:** the macOS/VoiceOver pass, which covers sections A–H together
+and needs the Mac tester. It is now the single outstanding item on
+`feature/cross-radio-migration`. Note that the separate NVDA passes still owed
+on the **radio settings editor** and on the **Ctrl+B banks editor's** own
+membership readout/checkbox state are unrelated to section H and remain open.
+
+## 2026-07-25 — Bank names and channels-in-a-bank (Phase 6.1)
+
+**Outcome:** Cross-radio migration deliberately never renames a destination
+bank, and membership was only ever visible one channel at a time. **Radio ▸
+Manage banks…** (`vrp/bank_manager_dialog.py`) now renames a bank where the
+driver really stores names, and lists a bank's channels read-only with **Go to
+channel**. Ctrl+B keeps per-channel assignment and cross-links to the new
+dialog. No new accelerator, so `APP_SHORTCUTS`/F1/`KeyboardCommands.html` are
+untouched — that surface is only for accelerator-bearing commands.
+
+**Verify by rereading; capability is not evidence.** `chirp_common.NamedBank`
+ships a base `set_name` that only assigns an attribute, so `hasattr` (CHIRP's
+own test, `wxui/bankedit.py:189`) cannot tell a real implementation from a
+no-op. The pinned **Kenwood TK-890** is worse than the base case: `MemBank`
+implements a genuine `set_name`, but the image configures `grp_name_length` as
+**0**, so `set_group_name` filters the whole name away and stores nothing
+without raising. **Icom ID-880H** truncates to six characters ("Repeaters" →
+"Repeat"). Both are now reported to the user instead of being announced as a
+clean success, and both are pinned regression tests.
+
+**The overview avoids a broken upstream helper.** `scan_bank_channels` asks each
+memory which banks it is in rather than calling
+`MappingModel.get_mapping_memories`, whose `StaticBankModel` implementation
+divides with `/` and hands `range()` a float (`chirp_common.py:794`).
+`chirp/` is not edited; `tests/test_bank_overview.py` asserts the upstream
+`TypeError` so a future CHIRP fix surfaces loudly.
+
+**Undo needed two changes.** Bank names are radio-wide, so `UndoManager`'s
+global snapshot — previously wired *exclusively* to D-STAR call lists and only
+installed for radios requiring them — became a **composite** covering call
+lists and bank names independently. Separately, `commit()` discarded any
+transaction that wrote no memory (`_order` only grows per-channel), so a rename
+produced no history entry at all; it now commits when radio-wide state was
+recorded. Snapshot failure stays fail-closed.
+
+**Verification:** full suite **519 passed** (was 479). All four audits hold
+their baselines, which is the evidence that the composite global state left
+D-STAR alone: ordinary 2,310/814/1,496; special 1,989/1,007/982; D-STAR
+385-target 13/372 plus 960 call-list cases 482/478; bank 70 models (16 fixed,
+54 mutable). `tools/audit_bank_migrations.py` gained a rename
+write/verify/exact-restore sweep: **36 names verified, 33 unsupported, 1
+ignored by the driver**, zero unexpected failures.
+
+**Next:** the NVDA hand pass, written up as **section H** of
+`docs/testing/2026-07-25-cross-radio-migration-accessibility.md` and marked
+"Not run". It deliberately covers the truncation wording, which is the string
+most likely to be wrong out loud. Plan:
+`docs/superpowers/plans/2026-07-25-bank-names-and-overview.md`.
+
+## 2026-07-25 — Expanded compatibility corpus (Phase 6 checkpoint)
+
+**Outcome:** The opt-in ordinary migration audit no longer extrapolates from
+one 443.1 MHz FM/DTCS channel. `tools/audit_migrations.py` now builds six
+independent sources: VHF/Tone, UHF/DTCS, HF/AM, airband AM, cross-band split,
+and a real IC-2200H D-STAR memory. Every source/target pairing starts from a
+freshly parsed fixture, successful writes must reread as populated, rejected
+writes must preserve the destination's meaningful state, and rollback warnings
+fail the audit. Repeatable `--source-channel` remains available for targeted
+Generic CSV debugging.
+
+**Verification:** full suite **479 passed**. All **2,310 migrations** across
+**385 radio targets from 358 pinned images** completed with zero unexpected
+failures: **814 imported** and **1,496 expected incompatibilities**. Per-case
+results were VHF/Tone 250/135, UHF/DTCS 276/109, HF/AM 11/374, airband AM
+104/281, split 160/225, and D-STAR 13/372 (imported/incompatible). HF/AM and
+split use actual IC-M710 and WP-9900 fixture memories. The unchanged
+special audit remains 1,007/982 across 1,989 slots; all 70 bank models remain
+clean; and the 960-case required-call-list D-STAR audit remains 482/478, all
+with zero unexpected failures.
+
+**Preview decision:** A generic pre-import “preview” is deferred. CHIRP
+conversion may mutate D-STAR call lists, validation without the destination
+setter cannot predict actual driver/bank failures, and a truthful non-mutating
+preview would require cloning complete parent, bank, and radio-global state.
+The transactional write, itemized report, and one-step Undo are the truthful
+safety path today.
+
+**Accessibility checkpoint:** A repeatable NVDA/VoiceOver matrix now lives in
+`docs/testing/2026-07-25-cross-radio-migration-accessibility.md`. The user
+confirmed the Windows/NVDA side working on commit `a556e71`. The NVDA version
+and exact per-check speech/focus transcript were not supplied, so the acceptance
+record says that explicitly rather than inventing details. A separate tester
+will run VoiceOver on a Mac. Phase 6 remains in progress only for that macOS
+pass.
+
+**Next:** run and record the matrix with VoiceOver, including its version,
+exact speech/focus results, and any on-device repairs, before marking Phase 6
+complete.
+
+## 2026-07-24 — Transactional D-STAR migration (Phase 5)
+
+**Outcome:** Cross-radio migration now treats required D-STAR master call lists
+as part of the channel transaction. VRP still delegates all DV conversion and
+compatibility decisions to CHIRP; a destination without DV support reports an
+incompatibility and is never silently coerced to analog. Successful imports
+retain any required URCALL/RPTCALL additions and itemize them in the migration
+report without adding another confirmation dialog.
+
+**Exact failure rollback.** CHIRP's `import_mem` calls `ensure_has_calls` before
+frequency conversion, immutable checks, validation, and the final driver write.
+Some setters also modify raw memory before raising. New
+`chirp_backend/dstar_ops.py` snapshots/restores required call lists exactly, and
+`migration.apply_batch` restores both those lists and the destination memory
+after every rejected write attempt. This was required by a real ID-4100 →
+IC-2200H case: CHIRP added padded `CQCQCQ` data, then the IC-2200H driver
+partially wrote the target before rejecting it. A partial batch keeps additions
+from earlier successful rows while removing only the failed row's side effects.
+Direct-call D-STAR radios do not have their master lists touched.
+
+**Undo/Redo and fail-closed behavior.** `UndoManager` now supports opt-in
+radio-global state in addition to memory and auxiliary bank state. Required
+call lists are restored before channel memories during Undo/Redo so
+list-indexed driver setters see the correct calls. The memory and calls still
+form one history entry and persist through Save/reopen. If a required call-list
+snapshot cannot be captured, the entire batch is refused before any write.
+
+**Verification:** full suite **475 passed**. Focused D-STAR and special-memory
+coverage passed **22 tests**. The ordinary audit remains **385 targets: 276
+imported, 109 expected incompatibilities**; the special audit remains **1,989:
+1,007 imported, 982 expected incompatibilities**; and all **70 bank models**
+remain clean. The new D-STAR audit inventories **15 DV-capable targets** and
+**240 populated actual `DVMemory` records**. Its representative sweep covered
+**385 targets: 13 imported, 372 expected incompatibilities**. Its required-list
+corpus covered **960 cases** across IC-2200H, IC-U82, IC-V82, and ID-800H:
+**482 imported, 478 expected incompatibilities**. All four audits had **zero
+unexpected failures**, rejected destinations/call lists restored exactly, and
+the vendored `chirp/` tree remains unmodified.
+
+**Next:** Phase 6 expands the source corpus beyond one representative ordinary
+channel, then performs the cross-radio NVDA and VoiceOver acceptance matrix.
+
+## 2026-07-23 — Explicit cross-radio bank mapping (Phase 4)
+
+**Outcome:** Cross-image Paste and ordinary File ▸ Import can now migrate bank
+membership without assuming that bank indexes or names mean the same thing on
+different radios. Only source banks used by the selected channels are shown.
+Unique exact-name matches are suggestions, position matching is an explicit
+button, every mapping is reviewable, and an unmapped source bank is omitted.
+Destination bank names are not changed.
+
+**Explicit safety policy.** When mapping is enabled, each successfully imported
+channel receives exactly its mapped memberships, replacing its prior target
+memberships. An entirely unbanked selection asks whether to clear or keep
+target memberships. No-bank and fixed-bank destinations require a separate
+**Import channels only** confirmation. Cancel occurs before memory writes.
+Bank-driver failures roll that channel back to its exact prior membership and
+ordering, leave the compatible memory import intact, and appear as warnings in
+the detailed report.
+
+**Backend and history.** `MigrationBatch` now captures source bank catalog and
+per-channel membership while the source image/section is active; the clipboard
+retains that complete batch across context changes. `bank_ops` discovers actual
+CHIRP bank models, supports opaque indexes and indexed ordering, verifies
+writes, and performs atomic rollback. `UndoManager` now supports optional
+auxiliary snapshots, so imported memories and banks are one Undo/Redo step.
+The existing Channel banks editor is consequently undoable too.
+
+**Accessible UX.** `vrp/bank_mapping_dialog.py` uses the shared native
+`RadioListView`, adjacent labels, filtering, match counts, explicit Map/Skip/
+exact-name/position/clear actions, and Escape. This remains usable for drivers
+with hundreds of banks without creating hundreds of checkbox controls.
+
+**Verification:** full suite **464 passed**. The ordinary audit remains **385
+targets: 276 imported, 109 expected incompatibilities, 0 unexpected failures**;
+the special audit remains **1,989 slots: 1,007 imported, 982 expected
+incompatibilities, 0 unexpected failures**. The new bank audit found **70 bank
+models across 63 image files from 358 pinned images**: all **54 mutable models**
+passed write/verify/exact-rollback, all **16 fixed models** rejected
+reassignment, and there were **0 unexpected failures**. The vendored `chirp/`
+tree remains unmodified.
+
+**Next:** Phase 5 D-STAR call-list and validation side effects, followed by
+Phase 6 broader source-corpus and NVDA/VoiceOver acceptance.
+
+## 2026-07-22 — Explicit special-memory migration (Phase 3)
+
+**Outcome:** File ▸ Import can now transfer one explicitly selected regular or
+named special memory to either a numbered channel or a named special memory.
+Ordinary bulk import remains numeric-only: it never silently includes call
+channels, scan limits, VFOs, home channels, weather memories, or other
+driver-defined specials. A same-name destination may be preselected, but the
+user must still confirm the mapping; an occupied special requires a separate
+overwrite confirmation.
+
+**CHIRP-compatible backend.** `chirp_backend/migration.py` now catalogs regular
+and special memory identifiers, builds a one-memory batch from either kind, and
+routes special→regular, regular→special, and special→special conversion through
+CHIRP `import_logic.import_mem`. Named targets preserve the destination
+driver's virtual number, `extd_number`, and real immutable fields. Foreign
+driver extras are discarded as in ordinary cross-model migration. Known driver
+limitations—invalid immutable declarations, special slots that cannot be
+reread by virtual number, and plain out-of-band setter exceptions—produce
+per-memory incompatibility results instead of crashes.
+
+**Accessible UX and history.** New native dialogs provide explicit bulk-versus-
+single and numbered-versus-special choices plus a filterable source/target
+memory picker with adjacent labels, match counts, keyboard operation, and
+Escape. Same-name special mapping is only a convenience preselection. The
+single write is one undo/redo transaction; undo restores an empty or populated
+special by name, and edits survive Save/reopen through the physical parent
+image.
+
+**Verification:** full suite **440 passed**. The new opt-in special audit swept
+all **1,989 named special slots across 70 radio targets from 358 pinned
+images**: 1,007 imports succeeded, 982 returned expected incompatibilities, and
+**0 unexpected failures**. The ordinary audit remains **385 targets: 276
+imported, 109 expected incompatibilities, 0 unexpected failures**. The vendored
+`chirp/` tree remains unmodified.
+
+**Next:** Phase 4 explicit bank mapping and undo policy, followed by Phase 5
+D-STAR call-list side-effect tests and Phase 6 NVDA/VoiceOver and hardware
+acceptance.
+
+## 2026-07-21 — Generic cross-radio channel migration (Phase 2)
+
+**Outcome:** CHIRP images that expose multiple memory devices—sides, bands,
+VFOs, or dynamically parsed zones—can now be opened, imported, downloaded, and
+switched inside VRP. The selected child supplies memories/features to the grid
+and migration engine; the physical parent remains the owner of Save/Save As,
+radio Settings, clone prompts, and Upload. Work is on
+`feature/cross-radio-migration`, commit `00af255`; the dated migration plan is
+the detailed handoff.
+
+**Backend ownership.** `RadioImageSet` holds one parsed parent and its memory
+views. `load_image_set` discovers views without mutating active state, then
+`activate_image_set` selects one after the UI choice, so canceling Open does not
+replace the existing document. Parents with only one child still activate that
+child automatically. Dynamic subdevices are discovered after image parsing,
+and `ExternalMemoryProperties.link_device_metadata` mirrors CHIRP's editor so
+child metadata survives a parent save.
+
+**Accessible UX.** New `SubdeviceDialog` is a real filterable modal using the
+same platform-native `RadioListView` as the model/frequency-list pickers, with
+adjacent screen-reader labels, match count, explicit Open/Import/Show and Cancel
+buttons, and Escape. It appears for multi-view Open, File Import, and successful
+Download. Radio ▸ Select memory section… changes the view later. The window
+title and Radio Info identify the selected section. Labels come from CHIRP's
+`VARIANT` and channel bounds—never generated class names (dynamic Kenwood class
+names can exceed 20,000 characters).
+
+**Safety and history.** Clipboard identity is now the document UUID plus
+selected section. Raw move/make-room Paste is restricted to that exact context;
+after a side/zone switch, Paste uses the generic migration engine and deferred
+Cut becomes Copy, so it cannot erase a same-numbered row in another section.
+Switching restores the previous child's original write methods and installs a
+fresh Undo recorder on the next child. Existing image edits and the dirty flag
+remain, while section-local Undo history resets cleanly.
+
+**Verification:** full suite **420 passed**. `tests/test_subdevices.py` covers
+all **23 pinned CHIRP subdevice parents** and their expected **50 child views**,
+including one-child dynamic parents; static FT-8800 and dynamic TK-3180K2 edits
+both survive parent Save/reopen. GUI tests cover chooser accessibility/filtering,
+selected-section Open, cancel-without-replacement, menu/title behavior, and
+cross-section Cut safety. The full migration audit remains **385 targets from
+358 images: 276 imported, 109 normal incompatibilities, zero unexpected
+failures**. `chirp/` remains unmodified.
+
+**Next:** Phase 3 special-memory semantics, followed by explicit bank mapping,
+D-STAR call-list side-effect tests, and NVDA/VoiceOver acceptance passes. A
+multi-section physical-radio Download/Upload hand test belongs in that
+acceptance work.
+
+## 2026-07-21 — Generic cross-radio channel migration (Phase 1)
+
+**Outcome:** ordinary numbered channels can now move directly between different
+radio images with Copy/Paste or File ▸ Import; a CSV round-trip is optional, not
+required. The implementation is model-generic and delegates compatibility to
+CHIRP instead of adding UV-5R/UV-5R Mini (or any other) pairwise converters.
+Implemented on `feature/cross-radio-migration`, commit `69cf9b1`. Detailed
+handoff and remaining phases:
+[`docs/superpowers/plans/2026-07-21-cross-radio-migration.md`](docs/superpowers/plans/2026-07-21-cross-radio-migration.md).
+
+**CHIRP behavior confirmed.** CHIRP's editor transports model-neutral
+`Memory`/`DVMemory` objects plus the source `RadioFeatures` and stable
+`directory.radio_class_id`, then runs `import_logic.import_mem` against the
+destination. That routine already adapts/checks frequency, name, power, tones,
+DTCS, mode, duplex/split/off, immutability, target validation, and D-STAR. Its
+own `test_copy_all` follows the same generic principle across driver fixtures.
+There is no model-pair migration table to reproduce.
+
+**Shared backend.** New `chirp_backend/migration.py` supplies
+`MigrationBatch`, per-item results, `MigrationReport`, source snapshot helpers,
+radio identity/labels, and `apply_batch`. File import, RepeaterBook/frequency
+list imports, and cross-image clipboard paste now converge on the undoable
+`memory_ops.apply_migration_batch`. `import_memories` remains as a compatibility
+wrapper. The destination number is passed to `import_mem` as an override so its
+immutable-policy check sees the correct target slot. Populated source channels
+are packed in order; every attempted row is reported as imported, occupied,
+incompatible, failed, or out of space. Partial success is allowed and all writes
+form one Undo operation.
+
+**Driver-private extras.** Raw clipboard writes failed both UV-5R ↔ Mini
+directions because their `PowerLevel`/`Memory.extra` objects are driver-specific;
+Mini → UV-5R specifically failed on `sqmode`. A cross-radio batch now clears
+`Memory.extra` when CHIRP radio class IDs differ (before import/write); exact
+same-driver transfers retain it. This matches CHIRP's class boundary while
+avoiding the Mini extra reaching the UV-5R setter.
+
+**Safe clipboard identity.** `RadioState.document_id` is regenerated on every
+image open/download and copied into `_Clipboard`. Same-document Cut/Paste keeps
+the existing move + Make room behavior. After another image is opened, Paste
+uses the migration engine, occupied rows offer Overwrite / Skip / Cancel, and a
+deferred Cut becomes Copy rather than erasing same-numbered rows in the new
+radio. Incompatibilities/warnings open a keyboard-navigable, copyable
+`InfoDialog` with source/destination and exact reasons.
+
+**CSV fixes.** File Import now exposes both `.img` and `.csv`. Export mirrors
+CHIRP's generic CSV path: size `CSVRadio` to the real maximum channel, erase its
+synthetic channel 0, and import into base `chirp_common.Memory`. This fixes a
+radio whose memories begin at 1 exporting an extra channel zero.
+
+**Verification:** full suite **383 passed**; focused migration tests **71
+passed**. Real pinned fixtures: Mini → UV-5R imported all 21 populated channels;
+UV-5R → Mini imported 36 and correctly reported one invalid transmit-frequency
+channel. New `tools/audit_migrations.py` exercised a representative Generic CSV
+channel against **385 targets from 358 pinned image files** (including exposed
+subdevices): 276 imported, 109 returned normal band/feature incompatibilities,
+and **zero unexpected failures**. The vendored `chirp/` tree was not modified.
+
+**Scope boundary at the Phase 1 checkpoint:** Phase 1 covered ordinary numbered
+memories. Radio-wide settings, bank memberships, special memories, and active/
+source subdevice-selection UX were not yet migrated; the Phase 2 entry above
+records that subdevice UX is now complete. D-STAR conversion is wired through
+CHIRP, but real call-list side effects need focused fixture coverage. NVDA and
+VoiceOver hand passes of the cross-image/report flow are also owed. See the
+dated plan for the remaining phases and resume checklist.
+
+## 2026-07-15 — `--portable` builds a real macOS artifact (ready for a Mac run)
+
+Prep for cutting a Mac release from the developer's Mac. `build_portable` was
+Windows-shaped in ways that go beyond the filename, and would have produced a
+broken or misleading artifact:
+
+1. **Hardcoded `-win64.zip`.** A Mac build would have been published as
+   "win64" — actively wrong once both are on the releases page. Now
+   `artifact_suffix()`: `win64`, or `macos-<arch>`. The **arch is in the Mac
+   name** because a Mac build only runs on the arch it was built for (an arm64
+   build won't start on an Intel Mac), unlike the Windows one.
+2. **It would have zipped the wrong artifact.** With `--windowed`, PyInstaller
+   emits BOTH `dist/vrp/` (raw COLLECT folder) and `dist/vrp.app` (the bundle).
+   `build_portable` zipped `dist/vrp/`, which hands a Mac tester a bare unix
+   binary instead of something double-clickable.
+3. **A `.app` must not be zipped with `zipfile`** — the one that would really
+   have bitten. `zipfile` follows symlinks instead of storing them (a bundle's
+   `Frameworks/` relies on them) and `extractall()` doesn't restore the
+   executable bit; either leaves a bundle that won't launch. macOS's own
+   **`ditto -c -k --sequesterRsrc --keepParent`** preserves symlinks,
+   permissions and resource forks, and is used for the staging copy too.
+
+Split into `_build_portable_zipfile` (Windows/Linux) and
+`_build_portable_macos`, chosen by platform. Staging
+(`build/portable/VRP-<version>/`) lets `sample-images/` sit beside the .app
+inside the zip, matching the Windows layout. `--installer` now errors out off
+Windows instead of failing obscurely on a missing ISCC.exe. The macOS path also
+prints the Gatekeeper warning: the .app is unsigned/unnotarized, so testers need
+right-click ▸ Open or `xattr -dr com.apple.quarantine`, and the release notes
+must say so.
+
+**Verified what could be verified from Windows:** the Windows path is unchanged
+— rebuilt the zip and diffed the entry list against the *published* `.3`
+artifact: **477 entries, identical**. Naming/routing is unit-tested
+(`tests/test_build_artifact_name.py`, +7: win64, macos-arm64/x86_64, the two
+never collide, a Mac suffix never says "win", and — the point — a `.app` is
+never routed to the zipfile packer). Suite **346 passed**.
+
+**NOT verified: the macOS packaging itself.** It was written on Windows and has
+never run on a Mac. Every failure mode is loud (missing .app, missing `ditto`,
+non-zero `ditto` exit) rather than silent. Relevant good news: the frozen driver
+repair was written for this — `import_drivers()`'s frozen branch is **win32-only**,
+so a frozen Mac build hits the same broken glob, and `_ensure_driver_modules()`
+imports the modules itself rather than relying on that branch. And prism ships
+macOS wheels with a `libprism.dylib` that `--collect-binaries=prism` collects the
+same way. **Owed:** the first real Mac run, and the VoiceOver pass on the grid
+(never done on hardware) — a Mac release is first contact for that.
+
+## 2026-07-15 — Portable zip ships CHIRP's test images (sample-images/)
+
+`build.py --portable` now drops CHIRP's 360 test images (one saved memory image
+per supported model) into a top-level **`sample-images/`** folder in the zip,
+plus a README naming the CHIRP pin they came from. A tester can then open a real
+radio image with **no radio and no cable** — which is exactly how the
+zero-drivers bug above was found, and what anyone debugging the grid/cursor
+needs.
+
+- **Top level, beside `vrp.exe` — deliberately not `_internal/`.** That folder
+  is app plumbing a user should never open, and File ▸ Open Image File needs
+  somewhere obvious to point. This is a *zip*-level addition, not `--add-data`:
+  PyInstaller 6 puts data under the contents directory (`_internal/`), which is
+  the wrong place for something a human must browse to.
+- **Matched to the build.** They come from `./chirp`, which `ensure_chirp_on_pin`
+  has already forced to `CHIRP_COMMIT`, so the images always match the bundled
+  driver set. The README records the pin (`906e03930c7d`).
+- **Cost: ~0.5 MB** (22.9 → 23.4 MB). The images are 10 MB on disk but are
+  mostly sparse memory maps, so they compress hard.
+- **On by default for `--portable` only** (that IS the tester build);
+  `--no-samples` omits them. The Inno Setup installer never gets them — it wraps
+  `dist/vrp/` only, and a real user has their own radio.
+
+## 2026-07-15 — Frozen builds registered ZERO drivers (every release was broken)
+
+**The bug, reported by the developer:** the release .exe fails to open any test
+image — *"Failed to load image: Unsupported model Baofeng UV-5R Mini"*. Not
+image-specific: the frozen app registered **no drivers at all**. Since
+`list_radio_models()` iterates the same `directory.DRV_TO_RADIO`, the Download
+dialog's model list was empty too. **Every VRP release build ever produced could
+neither open an image nor talk to a radio.** Launching was the only thing it did
+— which is exactly as far as our verification had ever gone.
+
+**Root cause (in CHIRP, triggered by how we package it).**
+`chirp/drivers/__init__.py` builds `__all__` by globbing `*.py` **off the
+filesystem**. Frozen, the drivers live inside PyInstaller's PYZ archive and
+there are no .py files on disk, so `__all__` comes out **empty** — and
+`directory.import_drivers()` has a frozen branch (`if sys.platform == 'win32'
+and frozen`) that iterates exactly that list. Empty list → nothing imported →
+nothing registers → "Unsupported model". `--collect-submodules=chirp.drivers`
+faithfully bundles all 191 driver modules; **nothing ever imports them.** CHIRP's
+own comment names the trap: *"This won't be here in the frozen build because we
+convert this file to a static list of driver modules to import."* Upstream
+rewrites that file when packaging. We can't — ./chirp is used unmodified
+(CLAUDE.md) — so the repair has to live on the VRP side.
+
+**The fix — `chirp_backend/radio._ensure_driver_modules()`,** called from
+`_ensure_chirp()` before `import_drivers()`. When `__all__` is empty it rebuilds
+the list via `pkgutil.iter_modules`, which PyInstaller's frozen importer
+implements (191 modules), and imports the modules itself rather than trusting
+`import_drivers()`'s branch — that branch is **win32-only**, so a frozen macOS
+build would fall through to the same broken glob. A bad driver is logged and
+skipped, not fatal. On a source run `__all__` is already populated, so it is a
+no-op and CHIRP behaves exactly as upstream intends.
+
+**Verified (`tools/spike_frozen_drivers.py`, frozen console build with build.py's
+real flags, driving VRP's actual `chirp_backend.radio` path):** before —
+`__all__: 0 entries`, `import_drivers()` → **0 registered**. After —
+`_ensure_chirp()` → **552 registered**; `load_image()` → `ok=True, Loaded
+Baofeng UV-5R Mini`. Suite **339 passed**.
+
+**On the tests — the first version of them was worthless, which is the real
+lesson.** Emptying `__all__` in-process proves nothing: the registry is a
+process-wide global that earlier imports have already filled, so the assertions
+passed with the fix removed. Emptying it on a source run proves nothing either:
+`import_drivers()` only consults `__all__` when frozen; otherwise it globs and
+succeeds regardless. Three of the four first-draft tests were green and blind —
+the same species of test that let this ship. `tests/test_frozen_drivers.py` now
+runs a **subprocess** with `sys.frozen` forced on and `__all__` emptied, and
+carries a **negative control** asserting that *without* the repair that
+interpreter registers 0 drivers — so if the simulation ever stops reproducing
+the bug, the suite says so instead of going quietly green.
+
+**Why it was never caught:** nothing had ever opened an image in a frozen build.
+The frozen smoke owed since 2026-07-10 was "do the stock_config CSVs land", and
+today's release verification went as far as "the window appears". Both were
+true, and both were shallow.
+
+### Follow-up: the rest of the frozen surface was audited (it's clean)
+
+The developer asked the right question — drivers were one instance of a *class*
+of bug ("CHIRP finds things dynamically or via the filesystem; PyInstaller can't
+see it; it fails only when frozen"), so what else is broken? Serial and
+RepeaterBook especially. Rather than reason about it,
+**`tools/spike_frozen_audit.py`** exercises every CHIRP subsystem VRP uses
+through VRP's real `chirp_backend` entry points, inside a frozen console build
+with build.py's actual flags. **15/15 pass:**
+
+drivers (552) · radio model list (552 — the Download dialog) · describe_model ·
+serial port enumeration (pyserial's platform backend imports) · band plans
+(offset suggestion) · stock configs (20 lists, data files present) · opening a
+stock config via the generic_csv driver · **the full Frequency-lists import into
+a loaded radio (10 NOAA channels at ch 20, `162.550 'WX1PA7'` — identical to the
+2026-07-10 source-run result, which finally closes that owed frozen smoke)** ·
+RepeaterBook import + geography · RepeaterBook cache dir
+(`chirp_platform.config_file`) · **a LIVE RepeaterBook fetch over HTTPS from the
+frozen .exe (40 Delaware repeaters — proves requests *and* TLS/certifi work
+frozen)** · load image · settings editor · banks editor · export to CSV.
+
+Note the two correct-but-opposite placements for bundled data, which the
+`sample-images/` work threw into relief: **stock configs belong in
+`_internal/`** (the app resolves them itself via `sys._MEIPASS` and offers them
+in a chooser — a user never browses there), while **sample images belong at the
+top level** (a human opens them through a File dialog and must be able to find
+them). The rule is: data the app resolves → `_internal/`; files a human browses
+→ beside the .exe.
+
+So the driver glob was the only instance. Two findings from the audit:
+
+- **`build.py`/`pyproject.toml` comments were stale and actively misleading.**
+  Both claimed `chirp.sources` is unused and `requests` therefore absent from
+  the frozen app — untrue since RepeaterBook returned on 2026-07-09.
+  `chirp_backend/repeaterbook.py` imports it statically (inside functions, which
+  modulegraph still follows), so requests/certifi are bundled. Comments
+  corrected.
+- **A latent CHIRP frozen bug VRP doesn't hit:** `chirp/platform.py`
+  `executable_path()` does `str(sys.executable, encoding)` under
+  `we_are_frozen()` — a Python-2-ism that would `TypeError` on py3. Only
+  `find_resource()` calls it (for `share/` assets), which VRP never uses. Left
+  alone; noted in case a future feature reaches for CHIRP resources.
+
+**Owed:** open an image in the real windowed `vrp.exe` (the spikes prove the
+code path, not the GUI) and a serial **clone** against real hardware — port
+*enumeration* is verified frozen, but opening a port and running a download
+needs the radio.
+
+## 2026-07-15 — The speech preference is wired up (it was dead code)
+
+Follow-up to the prism bundling below, found while investigating it.
+
+**The bug:** `speak_status_messages` (Preferences ▸ "Speak status messages
+aloud", default **OFF**) was shown, read, and written to the config — and
+**never consulted**. `MainWindow.__init__` built the `Announcer` with an
+unconditional `speak=` lambda, so speech was always on whenever prism imported,
+and the checkbox did nothing. The webview `app.py` gated it via
+`self._speak_enabled`; the native rewrite never carried that over. Note that
+`test_announce.py` passed throughout — the defect was in the **wiring**, not the
+`Announcer`, and nothing tested the wiring.
+
+**The trap this set.** The naive fix — consult the pref, keep the default —
+would have been a **silent regression for every existing user**: `Config.set`
+persists the whole dict, so anyone who had ever OK'd Preferences had
+`"speak_status_messages": false` stored (the developer's own config did). Wiring
+the pref up would have honoured those stored `false`s and muted the app on
+upgrade — and it would have looked like the prism fix had failed.
+
+**The resolution: abandon the key, don't migrate it.** A stored `false` records
+**no user choice** — the pref never did anything, so the value is just the
+default that got written out. So `speak_status_messages` is dropped and a new
+`speak_messages` (default **True**) replaces it; leftover old keys are ignored
+and harmless. Default ON because there is no live region any more and NVDA does
+not read the status bar spontaneously: with speech off, an announcement is only
+ever *seen*.
+
+**The cell cursor bypasses the pref.** `Announcer.announce` grew
+`always_speak=True`, used only by the grid's Left/Right cell cursor, which is
+the *only* announcement of which cell you are on (the generic Windows
+DataViewCtrl announces no per-cell cursor). Gating it would recreate the silent-
+navigation bug through a different door — via a preference the user might
+reasonably tick. It can't double-speak precisely because nothing else announces
+it. The checkbox label says so ("…moving around the channel grid always
+speaks"), in the label itself rather than a trailing StaticText — a CheckBox
+self-labels under MSAA, and wxMSW would try to attach a trailing StaticText to
+the *next* control.
+
+- `Announcer`: `speech_enabled` ctor arg + `set_speech_enabled()` (Preferences
+  applies immediately, so the "Preferences saved." confirmation is itself
+  spoken/silent per the choice just made) + `always_speak=`.
+- `main_window`: builds the Announcer from the pref; the cell-cursor closure
+  became a named `_announce_cell` method — more debuggable, and reachable from
+  a test.
+
+**Verified:** suite **334 passed** (+17). Unit tests for the gate; and
+`tests/test_speech_pref_wiring.py` drives a real `MainWindow` for the wiring
+itself (default ON, pref honoured both ways, the abandoned key can't silence the
+app, and announcements-off still leaves the cell cursor speaking).
+**Mutation-checked** — re-introducing each half of the bug fails the matching
+test, so they aren't vacuous. Driven end-to-end from source with an isolated
+`APPDATA`: `speak_messages=true` → `prism: using backend NVDA` logged (an
+announcement passed the gate); `false` → no backend ever acquired (nothing
+spoke). **Owed:** the audible NVDA pass — that the cell cursor is *heard* with
+announcements off is proven at the callback, not at the ear.
+
+## 2026-07-15 — prism is bundled in the build (the release .exe was silent)
+
+**The bug:** every release build excluded prism, so the frozen app had **no
+speech at all** — and on Windows that means the Left/Right **cell cursor
+announces nothing**, because wx's generic DataViewCtrl provides no per-cell
+cursor and VRP's own cursor is voiced *only* through the prism Announcer
+(`main_window.py` `cell_announce` → `announce(..., assertive=True)`). The status
+bar still got the text, but NVDA does not read the status bar spontaneously.
+Selection counts, F2 cell-edit results, and operation summaries were equally
+mute. NVDA's own reading of the focused *row* still worked, so the app wasn't
+unusable — but VRP's signature per-cell layer was gone from every build we
+shipped. Caught by the developer asking why prism wasn't bundled.
+
+**Why it happened — the rationale rotted rather than being wrong.** The
+exclusion dates from the **webview era**, where an ARIA live region did the
+announcing and prism was genuinely supplemental (see the Preferences entry
+below: "gates the *supplemental* prism speech; the live region is always spoken
+by the screen reader"). Two later changes invalidated that and neither revisited
+the build: (1) the webview UI was removed (2026-06-29), taking the live region
+with it; (2) the Left/Right cell cursor was added, whose only Windows voice is
+prism. The log even flagged the risk — "the release `.exe` excludes prism, so
+verify the channel grid reads under NVDA in a built Windows binary" — and listed
+the prism-less frozen-exe smoke as owed. It was never run; VRP-20260715.1
+shipped that untested configuration.
+
+**The stated cost was also a Nuitka-era artifact.** `build.py`/README/CLAUDE.md
+all claimed prism "drags in the entire win32more Windows-API surface (~795
+modules) plus numpy". That was true of **Nuitka's `--include-package=win32more`**,
+which force-included a package regardless of imports. **prism imports only
+`cffi`** — never win32more, never numpy — and PyInstaller follows real imports.
+Measured cost of bundling: **+0.8 MB** (22.1 → 22.9 MB zip).
+
+**The actual fix: `--collect-binaries=prism`.** prism dlopens a native
+`prism.dll` from `prism/_native/` (`prism/lib.py` `_find_native_dir` →
+`os.add_dll_directory` → `ffi.dlopen`). That DLL is package *data*, so removing
+`--exclude-module=prism` alone is **not enough** — PyInstaller bundles the .py
+files and the import then dies in `os.add_dll_directory`, which is guarded only
+against `AttributeError`, with `FileNotFoundError(2)`. `win32more`/`numpy` stay
+excluded as guards, with corrected comments.
+
+**Verified (`tools/spike_frozen_prism.py`, a throwaway console-build spike, kept
+for the next time this is questioned):** frozen *without* the flag → `import
+prism` raises `FileNotFoundError`, 0 win32more modules pulled in. Frozen *with*
+it → import OK, **14 backends**, backend acquired = **NVDA**, `speak()` returns;
+25.4 → 26.5 MB. Then in the real app: `prism.dll` present at
+`_internal/prism/_native/prism.dll`, no win32more/numpy directories, and — from
+a **clean unzip of the shipped zip** — `vrp.exe` runs with `prism.dll` **loaded
+into the live process**, proving the import and dlopen both succeed where they
+previously failed. Suite: **317 passed**. Cut **VRP-20260715.2**.
+
+**Owed:** an audible NVDA confirmation by a human — a loaded process proves the
+machinery initialised, not that the cell cursor is heard. **Follow-up bug found
+while investigating:** the **`speak_status_messages` preference is dead code** —
+`MainWindow.__init__` builds the `Announcer` with an unconditional `speak=`
+lambda, so the pref (default **OFF**) is written and read but never consulted;
+speech is always on when prism is importable. The webview `app.py` gated it via
+`self._speak_enabled`; the native rewrite never carried that over. Do **not**
+naively re-wire it: with prism now the cell cursor's only voice, honouring a
+default-OFF pref would mute cell navigation by default. The default and the
+meaning need a decision first (likely: default ON, and/or the cell cursor
+bypasses the gate).
+
+## 2026-07-15 — Date-based releases (VRP-YYYYMMDD.N) + portable zip build
+
+Replaced the semantic version (`0.1.0`, never bumped) with a **date-based release
+scheme**, and added a no-install portable build to hand to testers.
+
+**The scheme.** `VRP-YYYYMMDD.N` — `VRP-20260715.1` is the first release cut on
+15 July 2026, `.2` the second that day; `N` restarts at 1 each day. Rationale:
+VRP has no compatibility contract to communicate, so a semantic version conveys
+nothing a tester can act on, whereas a date answers "how fresh is this build".
+`N` is never zero-padded, which keeps the version a valid **PEP 440** release
+segment and makes both PEP 440 and integer comparison order releases correctly
+(`20260715.10` > `20260715.9`). Inno Setup's `AppVersion` takes an arbitrary
+string and no `VersionInfoVersion` is set, so the installer needed no change.
+
+- **`tools/release_version.py` (new).** Owns the scheme: `parse_version`
+  (rejects non-scheme *and* date-shaped-but-unreal stamps like `20261332.1`),
+  `next_version` (same day → N+1; any other day, or a non-date current version
+  like `0.1.0` → today`.1`), `tag_for`. CLI: `--show` / `--bump` / `--set` /
+  `--check`.
+- **Two files, one version.** `vrp/__init__.py` (`__version__` — what the app and
+  `build.py` read) and `pyproject.toml` both carry it and must agree; the tool
+  writes both with file-anchored regexes (so a dependency constraint in
+  pyproject can't be mistaken for the project version), and a test asserts they
+  match.
+- **`vrp.describe_version()` + About box (a11y).** A screen reader reads
+  `20260715.1` as one huge number ("twenty million…"), which tells the user
+  nothing — so About now leads with a speakable **"Release 1 of 15 July 2026"**
+  and keeps the exact string in `SetVersion` for copying into a bug report.
+  Non-date versions pass through unchanged for local/dev builds.
+- **`build.py --portable`.** Zips the onedir into
+  `dist/VRP-<version>-win64.zip`, re-rooting every entry under a release-named
+  top folder (`VRP-20260715.1/`, not `vrp/`) so two releases unzipped side by
+  side don't merge and the folder on disk says which build it is. Rejects
+  `--onefile` (already portable), combinable with `--installer`.
+
+**Verified:** `tests/test_release_version.py` (+30: parse accept/reject incl. the
+unreal-date and zero-padding cases, same-day increment, new-day reset, the
+`0.1.0`→date transition, bump-moves-forward, sort order, both-files-agree,
+write round-trip that leaves `wxpython>=4.2.0` untouched, and the speakable
+renderings). Full suite **317 passed**. Cut **VRP-20260715.1** and built it:
+`build.py --portable` → 22.1 MB zip / 114 files, CHIRP pin enforced at
+`906e0393` as always. Then **extracted the zip to a clean directory and ran
+`vrp.exe`** — it launched (window title "Versatile Radio Programmer"), which is
+the portable path end-to-end.
+
+**Also closes the owed frozen-build smoke from 2026-07-10:** the 20 stock-config
+CSVs are present in the frozen tree at `_internal/chirp/stock_configs/`, exactly
+where `stock_configs_dir()` looks under `sys._MEIPASS`. The *import* half was
+closed later the same day — see the frozen audit below, which runs the whole
+Frequency-lists flow in a frozen build (10 NOAA channels into ch 20,
+`162.550 'WX1PA7'` — identical to the source-run result). **Still owed:** the
+NVDA pass on the About box's new release line.
+
 ## 2026-07-10 — Import from frequency lists (CHIRP stock configs)
 
 Added **Radio ▸ Query Source ▸ Frequency lists…** (directly under RepeaterBook)

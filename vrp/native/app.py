@@ -14,4 +14,8 @@ def run(debug: bool = False) -> None:
     app = wx.App()
     win = MainWindow()
     win.Show()
+    # Queued rather than called: it runs once MainLoop is going and the frame is
+    # actually on screen, so the welcome dialog has a shown parent to be modal
+    # against and focus returns to a live grid when it closes.
+    wx.CallAfter(win.maybe_show_welcome)
     app.MainLoop()

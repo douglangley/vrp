@@ -4,6 +4,13 @@ Status: ☑ implemented 2026-07-10 (see PROGRESS_LOG). Owed: NVDA pass on the
 chooser dialog + a frozen-build smoke that the CSVs bundle and import. Created
 2026-07-10.
 
+> **2026-07-21 addendum:** the UI flow is unchanged, but the shared import
+> implementation is now `migration.batch_from_radio` +
+> `memory_ops.apply_migration_batch`, with per-channel reports and one-step Undo.
+> References below to `import_memories` describe the original implementation;
+> that function now delegates to the migration engine for compatibility. See
+> [2026-07-21-cross-radio-migration.md](2026-07-21-cross-radio-migration.md).
+
 ## Goal
 
 Let the user import one of CHIRP's built-in **stock configs** (20 curated
@@ -37,10 +44,10 @@ exact same destination + import machinery.
   loads as "Generic CSV" with the right channel count.
 - `MainWindow._import_results(src_radio, count, numbers=None)` — the shared
   import flow: shows **`ImportDestinationDialog`** (which already asks for the
-  **starting channel** and **overwrite-vs-skip**), calls
-  `memory_ops.import_memories(...)`, reloads the grid, focuses the first
-  imported channel, and announces the result. RepeaterBook and Import-from-File
-  both already go through it.
+  **starting channel** and **overwrite-vs-skip**), builds a migration batch,
+  calls `memory_ops.apply_migration_batch(...)`, reloads the grid, focuses the
+  first imported channel, announces the summary, and shows accessible issue
+  details. RepeaterBook and Import-from-File both already go through it.
 - `ImportDestinationDialog` (`vrp/query_dialogs.py`) — destination + overwrite.
 - `RadioListView` (`vrp/serial_dialogs.py`) — the a11y-tuned, type-ahead
   `wx.ListCtrl` used by the model picker; reuse it for the list chooser.
@@ -148,9 +155,9 @@ pin, so source runs read the CSVs straight from `./chirp/chirp/stock_configs`.
   - `stock_configs_dir()` resolves to the CHIRP tree from source.
   - `describe_config()` on "US NOAA Weather Alert" reports 10 channels and
     includes a known frequency (162.550) — proves the open+count path.
-  - End-to-end: `open_image_as_source(<a stock path>)` →
-    `memory_ops.import_memories(src, dest, overwrite)` lands the channels at the
-    destination in a loaded UV-5R (reuse the existing import test scaffolding).
+  - End-to-end: `open_image_as_source(<a stock path>)` → shared migration batch
+    lands compatible channels at the destination in a loaded UV-5R and retains
+    individual incompatibility reasons (reuse the existing import scaffolding).
 - Dialog smoke test (like `test_repeaterbook_dialog.py`): construct
   `FrequencyListDialog`, assert the list is populated, the filter narrows it, and
   `get_selection()` returns a `(name, path)` pair. Assert label-before-control

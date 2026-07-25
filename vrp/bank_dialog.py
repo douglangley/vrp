@@ -66,6 +66,14 @@ class ChannelBanksDialog(wx.Dialog):
                 self._radio.Disable()
             outer.Add(self._radio, 0, wx.EXPAND | wx.ALL, 10)
 
+        # Renaming a bank and reviewing its channels are radio-level actions,
+        # so they live in Radio ▸ Manage banks…. This is the cross-link; the
+        # caller opens that dialog when ``manage_requested`` is set.
+        self.manage_requested = False
+        self.manage_button = wx.Button(self, label="Mana&ge banks…")
+        self.manage_button.Bind(wx.EVT_BUTTON, self._on_manage)
+        outer.Add(self.manage_button, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 10)
+
         flags = wx.CANCEL if self._read_only else (wx.OK | wx.CANCEL)
         buttons = self.CreateStdDialogButtonSizer(flags)
         if self._read_only:
@@ -75,6 +83,15 @@ class ChannelBanksDialog(wx.Dialog):
         outer.Add(buttons, 0, wx.EXPAND | wx.ALL, 8)
 
         self.SetSizerAndFit(outer)
+        self.SetEscapeId(wx.ID_CANCEL)
+
+    def _on_manage(self, _event) -> None:
+        """Close this per-channel editor and hand off to the bank manager."""
+        self.manage_requested = True
+        if self.IsModal():
+            self.EndModal(wx.ID_CANCEL)
+        else:
+            self.Close()
 
     def get_desired_indexes(self) -> set:
         if self._mode == "multi":

@@ -11,11 +11,13 @@
 ; or, equivalently, by hand:
 ;
 ;   uv run python build.py                     (produces dist\vrp\)
-;   ISCC installer.iss /DMyAppVersion=0.1.0
+;   ISCC installer.iss /DMyAppVersion=20260715.1
 ;
 ; Requires Inno Setup 6: https://jrsoftware.org/isinfo.php
 ; build.py passes the version in via /DMyAppVersion; this fallback only applies
-; when ISCC is run by hand without it.
+; when ISCC is run by hand without it. Versions are dates (YYYYMMDD.N — see
+; tools/release_version.py); AppVersion takes an arbitrary string, so the date
+; scheme needs nothing special here.
 
 #ifndef MyAppVersion
   #define MyAppVersion "0.0.0"

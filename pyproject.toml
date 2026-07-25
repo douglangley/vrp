@@ -3,7 +3,7 @@
 # A free, open-source, accessible radio memory channel programmer.
 # Built on the CHIRP radio driver library (GPLv3).
 name = "versatile-radio-programmer"
-version = "0.1.0"
+version = "20260715.3"
 description = "Versatile Radio Programmer (VRP) — accessible radio memory channel programmer"
 requires-python = "==3.11.*"
 
@@ -31,11 +31,10 @@ dependencies = [
     "chirp",
     # CHIRP library dependencies. pyserial (the clone pipe) and lark
     # (chirp.bitwise_grammar) are used on every run. requests is declared by
-    # CHIRP itself (chirp/setup.py) and is only reached through chirp.sources
-    # (RepeaterBook et al.) — nothing VRP runs imports it, so it is NOT in the
-    # frozen app (build.py no longer collects chirp.sources). Kept here so the
-    # dev/source environment matches CHIRP's requirements and RepeaterBook works
-    # when it returns.
+    # CHIRP itself (chirp/setup.py) and is reached through chirp.sources —
+    # which VRP DOES use again: RepeaterBook returned on 2026-07-09
+    # (chirp_backend/repeaterbook.py). It is therefore bundled in the frozen app
+    # too, via that static import; verified by a live fetch from the .exe.
     "pyserial>=3.5",
     "lark>=1.1.0",
     "requests>=2.28.0",
@@ -48,6 +47,12 @@ dev = [
 ]
 build = [
     "pyinstaller>=6.10.0",
+]
+# Experimental, macOS-only alternate packaging path — see setup.py. The
+# project's primary, tested packager remains PyInstaller (build.py); this
+# extra is separate so `uv sync --extra build` is unaffected.
+py2app = [
+    "py2app>=0.28; sys_platform == 'darwin'",
 ]
 
 [project.scripts]

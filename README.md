@@ -99,7 +99,9 @@ Windows (exposed to MSAA/UIA so **NVDA** reads it):
 - Multi-select (Shift+Arrow for a contiguous block, Ctrl+Space for individual
   rows) drives in-place reordering: move up/down a slot or move-to a chosen
   channel, with the moved block re-selected and focused afterward
-- Whole-row cut/copy/paste and channel-edit undo/redo
+- Whole-row cut/copy/paste and channel-edit undo/redo. Clipboard snapshots can
+  be pasted after opening another radio; CHIRP converts each compatible channel
+  for the destination and reports incompatible rows individually.
 - Channel editing happens in a native wx dialog (F2/Enter); the grid itself is
   read-only/navigable
 - A single native menu bar carries both mnemonics and Ctrl-combo accelerators
@@ -116,8 +118,21 @@ Windows (exposed to MSAA/UIA so **NVDA** reads it):
 - Find / Find Next (frequency, name, or comment) with wrap-around
 - Download from / upload to radio with live progress announcements (background
   thread), favorite-radios list, and a "Radio details" view of any model's specs
-- Radio settings editor, banks editor, and online query sources (AMSAT, SatNOGS;
-  more sources are incremental)
+- Radio settings editor, banks editor, RepeaterBook lookup, and CHIRP stock
+  frequency-list import
+- Direct channel migration from another radio image or CHIRP CSV, with
+  overwrite/skip, partial success, accessible details, and one-step undo
+- Explicit cross-radio bank-membership mapping for ordinary imports and
+  cross-image Paste, with exact-name suggestions, opt-in position matching,
+  per-channel rollback, and memory-plus-bank Undo/Redo
+- Transactional D-STAR migration: required call signs are added on success,
+  reported to the user, exactly rolled back with partially written channels on
+  rejection, and included in Undo/Redo
+- Explicit one-memory transfer between regular channels and driver-defined
+  named specials (call, home, scan-limit, VFO, and similar slots); bulk import
+  remains numeric-only and never silently includes specials
+- Multi-side/zone radio images: accessible memory-section selection for Open,
+  Import, Download, and later switching, while saving/uploading the full image
 - High contrast and forced-colors (Windows High Contrast) support
 - Packages as a Windows installer (Inno Setup) wrapping a PyInstaller build
 
@@ -141,28 +156,47 @@ vrp/
   ops_dialog.py           Native wx dialog for bulk operations.
   find_dialog.py          Native wx Find dialog.
   serial_dialogs.py       Native wx Download / Upload / favorites / progress dialogs.
+  subdevice_dialog.py      Filterable native memory-section chooser.
+  special_memory_dialogs.py
+                         Explicit import mode/destination choices and a
+                         filterable regular/special memory chooser.
   settings_dialog.py      Native wx radio settings editor, Treebook.
   bank_dialog.py          Native wx dialog to assign a channel to banks.
+  bank_mapping_dialog.py  Filterable explicit cross-radio bank mapper.
   query_dialogs.py        Native wx query-source param + import dialogs.
   prefs_dialog.py         Native wx Preferences dialog.
-  info_dialog.py          Read-only multiline edit box (Radio Info / details).
+  info_dialog.py          Read-only multiline edit box (Radio Info, model and
+                         migration details).
   config.py               Persistent JSON config (prefs + recent files + favorites).
   speech.py               prism speech wrapper, graceful no-op if unavailable.
   _chirp_path.py          Makes the editable ./chirp package importable.
 chirp_backend/
-  radio.py               Wraps chirp library: load image, read/write memories,
-                         serial port download/upload, describe_model.
+  radio.py               Wraps chirp library: parent/selected-subdevice image
+                         state, read/write/save, serial clone, describe_model.
+  migration.py           Generic cross-radio Memory/DVMemory conversion and
+                         per-channel compatibility reports.
+  dstar_ops.py           Required D-STAR call-list snapshots and restoration.
   memory_ops.py          Field edits + range operations: set/update channel,
-                         move, copy, delete+shift, sort, arrange, find/goto.
-  undo.py                Channel-edit undo/redo (UndoManager).
+                         move, copy, migrate, delete+shift, sort, arrange,
+                         find/goto.
+  undo.py                Channel, global D-STAR, and auxiliary bank undo/redo.
   col_defs.py            Column definitions mirroring CHIRP's column hierarchy.
-  bank_ops.py            Bank membership operations (assign channels to banks).
+  bank_ops.py            Bank discovery, atomic membership replacement/mapping.
   bandplan.py            Suggested repeater offset + band defaults, by region.
-  query.py               Online query-source registry + threaded fetch runner.
+  repeaterbook.py        RepeaterBook query through CHIRP's mirror.
+  stock_configs.py       Finds/opens pinned CHIRP stock frequency lists.
   serial_trace.py        Byte-level serial trace (written under --debug).
 tests/                   Unit tests (no radio hardware needed).
 tools/
   update_chirp.py        Fetches/tests/pins a new CHIRP commit.
+  audit_migrations.py    Sweeps six VHF/UHF/HF/AM/split/DV cases across every
+                         pinned CHIRP target.
+  audit_special_migrations.py
+                         Sweeps every named special in pinned CHIRP images.
+  audit_bank_migrations.py
+                         Verifies mutable/fixed bank behavior and rollback.
+  audit_dstar_migrations.py
+                         Sweeps DV support and required call-list rollback.
 build.py                 PyInstaller build script.
 pyproject.toml           uv-managed project definition (Python 3.11 pinned).
 ```
@@ -240,10 +274,14 @@ into `dist/vrp-<version>-setup.exe` (Start-menu shortcut + uninstaller). Use
 `build.bat` wrapper; building is a deliberate release step. Testers and end users
 run from source via `run-win.bat` / `run-mac.sh`.)
 
-`build.py` excludes `prism`/`win32more`/`numpy` (prism pulls in the whole
-win32more Windows-API surface; speech is opt-in and no-ops without it), and
-explicitly collects `chirp.drivers`/`chirp.sources` since CHIRP loads both
-via dynamic import that PyInstaller's static analysis can't follow on its own.
+`build.py` bundles `prism` with `--collect-binaries=prism` — **required**, not
+optional: prism dlopens a native `prism.dll` from `prism/_native/`, which
+PyInstaller doesn't bundle on its own, and without it `import prism` raises
+`FileNotFoundError` and the app runs **silent**. That matters because the
+Windows cell cursor (Left/Right) has no other voice. It costs about 1 MB;
+`win32more`/`numpy` stay excluded as guards but prism imports neither (only
+`cffi`). `build.py` also explicitly collects `chirp.drivers`, since CHIRP loads
+drivers via dynamic import that PyInstaller's static analysis can't follow.
 
 Before building, `build.py` enforces the CHIRP pin: it checks that `./chirp` is
 at the `CHIRP_COMMIT` SHA and syncs a clean clone to it automatically, so the
@@ -251,6 +289,37 @@ build always bundles the exact, tested driver set. It never pulls from the
 network — adopting a newer CHIRP is the deliberate, tested step in
 `tools/update_chirp.py`. Pass `--no-chirp-sync` to verify only (abort on a
 mismatch rather than fixing the clone).
+
+## Releases (dates, not version numbers)
+
+VRP releases are named for the day they were cut:
+
+```
+VRP-20260715.1     the first release cut on 15 July 2026
+VRP-20260715.2     a second release the same day
+VRP-20260716.1     the next day's first release
+```
+
+The version string is `YYYYMMDD.N` (`VRP-` prefixes the git tag and the release
+artifacts). `N` starts at 1 each day and increments for each further release that
+day. There is no semantic-version meaning to read into it — **the newest date is
+simply the newest build**, which is all a tester needs to know.
+
+The version lives in `vrp/__init__.py` (`__version__`, what the app and
+`build.py` read) and `pyproject.toml`, which must agree; `tools/release_version.py`
+writes both and a test asserts they match. To cut a release:
+
+```bash
+uv run python tools/release_version.py --bump    # 20260715.1 -> 20260715.2, or a new day -> .1
+uv run python -m pytest
+uv run python build.py --portable                # or --installer
+git commit -am "chore(release): VRP-20260715.2" && git tag VRP-20260715.2
+```
+
+`--show` prints the current version, `--set <version>` forces one, and `--check`
+verifies the two version files agree. The About box shows the exact version plus
+a **speakable** rendering of it ("Release 1 of 15 July 2026") — a screen reader
+reads the bare `20260715.1` as one huge number, which tells the user nothing.
 
 ## Files NOT to Modify
 
@@ -298,6 +367,53 @@ The pipeline is two steps: PyInstaller freezes the app into a `dist/vrp/`
 mirrors how upstream CHIRP ships its own PyInstaller build (a real installer with
 a Start-menu shortcut and uninstaller, not a loose self-extracting `.exe`).
 
+**`build.py --portable`** is the no-install alternative: it zips the same onedir
+folder into `dist/VRP-<version>-win64.zip`, whose single top-level directory is
+named for the release (`VRP-20260715.1/`) rather than `vrp/`. A tester unzips it
+anywhere and runs `vrp.exe` from the folder — nothing is installed, and two
+releases unzipped side by side stay separate instead of merging. Handy for
+handing a build to a few people without an installer; `--installer` is still how
+the app is meant to ship broadly. The two are combinable.
+
+The portable zip also carries CHIRP's test images in a top-level
+**`sample-images/`** folder (360 images, one per supported model, plus a
+README) — beside `vrp.exe`, not inside `_internal/`, so File ▸ Open Image File
+has somewhere obvious to point. They let a tester exercise the app with **no
+radio and no cable**, and they come from `./chirp` at the enforced
+`CHIRP_COMMIT` pin, so they always match the bundled drivers. They cost about
+0.5 MB compressed. `--no-samples` omits them. The Inno Setup installer never
+includes them (it wraps `dist/vrp/` only) — a real user has their own radio.
+
+### Building on macOS
+
+`build.py --portable` works on a Mac too, and adapts:
+
+```bash
+uv sync --extra build
+uv run python build.py --portable      # -> dist/VRP-<version>-macos-<arch>.zip
+```
+
+- It zips **`dist/vrp.app`**, not `dist/vrp/`. PyInstaller's `--windowed` emits
+  both; the `.app` is the one a Mac user can double-click.
+- It zips with **`ditto`**, not Python's `zipfile`. A `.app` relies on symlinks
+  and the executable bit; `zipfile` follows symlinks instead of storing them and
+  `extractall()` doesn't restore permissions, so a zipfile-packed bundle won't
+  launch. `ditto` is macOS's own tool and preserves both.
+- The name carries the **architecture** (`macos-arm64` / `macos-x86_64`): a Mac
+  build only runs on the arch it was built for, unlike the Windows one.
+- **`--installer` is Windows-only** (it's Inno Setup) and errors out on macOS.
+- The `.app` is **unsigned and unnotarized**, so Gatekeeper blocks it on first
+  launch — harder than Windows SmartScreen does. Testers must right-click the
+  app and choose **Open**, or run
+  `xattr -dr com.apple.quarantine /path/to/VRP-<version>/vrp.app`. Put that in
+  the release notes. Signing needs a paid Apple Developer ID; not done yet.
+
+> The macOS packaging path has **not been run on a Mac yet** — it was written on
+> Windows. The naming/routing logic is unit-tested
+> (`tests/test_build_artifact_name.py`) and every failure mode is loud rather
+> than silent, but the first real run is unverified. The Windows path is
+> unaffected and verified.
+
 Why onedir over onefile: onefile re-extracts the whole interpreter + wxPython +
 552 drivers to a temp dir on *every* launch (multi-second cold start) and is a
 frequent Defender/SmartScreen false-positive trigger; onedir launches instantly.
@@ -312,13 +428,12 @@ Build command is in `build.py`. Key PyInstaller flags required:
 
 ```
 --windowed                       GUI app, no console window
---exclude-module=prism           speech is opt-in/off by default — don't bundle it
---exclude-module=win32more       prism's WebView2/win32 bindings — same reason
---exclude-module=numpy           prism dependency — same reason
+--collect-binaries=prism         prism's native prism.dll — REQUIRED, or speech dies silently
+--exclude-module=win32more       guard only; prism does not import it (Nuitka-era bloat)
+--exclude-module=numpy           guard only; not a prism dependency
 --collect-submodules=chirp.drivers   dynamic __import__ — must be explicit
---collect-submodules=chirp.sources   dynamic importlib.import_module — must be explicit
---collect-data=chirp             stock_configs, locale, etc.
 --collect-data=lark              .lark grammar files (chirp.bitwise_grammar)
+--add-data=...chirp/stock_configs    the "Frequency lists" CSVs (data, not modules)
 ```
 
 wxPython, `wx_accessible_grid`, and pyserial don't need explicit flags —

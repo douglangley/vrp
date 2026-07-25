@@ -44,6 +44,8 @@ arrow keys move across top-level menus; NVDA reads it like any native app menu.
 | Radio | Favorite radios… | — | manage starred radios (no loaded radio needed); used by Download's Favorites toggle; has a **Radio details…** button |
 | Radio | Radio Info… | — | needs a loaded radio; opens a read-only, navigable, copyable edit box |
 | Radio | Settings… | `Ctrl+Shift+P` | needs a loaded radio |
+| Radio | Select memory section… | — | enabled for a loaded multi-side/zone image; filter and show another section |
+| Radio | Manage banks… | — | needs a loaded radio; rename a bank (where the driver stores names) and review a bank's channels read-only with Go to channel |
 | Channels | Edit channel… | `Ctrl+E` | needs a loaded radio; all fields (also `Enter` / double-click on the grid) |
 | Channels | Edit cell… | `F2` | needs a loaded radio; edits the focused cell (the column at the Left/Right cursor) |
 | Channels | Delete channel(s) | `Del` | needs a loaded radio; clears the selected channel(s) |
@@ -55,12 +57,30 @@ arrow keys move across top-level menus; NVDA reads it like any native app menu.
 | Channels | Bulk operations… | `Ctrl+M` | needs a loaded radio; delete/delete+shift/insert/move/copy/sort/arrange over a range or list |
 | Channels | Find… | `Ctrl+F` | needs a loaded radio |
 | Channels | Find next | `F3` | needs a loaded radio |
+| Help | Getting Started | — | opens `help/GettingStarted.html` in the default browser |
+| Help | Keyboard Commands | — | opens `help/KeyboardCommands.html` in the default browser |
 | Help | Keyboard Shortcuts | `F1` | shows this list as a plain-text message box |
-| Help | About | — | |
+| Help | About | — | build info + the CHIRP acknowledgement, in two read-only edit boxes |
 
 Items marked "needs a loaded radio" are disabled until an image is open. F1's
 on-screen list (`APP_SHORTCUTS` in `vrp/native/main_window.py`) is kept in
 sync with this table by hand — update both when adding a command.
+
+The accelerators above are the **Windows** ones. wx maps a `Ctrl+` accelerator to
+**Command** on macOS, so `APP_SHORTCUTS` carries both columns and F1 shows the
+one for the platform it is running on. Three rows are not a Ctrl→Command swap:
+`Del` is `Fn+Delete` on a Mac, `Ctrl+Space` is just `Space` there, and
+`Ctrl+Up`/`Ctrl+Down` (the native list's focus-without-selection behaviour, which
+VRP never binds) has no NSTableView equivalent — VoiceOver users navigate with
+VoiceOver.
+
+The Help menu's shipped documents (`vrp/help.py`) open in the user's own browser
+rather than an in-app view, so a screen reader's browse mode does the reading.
+`help/KeyboardCommands.html` is the third statement of the key list, so it is
+**not** hand-checked: `tests/test_help_keyboard_parity.py` fails if it and
+`APP_SHORTCUTS` disagree in either direction. (That guard exists because this
+table and `APP_SHORTCUTS` *did* drift — `Ctrl+Q` was here and in the File menu
+but missing from F1.)
 
 **File ▸ Open Recent** lists the most-recently opened images (newest first),
 each labelled with an `Alt`+digit mnemonic (`&1`…`&9`) inside the submenu and
@@ -131,22 +151,60 @@ After a move, the moved block stays selected at its new position and focus
 lands on its first channel; the result is announced via the status bar and
 speech.
 
-**Cut / copy / paste** work on whole rows with an in-app clipboard (current
-image only). `Ctrl+C` snapshots the selected channel(s); `Ctrl+X` marks them
-(deferred — nothing changes until you paste, which then *moves* them and clears
-the clipboard); `Ctrl+V` pastes at the focused channel. Paste **overwrites** the
-destination, but when the destination is occupied a dialog offers **Overwrite**,
-**Make room** (shift the existing channels down to insert — blocked if there
-aren't enough empty slots near the end), or **Cancel**. The radio's channel
-count is fixed, so nothing is ever added or pushed off the end.
+**Cut / copy / paste** work on whole rows with an in-app clipboard. `Ctrl+C`
+snapshots the selected channel(s); `Ctrl+X` marks them (deferred — nothing
+changes until you paste); `Ctrl+V` pastes at the focused channel. Within the
+same open image, Cut + Paste is a move and clears the clipboard. After opening
+or downloading another radio, Paste uses CHIRP's cross-model conversion for
+frequency, names, power, tones, modes, duplex and D-STAR fields. A cross-image
+Cut is safely treated as Copy because its original image is no longer active.
+The same safety rule applies after switching a multi-section radio from one
+side/zone to another: only Paste within the exact same image and memory section
+may erase the deferred Cut source.
+
+Within one image, an occupied destination offers **Overwrite**, **Make room**
+(shift existing channels down), or **Cancel**. During cross-radio migration it
+offers **Overwrite**, **Skip**, or **Cancel**. Incompatible channels are skipped
+individually and shown with their reasons in a navigable, copyable details
+dialog; compatible channels still import. The radio's channel count is fixed,
+so every source channel that runs past the end is also listed in that report.
+Migration covers regular numbered memories (including D-STAR where both drivers
+support it). Multi-side/zone images present a filterable **memory section**
+chooser on Open and Import, and Radio ▸ Select memory section… switches the
+grid later. File Import can also map one explicitly selected regular or named
+special memory to a numbered channel or named special on the destination.
+Ordinary bulk migration never includes specials, and a same-name special is
+only preselected for confirmation—not written automatically.
+
+For a D-STAR destination that requires master call lists, VRP automatically
+adds the calls needed by each successfully imported channel and lists those
+additions in the migration details. If conversion or the driver write rejects a
+channel, its call-list changes and any partial destination write are restored.
+A destination without DV support reports that channel as incompatible; it is
+not converted to analog.
+
+When selected source channels use banks, ordinary File Import and cross-image
+Paste open a filterable **Map source banks** dialog. Exact non-empty bank names
+may be preselected, **Match by position** is available only as an explicit
+action, and any source bank can remain **Do not import**. Confirming a map makes
+the mapped banks replace existing memberships on each successfully imported
+channel; bank names themselves are not renamed. An entirely unbanked selection
+asks whether to clear or keep target memberships. A radio with no banks or
+fixed banks asks before continuing with channel contents only. Bank-driver
+failures restore that channel's prior memberships and appear in the details
+report. Radio-wide settings are not migrated between models.
 
 **Undo / redo** cover every channel operation — edit, delete, move, copy,
 cut/paste, sort, insert, arrange, import. `Ctrl+Z` undoes the last one and
 announces what it reversed (e.g. "Undone: Deleted channel 5"); `Ctrl+Y` (or
 `Ctrl+Shift+Z`) redoes it. The Edit menu's Undo/Redo items show the operation
 they'd act on; the history is bounded (most-recent ops) and cleared when you
-load, close, or download an image. Radio Settings and bank assignments are not
-yet undoable.
+load, close, download an image, or switch memory sections. Section switching
+preserves image edits and the unsaved-changes state. An imported named special
+is announced by name and restores correctly through Undo/Redo. Radio Settings
+are not undoable. Bank assignments, including cross-radio mapped memberships,
+are undoable together with their channel operation. Required D-STAR call-list
+additions are also restored and reapplied with the imported memories.
 
 ## Dialogs
 
@@ -219,6 +277,9 @@ channels…", default Cancel). The transfer runs on a background thread; progres
 is announced (throttled), with a gauge for sighted users. Download can be
 cancelled (result discarded); upload cannot (a half-written radio is worse). On
 download success the grid refreshes and focus moves to the first channel.
+If the downloaded image exposes multiple memory sections, a filterable chooser
+first asks which section to show; canceling that chooser keeps the first section
+available because the hardware download itself has already completed.
 
 ### Favorite radios
 
@@ -245,10 +306,18 @@ Ctrl shortcuts); a recent entry that's gone is announced and pruned.
 
 ### Import / Export / Radio Info
 
-File ▸ Import from File… picks another radio image (native file dialog), loads
-it as an independent source (the active radio is untouched), then reuses the
-import-destination dialog + import op (adapts each memory via CHIRP import_logic,
-overwrite/skip, announces counts, focuses the first imported channel). File ▸
+File ▸ Import from File… picks another radio image or CHIRP CSV (native file
+dialog), loads it as an independent source (the active radio is untouched), and
+offers a filterable memory-section chooser when needed. If either radio exposes
+named specials, the next dialog explicitly chooses **Bulk ordinary channels**
+or **One memory**. Bulk retains the normal numeric-only destination/overwrite
+flow and never includes specials. One memory opens a filterable regular/special
+source picker, then asks for a numbered or named-special destination. A matching
+special name may be preselected but must still be accepted; an occupied special
+requires a separate overwrite confirmation whose safe default is No. Both
+paths reuse the generic migration engine (adapts via CHIRP `import_logic`,
+reports incompatibilities, and focuses or announces the imported destination).
+File ▸
 Export to CSV… writes the loaded radio's non-empty channels to a CSV via CHIRP's
 generic_csv driver (native save dialog with overwrite prompt; announces count +
 file). You can also export **just a selection**: the row context menu's "Export
@@ -275,8 +344,8 @@ Dialog`, a `wx.ListBox` with `LB_MULTIPLE`): arrow through the repeaters, press
 **Unselect all** buttons and a **Back to search** button that returns to the
 query dialog with the previous inputs preserved (query → results loops until
 Import or Cancel). The checked rows flow through the shared
-`ImportDestinationDialog` + `memory_ops.import_memories` (its `numbers=`
-argument limits the import to the checked source channels). A checkbox list
+`ImportDestinationDialog` + shared migration engine (the selected source
+channel numbers limit the import to the checked rows). A checkbox list
 (`wx.CheckListBox`) was avoided — its per-item checkboxes read unreliably under
 NVDA; a multi-select ListBox announces each row and its selected state. It currently pulls from **CHIRP's mirror**
 (`data.chirpmyradio.com/rb/`, generic CHIRP User-Agent, no credential) — the
@@ -290,8 +359,8 @@ MURS, Marine VHF, aviation, railroad, EU PMR/LPD, …) into the loaded radio —
 *local* import, no network. A filterable `FrequencyListDialog` (type-ahead
 `RadioListView` + a **Details…** button that previews the list's channels in the
 read-only `InfoDialog`) chooses the list; the whole list then imports through the
-same `ImportDestinationDialog` (start channel + overwrite/skip) +
-`memory_ops.import_memories`. The files are read from the pinned CHIRP tree
+same `ImportDestinationDialog` (start channel + overwrite/skip) + shared
+migration engine. The files are read from the pinned CHIRP tree
 (`chirp/stock_configs`) — no copy into the VRP repo; the frozen build bundles
 that one subdir via a targeted `--add-data` (see `chirp_backend/stock_configs.py`
 and `build.py`). Unlike CHIRP, which *opens* a stock config as its own document,
@@ -309,7 +378,18 @@ fixed-bank radios show the membership read-only. An intro line states current
 membership in words. OK applies the add/remove diff and announces the new
 membership; failures are reported truthfully. Only enabled on bank-capable
 radios (the menu item is disabled / `Ctrl+B` announces "no banks" otherwise).
-Bank renaming and a "channels in a bank" overview are deferred. NVDA pass owed.
+A **Manage banks…** button hands off to the radio-level dialog below. An NVDA
+pass on this dialog's own membership readout and checkbox/radiobox state is
+still owed — the Phase 6.1 pass covered Manage banks…, not this.
+
+Radio ▸ Manage banks… renames a bank and reviews a bank's channels. The bank
+list carries each bank's channel count; **Rename…** is offered only where the
+driver actually stores names, and the result is confirmed by rereading, so a
+driver that truncates ("Repeaters" → "Repeat" on an ID-880H) or silently
+discards the name is reported rather than announced as success. **Show
+channels…** lists a bank's channels read-only with **Go to channel**.
+Renames are undoable. Windows/NVDA pass confirmed 2026-07-25 (matrix
+section H); macOS/VoiceOver pending.
 
 ### Radio settings
 

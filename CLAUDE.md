@@ -35,12 +35,18 @@ see `docs/research/2026-06-24-native-grid-voiceover-feasibility.md`.
 provides supplemental speech, and the app packages to a single .exe with
 PyInstaller.
 
-> **If in-app help/docs are added later** and an HTML view is genuinely the right
-> tool, build a small, purpose-made read-only viewer (a `wx.Frame`/`wx.Dialog`
-> hosting a read-only `wx.html2.WebView`, which is part of wxPython core — no
-> extra dependency). Do **not** resurrect the old webview stack: it was a full
-> alternate front end for the editable channel grid, not a doc viewer, and shares
-> nothing useful with a help window.
+> **Help/docs landed, and they do NOT use a webview.** The Help menu opens the
+> HTML in the **user's own browser** (`vrp/help.py`, `webbrowser.open`). A
+> screen-reader user reading a long structured document wants browse mode — H by
+> heading, T by table, K by link — and already has it, tuned to taste, in the
+> browser they use daily. An embedded `wx.html2.WebView` would mean requesting
+> the Edge backend explicitly (wx's MSW default is **IE/Trident**, legacy for
+> screen readers), shipping `WebView2Loader.dll`, and depending on the WebView2
+> runtime on the user's machine — a silent fall back to IE, or a dead Help menu,
+> for the exact users this app exists for. Do **not** resurrect the old webview
+> stack either: it was a full alternate front end for the editable channel grid,
+> and its `wx-accessible-webview` fixes target the editable-grid-re-read problem,
+> which a read-only doc does not have (PROGRESS_LOG, 2026-06-29).
 
 The CHIRP library (./chirp/) is used UNMODIFIED as a dependency. Never edit
 files inside ./chirp/. Update it with git pull only.
@@ -85,26 +91,52 @@ obscure it. Any future help/docs page must carry it too.
   - serial_dialogs.py  — native wx Download/Upload/Favorites/progress dialogs +
                          the shared filter ModelPicker and type-ahead
                          RadioListView (a wx.ListCtrl)
+  - subdevice_dialog.py — accessible filterable chooser for CHIRP memory
+                         sections (multi-side/VFO/band/zone images)
   - settings_dialog.py — native wx radio settings editor, Treebook
   - bank_dialog.py     — native wx dialog to assign a channel to banks
+  - bank_mapping_dialog.py — filterable explicit cross-radio bank mapping
   - query_dialogs.py   — native wx ImportDestinationDialog (shared by Import
                          from File + query import) and RepeaterBookQueryDialog
                          (country/state + filters); RepeaterBook backend is
                          chirp_backend/repeaterbook.py
   - prefs_dialog.py    — native wx Preferences dialog: recent-files count, band
                          plan region, apply-band-defaults, speak-aloud
+  - welcome_dialog.py  — startup welcome: band-plan region picker + an offer to
+                         open Getting Started. Shown by
+                         `MainWindow.maybe_show_welcome` (queued via
+                         wx.CallAfter from `vrp.native.app`) while the
+                         **`show_welcome`** pref is True. Only "Don't show this
+                         again" clears that pref — Escape and "Not now"
+                         deliberately leave it set. The region is saved whichever
+                         button is pressed, and is also in Preferences, so
+                         dismissing the screen loses nothing.
   - info_dialog.py     — read-only multiline edit box for reviewing text (Radio
-                         Info, "Radio details…"); navigable + copyable
+                         Info, "Radio details…", migration issue reports);
+                         navigable + copyable
+  - special_memory_dialogs.py — explicit import-mode/destination choices and
+                         filterable regular/special memory picker
+  - about_dialog.py    — Help ▸ About: build info + the CHIRP acknowledgement in
+                         two read-only edit boxes (navigable/copyable, unlike
+                         wx.adv.AboutBox's static text)
+  - help.py            — locates help/ (beside the exe when frozen; the .app's
+                         Contents/Resources on macOS) and opens a document in
+                         the user's browser
   - config.py          — persistent JSON config: prefs + recent files +
                          favorite radios + band-plan region
   - speech.py          — prism speech wrapper, graceful no-op if unavailable
   - _chirp_path.py     — makes the editable ./chirp package importable
 - chirp_backend/       — all chirp library interaction (framework-agnostic):
-                         radio (incl. describe_model), memory_ops, undo
-                         (channel-edit undo/redo), bandplan (suggested repeater
-                         offset + band defaults, by region), col_defs, bank_ops,
-                         serial_trace, repeaterbook (RepeaterBook query via
-                         CHIRP's mirror; direct-API seam for a future VRP UA)
+                         radio (incl. parent/selected-subdevice ownership,
+                         context identity + describe_model),
+                         migration (generic cross-radio conversion + detailed
+                         reports), dstar_ops (required call-list transactions),
+                         memory_ops, undo (channel + radio-global D-STAR +
+                         auxiliary bank state undo/redo),
+                         bandplan (suggested repeater offset + band defaults, by
+                         region), col_defs, bank_ops, serial_trace, stock_configs,
+                         repeaterbook (RepeaterBook query via CHIRP's mirror;
+                         direct-API seam for a future VRP UA)
   - extra_drivers/     — VRP-maintained out-of-tree CHIRP drivers for radios not
                          yet supported upstream (can't live in ./chirp — it's
                          vendored/re-cloned). `register_all()` (called by
@@ -114,8 +146,19 @@ obscure it. Any future help/docs page must carry it too.
                          module is a drop-in CHIRP driver (submit upstream as-is);
                          PyInstaller needs `--collect-submodules` (in build.py).
                          See extra_drivers/README.md. First one: Wouxun KG-UV96M.
+- help/                — the shipped user documentation (Getting Started in md/
+                         txt/html + KeyboardCommands.html). `build.py`'s
+                         `stage_help()` copies the whole folder BESIDE the exe in
+                         every build; the Help menu opens the .html in the user's
+                         browser. Adding a doc = drop it here + link it from
+                         `_build_help_menu`.
 - tests/               — unit tests (no hardware needed)
-- tools/               — update_chirp.py (CHIRP version bump); throwaway spikes
+- tools/               — update_chirp.py (CHIRP version bump),
+                         audit_migrations.py + audit_special_migrations.py +
+                         audit_bank_migrations.py + audit_dstar_migrations.py
+                         (all pinned driver fixtures, named special slots, bank
+                         models, and actual DV memories),
+                         release helpers, and throwaway spikes
 - build.py             — PyInstaller build script
 - chirp/               — upstream CHIRP library (DO NOT EDIT)
 
@@ -131,9 +174,20 @@ optionally gated on a loaded radio (`needs_radio=True`, tracked in
 keep it in sync with the menu accelerators by hand.
 
 When adding a command: add it via `self._add(menu, key, label_with_accelerator,
-handler, needs_radio=...)` in the right `_build_*_menu`, add the same combo to
-`APP_SHORTCUTS`, and update `docs/keyboard-map.md` and
-`docs/chirp-feature-coverage.md`.
+handler, needs_radio=...)` in the right `_build_*_menu`, add the combo to
+`APP_SHORTCUTS`, add a row to `help/KeyboardCommands.html`, and update
+`docs/keyboard-map.md` and `docs/chirp-feature-coverage.md`.
+
+`APP_SHORTCUTS` entries are **`(windows_keys, macos_keys, description)`** and F1
+shows the column for the platform it is running on (`shortcuts_for_platform`).
+Do **not** derive the macOS column by replacing "Ctrl" with "Command": wx maps a
+`Ctrl+` accelerator to Command on macOS, but `Del` is `Fn+Delete` there,
+`Ctrl+Space` is just `Space` (the grid ignores Ctrl, and Cmd+Space is Spotlight),
+and `Ctrl+Up`/`Ctrl+Down` is the native list's own behaviour that NSTableView
+lacks entirely (VoiceOver navigation). `tests/test_help_keyboard_parity.py`
+enforces both columns against `help/KeyboardCommands.html`, in both directions —
+it exists because `Ctrl+Q` was wired and documented but missing from F1 for
+months.
 
 ## Accessibility Rules (Enforce These Always)
 
@@ -152,7 +206,11 @@ handler, needs_radio=...)` in the right `_build_*_menu`, add the same combo to
    must be announced. Call `self.announce.announce('Message here')` (a
    `vrp.native.announce.Announcer`) — it writes the status bar and, if prism
    speech is available, speaks it too. Pass `assertive=True` for errors so they
-   interrupt any speech in progress. The announcer is a fallback, not the primary
+   interrupt any speech in progress. Speech obeys the **`speak_messages`**
+   preference (default ON); pass **`always_speak=True`** only for content the
+   screen reader cannot announce itself and that would otherwise be silent —
+   today just the grid's cell cursor. Never gate that kind of content behind a
+   preference (see PROGRESS_LOG "2026-07-15 — The speech preference"). The announcer is a fallback, not the primary
    signal: handlers should still move focus to the result row/field so the screen
    reader reads it directly. Every operation result and error MUST go through the
    announcer path.
@@ -190,11 +248,96 @@ handler, needs_radio=...)` in the right `_build_*_menu`, add the same combo to
 - mem.empty == True means the channel slot is unused
 - mem.immutable is a list of field names that cannot be changed for that memory
 
+### Cross-radio migration invariants (updated 2026-07-24)
+
+- Cross-model channel transfer is **generic**, never a pairwise model matrix.
+  Build a `chirp_backend.migration.MigrationBatch` containing source
+  `RadioFeatures`, stable `directory.radio_class_id`, and duplicated
+  `Memory`/`DVMemory` snapshots; convert each through
+  `chirp.import_logic.import_mem` against the destination.
+- Pass the destination location to `import_mem` in `overrides` (`number` and
+  cleared `extd_number`) so CHIRP's immutable-policy check inspects the target
+  slot. Do not renumber only after conversion.
+- `Memory.extra` is driver-private. Preserve it only when source and target
+  radio class IDs match; clear it before cross-driver conversion/write.
+- File Import, RepeaterBook, Frequency lists, and cross-image clipboard Paste
+  must converge on `memory_ops.apply_migration_batch`. Keep
+  `import_memories` only as the compatibility wrapper. Never add a separate
+  converter to one of those entry points.
+- Ordinary bulk batches enumerate numeric channels only. Named specials are
+  never silently included. File Import's explicit one-memory path may select a
+  regular or special source and map it to a numbered or named-special target;
+  named writes use `apply_migration_batch_to_special`.
+- Same-name special targets may be preselected but never auto-applied. Preserve
+  the target special's virtual number, `extd_number`, and real immutable values,
+  and require a separate confirmation before overwriting an occupied special.
+- Preserve partial success and every per-channel reason in `MigrationReport`.
+  A UI issue report must use the navigable/copyable `InfoDialog`, not a long
+  static `MessageBox`.
+- `RadioState.context_id` combines the exact open/downloaded document UUID and
+  selected memory-section index. A deferred Cut may erase source rows only when
+  that context still matches. Across images or sections it becomes Copy.
+  Same-document-and-section raw `paste_block` is the only path that offers Make
+  room/row shifting.
+- A CHIRP parent reporting `has_sub_devices` owns Save/Settings/prompts/Upload
+  as `RadioState.physical_radio`; its selected child owns memory/bank/export/
+  migration operations as `RadioState.radio`. Discover static or dynamic
+  children with `load_image_set` before calling `activate_image_set`, and call
+  `ExternalMemoryProperties.link_device_metadata` as the backend already does.
+  Never replace the current document before the memory-section chooser returns.
+- Switching sections preserves the parent image and dirty state, but resets
+  section-local Undo after restoring the prior child's original write methods.
+  Open, Import, post-Download, and Radio ▸ Select memory section… share the
+  accessible `SubdeviceDialog`; never expose generated child class names as
+  labels—use CHIRP `VARIANT` and channel bounds.
+- Capture source bank metadata while the source image/section is active.
+  Cross-image clipboard state stores that complete `MigrationBatch`; do not try
+  to reread source banks after the context changes.
+- Bank mapping is explicit. Show only used source banks; unique non-empty exact
+  names may be suggested but require confirmation, position matching is
+  user-invoked, and unmapped source banks are omitted. Never rename destination
+  banks or silently emulate CHIRP's positional `import_bank`.
+- When a bank plan is enabled, replace each successfully imported channel's
+  memberships exactly. Unbanked sources require a clear-versus-keep choice;
+  fixed/no-bank targets require channels-only confirmation. Verify every bank
+  write and restore exact membership/order on failure, retaining the memory
+  import with a report warning.
+- Bank state participates in the same Undo/Redo transaction as its memory
+  write through `UndoManager` auxiliary snapshots. Direct Channel banks edits
+  are undoable too. Preserve support for drivers whose live behavior allows
+  multiple memberships even when their class hierarchy says otherwise.
+- CHIRP may mutate required D-STAR `urcalls`/`rptcalls` before a later
+  conversion, validation, or write failure. Snapshot both lists before every DV
+  attempt on an `IcomDstarSupport` destination with
+  `requires_call_lists=True`; restore them exactly after rejection. Do not
+  mutate master lists on direct-call drivers.
+- Treat every attempted driver write as potentially partial. On failure,
+  restore the prior destination memory as well as its per-channel call-list
+  snapshot. Preserve call additions from earlier successful rows in the same
+  batch.
+- Required call lists participate in the batch's one Undo/Redo transaction
+  through `UndoManager` global state. Restore global state before memory images
+  because list-indexed setters need the calls. If the initial global snapshot
+  fails, write no memories. Report successful additions; do not add a second
+  confirmation dialog.
+- A destination without DV support remains incompatible. Never coerce a
+  `DVMemory` to analog to make an import appear successful.
+- Current migration scope is ordinary numbered memories, explicitly mapped
+  one-at-a-time special memories, required D-STAR call-list additions, and
+  explicitly mapped ordinary bank memberships. Other radio-wide settings and
+  bank names remain out of scope; never silently claim they moved. Phases 2–5
+  are complete.
+  See
+  `docs/superpowers/plans/2026-07-21-cross-radio-migration.md`.
+
 ## Memory Operations Reference
 
-All implemented in chirp_backend/memory_ops.py. When adding new operations,
-follow the same pattern: pure functions taking a radio object + parameters,
-returning (success: bool, message: str, affected_channels: list).
+Ordinary operations are implemented in `chirp_backend/memory_ops.py`. When
+adding new operations, follow the same pattern: pure functions taking a radio
+object + parameters, returning `(success: bool, message: str,
+affected_memory_identifiers: list)`. `apply_migration_batch` and
+`apply_migration_batch_to_special` deliberately return a fourth
+`MigrationReport` so the UI never loses itemised incompatibilities.
 
 Operations that modify the radio must call radio.set_memory() or
 radio.erase_memory() — never modify the memory map directly.
@@ -243,6 +386,19 @@ venv and errors clearly if pytest is missing. The run scripts use
 `uv sync --inexact`, so launching the app no longer prunes pytest from the venv.
 Tests use chirp/tests/images/ image files — no radio hardware needed.
 Every memory operation in memory_ops.py must have a corresponding test.
+After migration or CHIRP-pin changes, also run all opt-in broad audits:
+`.venv\Scripts\python.exe tools\audit_migrations.py` and
+`.venv\Scripts\python.exe tools\audit_special_migrations.py`, plus
+`.venv\Scripts\python.exe tools\audit_bank_migrations.py` and
+`.venv\Scripts\python.exe tools\audit_dstar_migrations.py`. The baselines are
+2,310 ordinary-corpus migrations (six VHF/UHF/HF/AM/split/DV sources × 385
+targets); 1,989 named special slots across 70 targets; 70 bank models (54
+mutable, 16 fixed); a 385-target DV sweep; and 960 actual-DV/required-call-list
+cases from 358 pinned images, all with zero unexpected failures. Normal
+band/feature/driver incompatibilities are expected and must remain classified
+rather than treated as crashes. The screen-reader acceptance matrix is
+`docs/testing/2026-07-25-cross-radio-migration-accessibility.md`; never mark a
+reader/platform pass from automated evidence alone.
 
 ## Running
 
@@ -262,6 +418,28 @@ To update:
 After a green bump, commit `CHIRP_COMMIT` (and note the SHA in PROGRESS_LOG.md)
 and rebuild. End users never pull/rebuild — updates ship as new VRP releases.
 
+## Releases (date-based versions)
+
+Releases are named for the day they were cut — **`VRP-YYYYMMDD.N`**
+(`VRP-20260715.1` = first release of 15 July 2026; `.2`, `.3` … for further
+releases the same day; `N` restarts at 1 each day and is never zero-padded, so
+the version is valid PEP 440 and orders correctly). There is no semantic-version
+meaning — newest date = newest build. `tools/release_version.py` owns the scheme:
+
+uv run python tools/release_version.py --bump     # today.1, or today.N+1
+uv run python tools/release_version.py --show / --set <v> / --check
+
+The version lives in **two files that must agree** — `vrp/__init__.py`
+(`__version__`; what the app and `build.py` read) and `pyproject.toml`. `--bump`/
+`--set` write both; `tests/test_release_version.py` asserts they match and that
+the shipped version fits the scheme. Never hand-edit one of them alone.
+
+`vrp.describe_version()` renders a date version speakably ("Release 1 of 15 July
+2026") for the About box — a screen reader reads the bare `20260715.1` as one
+huge number. Keep that line in About if you touch it (a11y rule 3's spirit: the
+release must be *audible*, not merely displayed). Non-date versions pass through
+unchanged.
+
 ## Building
 
 Building a release .exe is a deliberate developer/release step, not something
@@ -273,6 +451,33 @@ ran it by mistake). To cut a release build:
 uv sync --extra build
 uv run python build.py --installer
 Output: dist/vrp/ (the app folder) + dist/vrp-<version>-setup.exe (the installer)
+
+**`--portable`** zips the frozen app into `dist/VRP-<version>-<platform>.zip`
+(top-level folder named `VRP-<version>/`, not `vrp/`, so side-by-side unzips stay
+separate) — a no-install build to hand to a few testers. Incompatible with
+`--onefile` (already one file). Platform-aware, and the difference is NOT just
+the filename:
+- **Windows** (`-win64.zip`): zips `dist/vrp/` with `zipfile`. Verified.
+- **macOS** (`-macos-<arch>.zip`): zips **`dist/vrp.app`** (PyInstaller's
+  `--windowed` emits both it and the raw folder) using **`ditto`**, never
+  `zipfile` — zipfile follows symlinks instead of storing them and `extractall`
+  drops the executable bit, either of which leaves a bundle that won't launch.
+  The arch is in the name because a Mac build only runs on the arch it was built
+  for. **Not yet run on a Mac** (written on Windows); naming/routing is
+  unit-tested in `tests/test_build_artifact_name.py`.
+- **`--installer` is Windows-only** (Inno Setup) and errors out elsewhere.
+**Every build stages `help/`** (`stage_help()`) beside the executable — into
+`dist/vrp/help/`, or the .app's `Contents/Resources/help/` on macOS, where
+`vrp/help.py` looks for it. It is a post-PyInstaller copy, not `--add-data`,
+because PyInstaller 6 puts datas under `_internal/` and the docs belong somewhere
+a user can find them. Both downstream artifacts inherit it for free: the portable
+zip walks `dist/vrp/`, and `installer.iss` recurses `dist\vrp\*`.
+
+`--portable` also ships CHIRP's test images in a top-level **`sample-images/`** folder
+(beside `vrp.exe`, NOT in `_internal/` — a tester must be able to find them from
+a File-Open dialog) so the app can be exercised with no radio; they come from
+`./chirp` at the `CHIRP_COMMIT` pin, so they match the bundled drivers. ~0.5 MB
+compressed; `--no-samples` omits them. The installer never includes them.
 
 `build.py` defaults to **onedir** (a `dist/vrp/` folder), not onefile, because
 onefile re-extracts the whole interpreter + wxPython + 552 drivers to a temp dir
@@ -292,12 +497,29 @@ Notes:
   Nuitka would compile the 552 dynamically-imported drivers with no size or
   startup win for a wx GUI, so it stays retired. See PROGRESS_LOG "Phase 9" for
   the original Nuitka debugging history.
-- `build.py` excludes `prism`/`win32more`/`numpy` (`--exclude-module`) —
-  prism pulls in the entire win32more Windows-API surface; speech is opt-in
-  and no-ops without it.
-- `build.py` explicitly `--collect-submodules` for `chirp.drivers` and
-  `chirp.sources` — both are loaded via dynamic `__import__`/
-  `importlib.import_module`, which PyInstaller's static analysis can't follow.
+- **`build.py` MUST bundle prism** (`--collect-binaries=prism`). Speech is not
+  supplemental on the desktop: there is no ARIA live region (that died with the
+  webview UI), and on Windows the generic DataViewCtrl announces no per-cell
+  cursor, so VRP's Left/Right cell cursor is voiced **only** through prism — a
+  prism-less build navigates cells silently. prism dlopens a native `prism.dll`
+  from `prism/_native/`, which is package data PyInstaller won't bundle from the
+  import alone; without the flag `import prism` raises `FileNotFoundError` and
+  speech is silently dead. `win32more`/`numpy` stay `--exclude-module`'d as
+  guards only — prism imports neither (just `cffi`); the "~795 win32more
+  modules" scare was a Nuitka `--include-package` artifact, and under
+  PyInstaller prism costs ~1 MB. See PROGRESS_LOG "2026-07-15 — prism".
+- `build.py` explicitly `--collect-submodules` for `chirp.drivers` — loaded via
+  dynamic `__import__`, which PyInstaller's static analysis can't follow.
+  **Bundling them is not enough to make them work.** `chirp/drivers/__init__.py`
+  builds `__all__` by globbing `*.py` off the filesystem; frozen, there are no
+  .py files on disk, so `__all__` is empty and `directory.import_drivers()`'s
+  frozen branch registers **zero drivers** — every image becomes "Unsupported
+  model" and the Download list is empty. `chirp_backend.radio.
+  _ensure_driver_modules()` repairs this (rebuilds the list via
+  `pkgutil.iter_modules` and imports the modules) and MUST run before
+  `import_drivers()`. Don't remove it, and never assume a frozen build works
+  because it launches — **open an image in it**. See PROGRESS_LOG "2026-07-15 —
+  Frozen builds registered ZERO drivers".
 - **Every build first enforces the CHIRP pin** (`ensure_chirp_on_pin`): it
   verifies `./chirp` is checked out at the `CHIRP_COMMIT` SHA and, for a clean
   clone, syncs it there automatically, so the frozen app always bundles the exact
