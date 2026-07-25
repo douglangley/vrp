@@ -40,9 +40,9 @@ run_*.log
 # some end up read-only, which makes `git status` warn on every invocation.
 .test-tmp-*/
 
-# Scratch file that has held a pasted GitHub token. Ignored so it can never be
-# committed by a `git add -A`; it is still yours to delete, and any credential
-# that has sat in the working tree should be revoked rather than merely hidden.
+# Write-only GitHub token used to submit issues from the app (that feature is
+# still to be built). Deliberately local-only — never commit a credential, even
+# a write-only one.
 .feedback.txt
 
 # OS
