@@ -48,6 +48,8 @@ class _Entry:
     after: list
     before_aux: dict
     after_aux: dict
+    before_global: object | None
+    after_global: object | None
 
 
 class UndoManager:
@@ -62,12 +64,16 @@ class UndoManager:
         *,
         get_aux_state=None,
         set_aux_state=None,
+        get_global_state=None,
+        set_global_state=None,
     ) -> None:
         self._get = get_memory
         self._set = set_memory
         self._erase = erase_memory
         self._get_aux = get_aux_state
         self._set_aux = set_aux_state
+        self._get_global = get_global_state
+        self._set_global = set_global_state
         self._max = max_depth
         self._undo: list[_Entry] = []
         self._redo: list[_Entry] = []
@@ -76,6 +82,8 @@ class UndoManager:
         self._label: str | None = None
         self._before: dict[int | str, object] = {}
         self._before_aux: dict[int | str, object] = {}
+        self._before_global: object | None = None
+        self._global_recorded = False
         self._order: list[int | str] = []
         self._applying = False  # True while restoring (suppresses recording)
 
@@ -101,6 +109,8 @@ class UndoManager:
             self._label = label
             self._before = {}
             self._before_aux = {}
+            self._before_global = None
+            self._global_recorded = False
             self._order = []
         self._depth += 1
         return outermost
@@ -131,6 +141,30 @@ class UndoManager:
                 LOG.exception("undo: failed to snapshot auxiliary state for %s", number)
         self._order.append(number)
 
+    def record_global(self) -> bool:
+        """Capture radio-wide pre-state once for the open transaction.
+
+        This is opt-in because radio-wide state may be expensive and only
+        D-STAR migration currently needs it. Returns ``False`` if no safe
+        snapshot could be made, allowing the caller to refuse a mutation.
+        """
+        if self._depth == 0 or self._applying:
+            return False
+        if self._global_recorded:
+            return True
+        if self._get_global is None:
+            return False
+        try:
+            state = self._get_global()
+        except Exception:  # noqa: BLE001
+            LOG.exception("undo: failed to snapshot radio-wide state")
+            return False
+        if state is None:
+            return False
+        self._before_global = state
+        self._global_recorded = True
+        return True
+
     def commit(self) -> None:
         if self._depth == 0:
             return
@@ -143,6 +177,7 @@ class UndoManager:
         before = [self._before[n] for n in self._order]
         after = []
         after_aux = {}
+        after_global = None
         for n in self._order:
             try:
                 after.append(self._get(n).dupe())
@@ -157,6 +192,11 @@ class UndoManager:
                     LOG.exception(
                         "undo: failed to capture auxiliary after-state for %s", n
                     )
+        if self._global_recorded and self._get_global is not None:
+            try:
+                after_global = self._get_global()
+            except Exception:  # noqa: BLE001
+                LOG.exception("undo: failed to capture radio-wide after-state")
         self._undo.append(
             _Entry(
                 self._label or "",
@@ -164,6 +204,8 @@ class UndoManager:
                 after,
                 dict(self._before_aux),
                 after_aux,
+                self._before_global,
+                after_global,
             )
         )
         if len(self._undo) > self._max:
@@ -182,6 +224,8 @@ class UndoManager:
         self._label = None
         self._before = {}
         self._before_aux = {}
+        self._before_global = None
+        self._global_recorded = False
         self._order = []
 
     # -- undo / redo --------------------------------------------------
@@ -193,7 +237,7 @@ class UndoManager:
         if not self._undo:
             return None
         entry = self._undo.pop()
-        self._apply(entry.before, entry.before_aux)
+        self._apply(entry.before, entry.before_aux, entry.before_global)
         self._redo.append(entry)
         return entry.label, [
             getattr(m, "extd_number", "") or m.number for m in entry.before
@@ -206,20 +250,29 @@ class UndoManager:
         if not self._redo:
             return None
         entry = self._redo.pop()
-        self._apply(entry.after, entry.after_aux)
+        self._apply(entry.after, entry.after_aux, entry.after_global)
         self._undo.append(entry)
         return entry.label, [
             getattr(m, "extd_number", "") or m.number for m in entry.after
         ]
 
-    def _apply(self, images: list, aux_states: dict) -> None:
+    def _apply(
+        self,
+        images: list,
+        aux_states: dict,
+        global_state=None,
+    ) -> None:
         """Write a set of snapshots back to the radio without recording them.
         An empty ordinary snapshot erases its slot. Named special snapshots and
         populated ordinary snapshots are set from a dupe, so the stored
-        snapshot stays pristine for a later undo/redo. Optional auxiliary state
-        (currently bank memberships/order) is restored after memory contents."""
+        snapshot stays pristine for a later undo/redo. Optional radio-wide state
+        (currently D-STAR call lists) is restored *before* memory contents so
+        list-indexed DV drivers can write safely. Per-memory auxiliary state
+        (currently bank memberships/order) is restored afterward."""
         self._applying = True
         try:
+            if global_state is not None and self._set_global is not None:
+                self._set_global(global_state)
             for mem in images:
                 if (
                     getattr(mem, "empty", False)

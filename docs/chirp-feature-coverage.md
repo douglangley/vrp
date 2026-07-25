@@ -76,8 +76,8 @@ update (`git pull` ./chirp) in case new dialogs appear.
 
 ## Notes
 
-- **Cross-radio channel migration (VRP-only integration):** Phases 1–4 are
-  complete through 2026-07-23. `chirp_backend/migration.py` routes ordinary and
+- **Cross-radio channel migration (VRP-only integration):** Phases 1–5 are
+  complete through 2026-07-24. `chirp_backend/migration.py` routes ordinary and
   explicitly selected named-special `Memory`/`DVMemory` objects through CHIRP
   `import_logic`, clears foreign driver-private extras, validates/writes
   compatible memories, and reports every occupied/incompatible/failed/
@@ -94,9 +94,13 @@ update (`git pull` ./chirp) in case new dialogs appear.
   explicit filterable source-bank mapping; exact-name matches are suggestions,
   position matching is opt-in, bank writes are verified/rolled back per
   channel, and memory plus bank changes share Undo/Redo. The bank audit covers
-  70 models (54 mutable and 16 fixed). All three audits have zero unexpected
-  failures. Still open: D-STAR call-list side-effect tests and screen-reader
-  hand passes. See
+  70 models (54 mutable and 16 fixed). Required D-STAR call-list additions are
+  reported, restored exactly with partially written destination memories after
+  rejection, and included in memory Undo/Redo. The D-STAR audit covers a
+  385-target sweep plus all 240 actual pinned DV memories against the four
+  required-list targets (960 cases). All four audits have zero unexpected
+  failures. Still open: expanded source-corpus coverage and screen-reader hand
+  passes. See
   `docs/superpowers/plans/2026-07-21-cross-radio-migration.md`.
 - **Favorite radios (VRP-only, not a CHIRP feature):** Radio ▸ Favorite radios…
   manages a starred-radio list (`vrp/serial_dialogs.py` `FavoritesDialog`,

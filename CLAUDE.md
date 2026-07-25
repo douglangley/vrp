@@ -130,8 +130,9 @@ obscure it. Any future help/docs page must carry it too.
                          radio (incl. parent/selected-subdevice ownership,
                          context identity + describe_model),
                          migration (generic cross-radio conversion + detailed
-                         reports), memory_ops, undo (channel + auxiliary bank
-                         state undo/redo),
+                         reports), dstar_ops (required call-list transactions),
+                         memory_ops, undo (channel + radio-global D-STAR +
+                         auxiliary bank state undo/redo),
                          bandplan (suggested repeater offset + band defaults, by
                          region), col_defs, bank_ops, serial_trace, stock_configs,
                          repeaterbook (RepeaterBook query via CHIRP's mirror;
@@ -145,8 +146,9 @@ obscure it. Any future help/docs page must carry it too.
 - tests/               — unit tests (no hardware needed)
 - tools/               — update_chirp.py (CHIRP version bump),
                          audit_migrations.py + audit_special_migrations.py +
-                         audit_bank_migrations.py (all pinned driver fixtures,
-                         named special slots, and bank models),
+                         audit_bank_migrations.py + audit_dstar_migrations.py
+                         (all pinned driver fixtures, named special slots, bank
+                         models, and actual DV memories),
                          release helpers, and throwaway spikes
 - build.py             — PyInstaller build script
 - chirp/               — upstream CHIRP library (DO NOT EDIT)
@@ -237,7 +239,7 @@ months.
 - mem.empty == True means the channel slot is unused
 - mem.immutable is a list of field names that cannot be changed for that memory
 
-### Cross-radio migration invariants (updated 2026-07-23)
+### Cross-radio migration invariants (updated 2026-07-24)
 
 - Cross-model channel transfer is **generic**, never a pairwise model matrix.
   Build a `chirp_backend.migration.MigrationBatch` containing source
@@ -295,10 +297,27 @@ months.
   write through `UndoManager` auxiliary snapshots. Direct Channel banks edits
   are undoable too. Preserve support for drivers whose live behavior allows
   multiple memberships even when their class hierarchy says otherwise.
+- CHIRP may mutate required D-STAR `urcalls`/`rptcalls` before a later
+  conversion, validation, or write failure. Snapshot both lists before every DV
+  attempt on an `IcomDstarSupport` destination with
+  `requires_call_lists=True`; restore them exactly after rejection. Do not
+  mutate master lists on direct-call drivers.
+- Treat every attempted driver write as potentially partial. On failure,
+  restore the prior destination memory as well as its per-channel call-list
+  snapshot. Preserve call additions from earlier successful rows in the same
+  batch.
+- Required call lists participate in the batch's one Undo/Redo transaction
+  through `UndoManager` global state. Restore global state before memory images
+  because list-indexed setters need the calls. If the initial global snapshot
+  fails, write no memories. Report successful additions; do not add a second
+  confirmation dialog.
+- A destination without DV support remains incompatible. Never coerce a
+  `DVMemory` to analog to make an import appear successful.
 - Current migration scope is ordinary numbered memories, explicitly mapped
-  one-at-a-time special memories, and explicitly mapped ordinary bank
-  memberships. Radio-wide settings and bank names remain out of scope; never
-  silently claim they moved. Phases 2–4 are complete.
+  one-at-a-time special memories, required D-STAR call-list additions, and
+  explicitly mapped ordinary bank memberships. Other radio-wide settings and
+  bank names remain out of scope; never silently claim they moved. Phases 2–5
+  are complete.
   See
   `docs/superpowers/plans/2026-07-21-cross-radio-migration.md`.
 
@@ -361,9 +380,11 @@ Every memory operation in memory_ops.py must have a corresponding test.
 After migration or CHIRP-pin changes, also run all opt-in broad audits:
 `.venv\Scripts\python.exe tools\audit_migrations.py` and
 `.venv\Scripts\python.exe tools\audit_special_migrations.py`, plus
-`.venv\Scripts\python.exe tools\audit_bank_migrations.py`. The baselines are
-385 ordinary targets; 1,989 named special slots across 70 targets; and 70 bank
-models (54 mutable, 16 fixed) from 358 pinned images, all with zero unexpected
+`.venv\Scripts\python.exe tools\audit_bank_migrations.py` and
+`.venv\Scripts\python.exe tools\audit_dstar_migrations.py`. The baselines are
+385 ordinary targets; 1,989 named special slots across 70 targets; 70 bank
+models (54 mutable, 16 fixed); a 385-target DV sweep; and 960 actual-DV/
+required-call-list cases from 358 pinned images, all with zero unexpected
 failures. Normal band/feature/driver incompatibilities are expected and must
 remain classified rather than treated as crashes.
 

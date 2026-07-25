@@ -325,6 +325,13 @@
   importing channel contents only. A bank failure restores that channel's old
   memberships and appears in the report. Channel plus bank changes are one
   Undo step. Radio-wide settings are not copied.</p>
+  <p>D-STAR calls are handled with the channel. If the destination radio
+  requires master call lists, VRP adds the calls needed by each successfully
+  imported channel and lists the additions in the details report. A rejected
+  channel leaves neither added calls nor a partially changed destination
+  behind. Undo and Redo restore the calls with the memories. A radio without
+  D-STAR support reports the channel as incompatible instead of converting it
+  to analog.</p>
   <p>When an image has multiple sides, VFOs, bands, or zones, Open and Import
   show a filterable <strong>Memory section</strong> chooser.
   <strong>Radio ▸ Select memory section…</strong> switches the grid later; Save

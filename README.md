@@ -125,6 +125,9 @@ Windows (exposed to MSAA/UIA so **NVDA** reads it):
 - Explicit cross-radio bank-membership mapping for ordinary imports and
   cross-image Paste, with exact-name suggestions, opt-in position matching,
   per-channel rollback, and memory-plus-bank Undo/Redo
+- Transactional D-STAR migration: required call signs are added on success,
+  reported to the user, exactly rolled back with partially written channels on
+  rejection, and included in Undo/Redo
 - Explicit one-memory transfer between regular channels and driver-defined
   named specials (call, home, scan-limit, VFO, and similar slots); bulk import
   remains numeric-only and never silently includes specials
@@ -172,10 +175,11 @@ chirp_backend/
                          state, read/write/save, serial clone, describe_model.
   migration.py           Generic cross-radio Memory/DVMemory conversion and
                          per-channel compatibility reports.
+  dstar_ops.py           Required D-STAR call-list snapshots and restoration.
   memory_ops.py          Field edits + range operations: set/update channel,
                          move, copy, migrate, delete+shift, sort, arrange,
                          find/goto.
-  undo.py                Channel and auxiliary bank-state undo/redo.
+  undo.py                Channel, global D-STAR, and auxiliary bank undo/redo.
   col_defs.py            Column definitions mirroring CHIRP's column hierarchy.
   bank_ops.py            Bank discovery, atomic membership replacement/mapping.
   bandplan.py            Suggested repeater offset + band defaults, by region.
@@ -190,6 +194,8 @@ tools/
                          Sweeps every named special in pinned CHIRP images.
   audit_bank_migrations.py
                          Verifies mutable/fixed bank behavior and rollback.
+  audit_dstar_migrations.py
+                         Sweeps DV support and required call-list rollback.
 build.py                 PyInstaller build script.
 pyproject.toml           uv-managed project definition (Python 3.11 pinned).
 ```

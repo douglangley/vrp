@@ -11,7 +11,7 @@ Status marks: ☐ not started · ◐ in progress · ☑ done.
 
 ## Current priority
 
-- ◐ **Generic cross-radio migration.** Phases 1–4 landed through 2026-07-23:
+- ◐ **Generic cross-radio migration.** Phases 1–5 landed through 2026-07-24:
   direct
   cross-image Copy/Paste and `.img`/`.csv` Import share CHIRP's model-generic
   conversion, preserve partial success with per-channel accessible reports,
@@ -22,12 +22,17 @@ Status marks: ☐ not started · ◐ in progress · ☑ done.
   named special source to a numbered or named-special target; bulk import never
   includes specials. Ordinary import and cross-image Paste now offer explicit,
   filterable bank mapping with exact-name suggestions, opt-in position
-  matching, per-channel rollback, and memory+bank Undo/Redo. Verified with 464
+  matching, per-channel rollback, and memory+bank Undo/Redo. Verified with 475
   project tests, all 23 pinned subdevice parents (50 views), the 385-target
   ordinary audit, all 1,989 special slots across 70 targets, and all 70 bank
   models (54 mutable, 16 fixed)—all audits have zero unexpected failures.
-  **Next:** D-STAR call-list tests, then expanded source coverage and
-  NVDA/VoiceOver hand passes. Detailed status/resume plan:
+  D-STAR migrations now transactionally add required call signs, exactly roll
+  back call lists and partially written memories on rejection, and include
+  radio-global state in Undo/Redo. The suite is now 475 tests; the D-STAR audit
+  covers all 240 actual DV fixture memories against four required-list targets
+  (960 cases) plus a 385-target representative sweep, with zero unexpected
+  failures. **Next:** expanded source coverage and NVDA/VoiceOver hand passes.
+  Detailed status/resume plan:
   [2026-07-21-cross-radio-migration.md](2026-07-21-cross-radio-migration.md).
 
 - ☑ **Serial port hardware verification.** Both **Download and Upload are

@@ -294,13 +294,36 @@ def apply_migration_batch(
     per-channel incompatibility/warning for an accessible results dialog, while
     the first three keep the usual memory-operation convention.
     """
-    from chirp_backend import migration
+    from chirp_backend import dstar_ops, migration
 
     try:
         target = _get_radio()
     except RuntimeError as exc:
         report = migration.MigrationReport(batch.source_label, "No radio")
         return False, str(exc), [], report
+
+    from chirp_backend.radio import get_undo_manager
+
+    manager = get_undo_manager()
+    if (
+        manager is not None
+        and dstar_ops.batch_requires_call_lists(target, batch)
+        and not manager.record_global()
+    ):
+        report = migration.MigrationReport(
+            batch.source_label, migration.radio_label(target)
+        )
+        for entry in batch.entries:
+            report.items.append(
+                migration.MigrationItemResult(
+                    entry.source_number,
+                    None,
+                    "failed",
+                    "Could not snapshot required D-STAR call lists; "
+                    "nothing was imported",
+                )
+            )
+        return False, report.summary(), [], report
 
     report = migration.apply_batch(
         target,
@@ -327,13 +350,36 @@ def apply_migration_batch_to_special(
     :func:`apply_migration_batch`; ``affected`` contains the special name so
     Undo/UI callers never mistake its driver virtual number for a grid channel.
     """
-    from chirp_backend import migration
+    from chirp_backend import dstar_ops, migration
 
     try:
         target = _get_radio()
     except RuntimeError as exc:
         report = migration.MigrationReport(batch.source_label, "No radio")
         return False, str(exc), [], report
+
+    from chirp_backend.radio import get_undo_manager
+
+    manager = get_undo_manager()
+    if (
+        manager is not None
+        and dstar_ops.batch_requires_call_lists(target, batch)
+        and not manager.record_global()
+    ):
+        report = migration.MigrationReport(
+            batch.source_label, migration.radio_label(target)
+        )
+        for entry in batch.entries:
+            report.items.append(
+                migration.MigrationItemResult(
+                    entry.source_number,
+                    destination_name,
+                    "failed",
+                    "Could not snapshot required D-STAR call lists; "
+                    "nothing was imported",
+                )
+            )
+        return False, report.summary(), [], report
 
     report = migration.apply_batch_to_special(
         target, batch, destination_name, overwrite=overwrite

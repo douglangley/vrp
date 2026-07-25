@@ -96,6 +96,8 @@ class MigrationItemResult:
     overwritten: bool = False
     bank_status: str = ""
     bank_message: str = ""
+    dstar_calls_added: tuple[str, ...] = ()
+    dstar_message: str = ""
 
 
 @dataclass
@@ -149,6 +151,10 @@ class MigrationReport:
         return sum(item.bank_status == status for item in self.items)
 
     @property
+    def dstar_calls_added(self) -> int:
+        return sum(len(item.dstar_calls_added) for item in self.items)
+
+    @property
     def affected(self) -> list[int | str]:
         return [
             item.destination_number
@@ -182,6 +188,8 @@ class MigrationReport:
             parts.append(f"{self.warning_count} warning(s)")
         if self.bank_updated:
             parts.append(f"banks applied to {self.bank_updated} channel(s)")
+        if self.dstar_calls_added:
+            parts.append(f"{self.dstar_calls_added} D-STAR call(s) added")
         return ", ".join(parts) + "."
 
     def details_text(self) -> str:
@@ -202,6 +210,8 @@ class MigrationReport:
                     f"  Banks: {item.bank_status.replace('_', ' ')} — "
                     f"{item.bank_message}"
                 )
+            if item.dstar_message:
+                lines.append(f"  D-STAR calls: {item.dstar_message}")
             for warning in item.warnings:
                 lines.append(f"  Warning: {warning}")
         return "\n".join(lines).rstrip()
@@ -460,6 +470,93 @@ def _apply_bank_mapping(
     return "updated", detail, None
 
 
+def _rollback_dstar_calls(target_radio, before) -> str | None:
+    """Restore per-channel call-list state after a rejected DV migration."""
+    if before is None:
+        return None
+    from chirp_backend import dstar_ops
+
+    try:
+        dstar_ops.restore_call_lists(target_radio, before)
+    except Exception as exc:  # noqa: BLE001 - preserve the original row result
+        LOG.exception("Could not roll back D-STAR call lists")
+        return f"D-STAR call-list rollback failed: {exc}"
+    return None
+
+
+def _rollback_destination_memory(target_radio, identifier, before) -> str | None:
+    """Repair a driver that partially mutated a memory before raising."""
+    try:
+        if (
+            getattr(before, "empty", False)
+            and not getattr(before, "extd_number", "")
+        ):
+            target_radio.erase_memory(identifier)
+        else:
+            target_radio.set_memory(before.dupe())
+        restored = target_radio.get_memory(identifier)
+        fields = ("empty", "freq", "name", "mode", "duplex")
+        mismatches = [
+            field
+            for field in fields
+            if getattr(before, field, None) != getattr(restored, field, None)
+        ]
+        if mismatches:
+            raise RuntimeError(
+                "restored channel differs in " + ", ".join(mismatches)
+            )
+    except Exception as exc:  # noqa: BLE001 - retain the original row failure
+        LOG.exception("Could not roll back destination memory %s", identifier)
+        return f"Destination memory rollback failed: {exc}"
+    return None
+
+
+def _rollback_failed_state(
+    target_radio,
+    identifier,
+    before_memory,
+    before_calls,
+    *,
+    write_attempted: bool,
+) -> tuple[str, ...]:
+    """Restore radio-wide calls first, then any partially written memory."""
+    warnings = []
+    call_warning = _rollback_dstar_calls(target_radio, before_calls)
+    if call_warning:
+        warnings.append(call_warning)
+    if write_attempted:
+        memory_warning = _rollback_destination_memory(
+            target_radio, identifier, before_memory
+        )
+        if memory_warning:
+            warnings.append(memory_warning)
+    return tuple(warnings)
+
+
+def _dstar_after_write(
+    target_radio,
+    before,
+) -> tuple[tuple[str, ...], str, str | None]:
+    """Verify successful call additions and return additions/detail/warning."""
+    if before is None:
+        return (), "", None
+    from chirp_backend import dstar_ops
+
+    try:
+        after = dstar_ops.capture_call_lists(target_radio)
+    except Exception as exc:  # noqa: BLE001 - memory is already imported
+        message = f"Could not verify D-STAR call lists after import: {exc}"
+        return (), "Call-list update could not be verified", message
+    additions = dstar_ops.added_calls(before, after)
+    if not additions:
+        return (), "All required calls were already present", None
+    return (
+        additions,
+        "Added " + ", ".join(call.strip() or call for call in additions),
+        None,
+    )
+
+
 def apply_batch(
     target_radio,
     batch: MigrationBatch,
@@ -536,7 +633,15 @@ def apply_batch(
         if batch.source_radio_id != target_identity:
             source_memory.extra = []
 
+        call_lists_before = None
+        memory_written = False
+        write_attempted = False
         try:
+            from chirp_backend import dstar_ops
+
+            call_lists_before = dstar_ops.capture_for_memory(
+                target_radio, source_memory
+            )
             converted = import_logic.import_mem(
                 target_radio,
                 batch.source_features,
@@ -555,7 +660,9 @@ def apply_batch(
                         ", ".join(str(msg) for msg in validation_errors)
                     )
                 warnings = tuple(str(msg) for msg in validation_warnings)
+            write_attempted = True
             target_radio.set_memory(converted)
+            memory_written = True
             bank_status = ""
             bank_message = ""
             if bank_mapping is not None:
@@ -568,6 +675,13 @@ def apply_batch(
                 )
                 if bank_warning:
                     warnings += (bank_warning,)
+            (
+                dstar_calls_added,
+                dstar_message,
+                dstar_warning,
+            ) = _dstar_after_write(target_radio, call_lists_before)
+            if dstar_warning:
+                warnings += (dstar_warning,)
         except (
             import_logic.DestNotCompatible,
             chirp_common.ImmutableValueError,
@@ -576,6 +690,17 @@ def apply_batch(
             errors.InvalidValueError,
             ValueError,
         ) as exc:
+            rollback_warnings = (
+                ()
+                if memory_written
+                else _rollback_failed_state(
+                    target_radio,
+                    dest,
+                    existing,
+                    call_lists_before,
+                    write_attempted=write_attempted,
+                )
+            )
             LOG.warning(
                 "migration source %s -> destination %s incompatible: %s",
                 entry.source_number,
@@ -584,17 +709,38 @@ def apply_batch(
             )
             report.items.append(
                 MigrationItemResult(
-                    entry.source_number, dest, "incompatible", str(exc)
+                    entry.source_number,
+                    dest,
+                    "incompatible",
+                    str(exc),
+                    warnings=rollback_warnings,
                 )
             )
         except Exception as exc:  # noqa: BLE001 - isolate driver failures by row
+            rollback_warnings = (
+                ()
+                if memory_written
+                else _rollback_failed_state(
+                    target_radio,
+                    dest,
+                    existing,
+                    call_lists_before,
+                    write_attempted=write_attempted,
+                )
+            )
             LOG.exception(
                 "migration source %s -> destination %s failed",
                 entry.source_number,
                 dest,
             )
             report.items.append(
-                MigrationItemResult(entry.source_number, dest, "failed", str(exc))
+                MigrationItemResult(
+                    entry.source_number,
+                    dest,
+                    "failed",
+                    str(exc),
+                    warnings=rollback_warnings,
+                )
             )
         else:
             report.items.append(
@@ -607,6 +753,8 @@ def apply_batch(
                     overwritten=was_occupied,
                     bank_status=bank_status,
                     bank_message=bank_message,
+                    dstar_calls_added=dstar_calls_added,
+                    dstar_message=dstar_message,
                 )
             )
         dest += 1
@@ -698,6 +846,9 @@ def apply_batch_to_special(
     if batch.source_radio_id != target_identity:
         source_memory.extra = []
 
+    call_lists_before = None
+    memory_written = False
+    write_attempted = False
     try:
         # Special memories often mark their location fields immutable. Preserve
         # every real immutable value from the chosen target slot before CHIRP's
@@ -716,6 +867,11 @@ def apply_batch_to_special(
         for field in (getattr(existing, "immutable", None) or []):
             setattr(source_memory, field, getattr(existing, field))
 
+        from chirp_backend import dstar_ops
+
+        call_lists_before = dstar_ops.capture_for_memory(
+            target_radio, source_memory
+        )
         converted = import_logic.import_mem(
             target_radio,
             batch.source_features,
@@ -737,7 +893,16 @@ def apply_batch_to_special(
                     ", ".join(str(msg) for msg in validation_errors)
                 )
             warnings = tuple(str(msg) for msg in validation_warnings)
+        write_attempted = True
         target_radio.set_memory(converted)
+        memory_written = True
+        (
+            dstar_calls_added,
+            dstar_message,
+            dstar_warning,
+        ) = _dstar_after_write(target_radio, call_lists_before)
+        if dstar_warning:
+            warnings += (dstar_warning,)
     except (
         import_logic.DestNotCompatible,
         chirp_common.ImmutableValueError,
@@ -746,6 +911,17 @@ def apply_batch_to_special(
         errors.InvalidValueError,
         ValueError,
     ) as exc:
+        rollback_warnings = (
+            ()
+            if memory_written
+            else _rollback_failed_state(
+                target_radio,
+                destination_name,
+                existing,
+                call_lists_before,
+                write_attempted=write_attempted,
+            )
+        )
         LOG.warning(
             "migration source %s -> special %s incompatible: %s",
             entry.source_number,
@@ -758,9 +934,21 @@ def apply_batch_to_special(
                 destination_name,
                 "incompatible",
                 str(exc),
+                warnings=rollback_warnings,
             )
         )
     except Exception as exc:  # noqa: BLE001 - classify known driver contracts
+        rollback_warnings = (
+            ()
+            if memory_written
+            else _rollback_failed_state(
+                target_radio,
+                destination_name,
+                existing,
+                call_lists_before,
+                write_attempted=write_attempted,
+            )
+        )
         # A few special-memory setters use plain Exception for band enforcement,
         # and some drivers cannot re-read a special by its virtual integer while
         # CHIRP's importer performs immutable validation. Both mean "this chosen
@@ -790,6 +978,7 @@ def apply_batch_to_special(
                     destination_name,
                     "incompatible",
                     message,
+                    warnings=rollback_warnings,
                 )
             )
         else:
@@ -800,7 +989,11 @@ def apply_batch_to_special(
             )
             report.items.append(
                 MigrationItemResult(
-                    entry.source_number, destination_name, "failed", message
+                    entry.source_number,
+                    destination_name,
+                    "failed",
+                    message,
+                    warnings=rollback_warnings,
                 )
             )
     else:
@@ -812,6 +1005,8 @@ def apply_batch_to_special(
                 "Imported",
                 warnings,
                 overwritten=was_occupied,
+                dstar_calls_added=dstar_calls_added,
+                dstar_message=dstar_message,
             )
         )
     return report

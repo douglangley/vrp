@@ -543,7 +543,7 @@ def _install_undo(radio) -> None:
             _state.is_modified = True
             invalidate_cache([number])
 
-        from chirp_backend import bank_ops
+        from chirp_backend import bank_ops, dstar_ops
 
         bank_model = bank_ops.bank_model_for(radio)
         bank_catalog = bank_ops.describe_banks(radio)
@@ -563,12 +563,25 @@ def _install_undo(radio) -> None:
                 bank_ops.restore_bank_membership(radio, number, snapshot)
                 _state.is_modified = True
 
+        capture_call_lists = None
+        restore_call_lists = None
+        if dstar_ops.requires_call_lists(radio):
+
+            def capture_call_lists():
+                return dstar_ops.capture_call_lists(radio)
+
+            def restore_call_lists(snapshot):
+                dstar_ops.restore_call_lists(radio, snapshot)
+                _state.is_modified = True
+
         _undo = UndoManager(
             get_memory=lambda n: orig_get(n),
             set_memory=restore_set,
             erase_memory=restore_erase,
             get_aux_state=capture_banks,
             set_aux_state=restore_banks,
+            get_global_state=capture_call_lists,
+            set_global_state=restore_call_lists,
         )
     except Exception:  # noqa: BLE001 — undo is best-effort; never block loading
         LOG.exception("Could not install undo recorder; undo disabled for this radio")

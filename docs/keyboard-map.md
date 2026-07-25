@@ -175,6 +175,13 @@ special memory to a numbered channel or named special on the destination.
 Ordinary bulk migration never includes specials, and a same-name special is
 only preselected for confirmation—not written automatically.
 
+For a D-STAR destination that requires master call lists, VRP automatically
+adds the calls needed by each successfully imported channel and lists those
+additions in the migration details. If conversion or the driver write rejects a
+channel, its call-list changes and any partial destination write are restored.
+A destination without DV support reports that channel as incompatible; it is
+not converted to analog.
+
 When selected source channels use banks, ordinary File Import and cross-image
 Paste open a filterable **Map source banks** dialog. Exact non-empty bank names
 may be preselected, **Match by position** is available only as an explicit
@@ -195,7 +202,8 @@ load, close, download an image, or switch memory sections. Section switching
 preserves image edits and the unsaved-changes state. An imported named special
 is announced by name and restores correctly through Undo/Redo. Radio Settings
 are not undoable. Bank assignments, including cross-radio mapped memberships,
-are undoable together with their channel operation.
+are undoable together with their channel operation. Required D-STAR call-list
+additions are also restored and reapplied with the imported memories.
 
 ## Dialogs
 

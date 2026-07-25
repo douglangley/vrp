@@ -1,11 +1,11 @@
 # Plan — Generic cross-radio channel migration
 
-> **Status:** Phases 1–4 implemented and verified through 2026-07-23 on branch
+> **Status:** Phases 1–5 implemented and verified through 2026-07-24 on branch
 > `feature/cross-radio-migration` (Phase 1 commit `69cf9b1`; Phase 2 commit
-> `00af255`; Phase 3 commit `56f6fd5`). The generic migration engine,
+> `00af255`; Phase 3 commit `56f6fd5`; Phase 4 commit `8f8d9bd`). The generic migration engine,
 > subdevice-aware image UX, explicit single special-memory workflow, and
-> explicit bank mapping are complete. The remaining phases cover D-STAR side
-> effects and broader hands-on testing.
+> explicit bank mapping and transactional D-STAR call-list support are
+> complete. The remaining phase covers broader fixture and hands-on testing.
 
 ## Goal
 
@@ -76,6 +76,8 @@ Therefore VRP must use that generic pipeline, not invent pairwise migrations.
 
 - `chirp_backend/migration.py` — payload, identity, conversion, validation, and
   detailed result/report types.
+- `chirp_backend/dstar_ops.py` — D-STAR call-list capability discovery,
+  snapshots, exact restoration, and added-call reporting.
 - `chirp_backend/memory_ops.py` — undoable `apply_migration_batch`; legacy
   `import_memories` is a compatibility wrapper.
 - `chirp_backend/radio.py` — parent/selected-child state, context identity,
@@ -97,12 +99,16 @@ Therefore VRP must use that generic pipeline, not invent pairwise migrations.
 - `tests/test_bank_migration.py`, `tests/test_bank_mapping_dialog.py`, and
   `tests/test_bank_import_ui.py` — real-driver bank mapping, rollback,
   undo/persistence, accessible dialog, clipboard, and import-policy coverage.
+- `tests/test_dstar_migration.py` — real-driver D-STAR conversion, call-list
+  mutation/rollback, partial success, special-memory, and Undo/Redo coverage.
 - `tools/audit_migrations.py` — opt-in sweep across every pinned CHIRP image and
   exposed subdevice.
 - `tools/audit_special_migrations.py` — opt-in sweep of a representative source
   memory into every named special slot exposed by the pinned fixture corpus.
 - `tools/audit_bank_migrations.py` — opt-in mutable-write/verify/exact-rollback
   and fixed-bank rejection sweep across every pinned bank model.
+- `tools/audit_dstar_migrations.py` — opt-in DV target sweep plus every actual
+  pinned `DVMemory` against every call-list-owning destination.
 
 ## Decisions implemented in Phase 2
 
@@ -210,9 +216,45 @@ clipboard test modules.
    accurately describe multi-membership capacity; real drivers that permit
    multiple banks through a plain `BankModel` remain supported.
 
-## Verification baseline after Phase 4 (2026-07-23)
+## Decisions implemented in Phase 5
 
-- Full VRP suite: **464 passed**.
+1. **CHIRP remains the conversion authority.** `import_logic.import_mem`
+   continues to convert `DVMemory` fields and reject a DV channel when the
+   destination cannot represent it. VRP never coerces rejected DV data into an
+   analog channel.
+2. **Call lists are transaction state.** On destinations whose
+   `IcomDstarSupport` features declare `requires_call_lists`, VRP snapshots
+   `urcalls` and `rptcalls` before each DV attempt. Calls added by CHIRP are
+   retained only when that channel writes successfully.
+3. **Rejected rows leave no side effects.** Conversion, validation, and driver
+   write failures restore both call lists exactly, including duplicates and
+   order. A failed channel does not remove additions made by an earlier
+   successful row in the same partial batch.
+4. **Partially written memories are repaired.** Some real drivers mutate their
+   raw destination before raising. VRP snapshots the destination and restores
+   it after any failed write attempt, so a reportable rejection cannot leave a
+   damaged channel behind.
+5. **Undo/Redo includes radio-global state.** `UndoManager` has an opt-in global
+   snapshot in addition to per-memory and auxiliary bank snapshots. D-STAR
+   imports record required call lists once per transaction; Undo/Redo restores
+   lists before memories because list-indexed setters need the matching entries.
+6. **Successful additions are visible, not separately confirmed.** The normal
+   migration confirmation remains sufficient. `MigrationReport` summarizes and
+   itemizes newly added call signs without adding another modal dialog.
+7. **Direct-call drivers stay untouched.** Radios with
+   `requires_call_lists=False` carry calls directly in `DVMemory`; VRP does not
+   mutate their master call lists.
+8. **Snapshot failure is fail-closed.** If required call-list state cannot be
+   captured for the active batch, no destination memory is written.
+
+The motivating real failure is Icom ID-4100 channel 0 into an IC-2200H
+destination. CHIRP added padded `CQCQCQ` call-list data and the IC-2200H setter
+partially changed its raw memory before rejecting the call. The Phase 5 rollback
+restores both pieces exactly.
+
+## Verification baseline after Phase 5 (2026-07-24)
+
+- Full VRP suite: **475 passed**.
 - Subdevice backend coverage: all **23 pinned parent fixtures** expand to their
   expected **50 child views**; both static FT-8800 and dynamic TK-3180K2 edits
   survive parent Save/reopen.
@@ -232,6 +274,15 @@ clipboard test modules.
 - Bank audit: **70 bank models across 63 image files from 358 pinned images**;
   all **54 mutable models** passed write/verify/exact-rollback, all **16 fixed
   models** rejected reassignment, and there were **0 unexpected failures**.
+- D-STAR inventory: **15 DV-capable targets** and **240 populated actual
+  `DVMemory` records** in the pinned corpus. Four targets require master call
+  lists: IC-2200H, IC-U82, IC-V82, and ID-800H.
+- D-STAR representative target sweep: **385 targets**; 13 imported and 372
+  returned expected incompatibilities, with **0 unexpected failures**.
+- D-STAR call-list corpus: **960 cases** (240 actual DV memories × four
+  required-list targets); 482 imported and 478 returned expected
+  incompatibilities. Every rejected destination memory and both call lists
+  restored exactly, with **0 unexpected failures**.
 
 Run all audits from the repository root:
 
@@ -239,6 +290,7 @@ Run all audits from the repository root:
 .\.venv\Scripts\python.exe tools\audit_migrations.py
 .\.venv\Scripts\python.exe tools\audit_special_migrations.py
 .\.venv\Scripts\python.exe tools\audit_bank_migrations.py
+.\.venv\Scripts\python.exe tools\audit_dstar_migrations.py
 ```
 
 ## Remaining work
@@ -260,14 +312,12 @@ Implemented as described above. Bank names remain destination-owned; this
 phase maps membership only. NVDA/VoiceOver hand passes remain Phase 6
 acceptance.
 
-### Phase 5 — D-STAR and validation side effects
+### Phase 5 — D-STAR and validation side effects — complete
 
-- Test migrations between real D-STAR fixtures, especially destinations with
-  `requires_call_lists`. `import_mem` may add calls before the final memory
-  write, so determine whether call-list changes need their own transaction or a
-  preflight step.
-- Preserve the current rule that a destination without DV support reports an
-  incompatibility rather than coercing the channel to analog.
+Implemented as described above. Required call lists and partially mutated
+destination memories now roll back per channel and participate in the same
+transaction-wide Undo/Redo state as the imported memories. Successful additions
+are included in the migration report.
 
 ### Phase 6 — Acceptance and stronger compatibility audit
 
@@ -294,9 +344,10 @@ acceptance.
 1. Check out `feature/cross-radio-migration` and confirm it tracks
    `origin/feature/cross-radio-migration`.
 2. Run `uv sync --extra dev`, then `uv run python -m pytest`.
-3. Run `tools/audit_migrations.py`, `tools/audit_special_migrations.py`, and
-   `tools/audit_bank_migrations.py` after any CHIRP pin or migration change.
-4. Start Phase 5 with real D-STAR fixtures and inventory every
-   `requires_call_lists` side effect before deciding its transaction policy.
+3. Run `tools/audit_migrations.py`, `tools/audit_special_migrations.py`,
+   `tools/audit_bank_migrations.py`, and `tools/audit_dstar_migrations.py` after
+   any CHIRP pin or migration change.
+4. Start Phase 6 by expanding the ordinary audit source corpus, then run the
+   NVDA/VoiceOver acceptance matrix.
 5. Keep `chirp/` unmodified and add a real pinned fixture for every new edge
    case.

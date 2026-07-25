@@ -62,7 +62,7 @@ main.py  (entry; launches the native UI)
        │    result row); the announcer covers summaries/errors with no
        │    natural focus target
        └─ chirp_backend/: radio.py, migration.py, memory_ops.py, undo.py,
-            bandplan.py, col_defs.py, bank_ops.py, serial_trace.py
+            dstar_ops.py, bandplan.py, col_defs.py, bank_ops.py, serial_trace.py
             (framework-agnostic)
             └─ chirp  (vendored ./chirp, used unmodified; serial + driver library)
 ```
@@ -134,12 +134,17 @@ pairs:
                                overrides=destination)
                   │
                   ▼
- target validation + set_memory ──► MigrationReport ──► InfoDialog/Announcer
+ required D-STAR calls + target validation + set_memory
+                  │
+                  └──────────────► MigrationReport ──► InfoDialog/Announcer
 ```
 
 - `chirp_backend/migration.py` owns the wx-free payload, conversion, and
   per-channel result model. It uses CHIRP's `Memory`/`DVMemory`,
   `RadioFeatures`, `directory.radio_class_id`, and `import_logic.import_mem`.
+- `chirp_backend/dstar_ops.py` discovers whether a target requires master call
+  lists and owns their snapshots, exact restoration, and added-call
+  accounting. Direct-call D-STAR targets need no global-list transaction.
 - `chirp_backend.memory_ops.apply_migration_batch` supplies the active target
   radio and wraps all successful writes in one undo transaction.
   `apply_migration_batch_to_special` does the same for one explicitly selected
@@ -179,6 +184,15 @@ pairs:
 - `UndoManager` accepts optional auxiliary snapshot/restore callables. Mutable
   bank radios use them so the memory and bank changes from an import—and direct
   Channel banks edits—undo and redo together.
+- `UndoManager` also accepts optional radio-global snapshot/restore callables.
+  Required D-STAR call lists opt in once per migration transaction. Undo/Redo
+  restores global lists before memory images because list-indexed driver
+  setters require the matching calls to exist.
+- CHIRP may add D-STAR calls before later validation fails, and some drivers
+  partially change raw memory before their setter raises. Every DV attempt
+  snapshots the required lists and every write attempt snapshots its
+  destination. A rejected row restores both exactly; earlier successful rows
+  in a partial batch keep their changes.
 - Migration is intentionally partial: incompatible, occupied, failed, and
   out-of-space rows are retained in `MigrationReport`, while compatible rows
   still write. Issue/warning reports use the read-only, copyable `InfoDialog`.
@@ -187,10 +201,10 @@ pairs:
   same-name targets may be preselected but never applied automatically.
   Special→regular, regular→special, and special→special all use CHIRP import
   conversion and remain one-step undoable.
-- Current migration boundary: memory contents plus explicitly mapped ordinary
-  channel bank memberships. Radio-wide settings and bank names are not
-  transferred; subdevice selection and explicit named-special transfer are
-  implemented.
+- Current migration boundary: memory contents, required D-STAR call-list
+  additions, and explicitly mapped ordinary channel bank memberships.
+  Other radio-wide settings and bank names are not transferred; subdevice
+  selection and explicit named-special transfer are implemented.
 
 See
 `docs/superpowers/plans/2026-07-21-cross-radio-migration.md` for decisions,

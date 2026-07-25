@@ -6,6 +6,48 @@ architecture, keyboard map, and CHIRP feature-coverage checklist.
 
 ---
 
+## 2026-07-24 — Transactional D-STAR migration (Phase 5)
+
+**Outcome:** Cross-radio migration now treats required D-STAR master call lists
+as part of the channel transaction. VRP still delegates all DV conversion and
+compatibility decisions to CHIRP; a destination without DV support reports an
+incompatibility and is never silently coerced to analog. Successful imports
+retain any required URCALL/RPTCALL additions and itemize them in the migration
+report without adding another confirmation dialog.
+
+**Exact failure rollback.** CHIRP's `import_mem` calls `ensure_has_calls` before
+frequency conversion, immutable checks, validation, and the final driver write.
+Some setters also modify raw memory before raising. New
+`chirp_backend/dstar_ops.py` snapshots/restores required call lists exactly, and
+`migration.apply_batch` restores both those lists and the destination memory
+after every rejected write attempt. This was required by a real ID-4100 →
+IC-2200H case: CHIRP added padded `CQCQCQ` data, then the IC-2200H driver
+partially wrote the target before rejecting it. A partial batch keeps additions
+from earlier successful rows while removing only the failed row's side effects.
+Direct-call D-STAR radios do not have their master lists touched.
+
+**Undo/Redo and fail-closed behavior.** `UndoManager` now supports opt-in
+radio-global state in addition to memory and auxiliary bank state. Required
+call lists are restored before channel memories during Undo/Redo so
+list-indexed driver setters see the correct calls. The memory and calls still
+form one history entry and persist through Save/reopen. If a required call-list
+snapshot cannot be captured, the entire batch is refused before any write.
+
+**Verification:** full suite **475 passed**. Focused D-STAR and special-memory
+coverage passed **22 tests**. The ordinary audit remains **385 targets: 276
+imported, 109 expected incompatibilities**; the special audit remains **1,989:
+1,007 imported, 982 expected incompatibilities**; and all **70 bank models**
+remain clean. The new D-STAR audit inventories **15 DV-capable targets** and
+**240 populated actual `DVMemory` records**. Its representative sweep covered
+**385 targets: 13 imported, 372 expected incompatibilities**. Its required-list
+corpus covered **960 cases** across IC-2200H, IC-U82, IC-V82, and ID-800H:
+**482 imported, 478 expected incompatibilities**. All four audits had **zero
+unexpected failures**, rejected destinations/call lists restored exactly, and
+the vendored `chirp/` tree remains unmodified.
+
+**Next:** Phase 6 expands the source corpus beyond one representative ordinary
+channel, then performs the cross-radio NVDA and VoiceOver acceptance matrix.
+
 ## 2026-07-23 — Explicit cross-radio bank mapping (Phase 4)
 
 **Outcome:** Cross-image Paste and ordinary File ▸ Import can now migrate bank
