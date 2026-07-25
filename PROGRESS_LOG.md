@@ -6,6 +6,55 @@ architecture, keyboard map, and CHIRP feature-coverage checklist.
 
 ---
 
+## 2026-07-25 — Bank names and channels-in-a-bank (Phase 6.1)
+
+**Outcome:** Cross-radio migration deliberately never renames a destination
+bank, and membership was only ever visible one channel at a time. **Radio ▸
+Manage banks…** (`vrp/bank_manager_dialog.py`) now renames a bank where the
+driver really stores names, and lists a bank's channels read-only with **Go to
+channel**. Ctrl+B keeps per-channel assignment and cross-links to the new
+dialog. No new accelerator, so `APP_SHORTCUTS`/F1/`KeyboardCommands.html` are
+untouched — that surface is only for accelerator-bearing commands.
+
+**Verify by rereading; capability is not evidence.** `chirp_common.NamedBank`
+ships a base `set_name` that only assigns an attribute, so `hasattr` (CHIRP's
+own test, `wxui/bankedit.py:189`) cannot tell a real implementation from a
+no-op. The pinned **Kenwood TK-890** is worse than the base case: `MemBank`
+implements a genuine `set_name`, but the image configures `grp_name_length` as
+**0**, so `set_group_name` filters the whole name away and stores nothing
+without raising. **Icom ID-880H** truncates to six characters ("Repeaters" →
+"Repeat"). Both are now reported to the user instead of being announced as a
+clean success, and both are pinned regression tests.
+
+**The overview avoids a broken upstream helper.** `scan_bank_channels` asks each
+memory which banks it is in rather than calling
+`MappingModel.get_mapping_memories`, whose `StaticBankModel` implementation
+divides with `/` and hands `range()` a float (`chirp_common.py:794`).
+`chirp/` is not edited; `tests/test_bank_overview.py` asserts the upstream
+`TypeError` so a future CHIRP fix surfaces loudly.
+
+**Undo needed two changes.** Bank names are radio-wide, so `UndoManager`'s
+global snapshot — previously wired *exclusively* to D-STAR call lists and only
+installed for radios requiring them — became a **composite** covering call
+lists and bank names independently. Separately, `commit()` discarded any
+transaction that wrote no memory (`_order` only grows per-channel), so a rename
+produced no history entry at all; it now commits when radio-wide state was
+recorded. Snapshot failure stays fail-closed.
+
+**Verification:** full suite **519 passed** (was 479). All four audits hold
+their baselines, which is the evidence that the composite global state left
+D-STAR alone: ordinary 2,310/814/1,496; special 1,989/1,007/982; D-STAR
+385-target 13/372 plus 960 call-list cases 482/478; bank 70 models (16 fixed,
+54 mutable). `tools/audit_bank_migrations.py` gained a rename
+write/verify/exact-restore sweep: **36 names verified, 33 unsupported, 1
+ignored by the driver**, zero unexpected failures.
+
+**Next:** the NVDA hand pass, written up as **section H** of
+`docs/testing/2026-07-25-cross-radio-migration-accessibility.md` and marked
+"Not run". It deliberately covers the truncation wording, which is the string
+most likely to be wrong out loud. Plan:
+`docs/superpowers/plans/2026-07-25-bank-names-and-overview.md`.
+
 ## 2026-07-25 — Expanded compatibility corpus (Phase 6 checkpoint)
 
 **Outcome:** The opt-in ordinary migration audit no longer extrapolates from

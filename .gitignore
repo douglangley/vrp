@@ -36,6 +36,15 @@ run_*.log
 # Test cache
 .pytest_cache/
 
+# Disposable pytest --basetemp roots. Named per run (.test-tmp-phase6-full etc);
+# some end up read-only, which makes `git status` warn on every invocation.
+.test-tmp-*/
+
+# Scratch file that has held a pasted GitHub token. Ignored so it can never be
+# committed by a `git add -A`; it is still yours to delete, and any credential
+# that has sat in the working tree should be revoked rather than merely hidden.
+.feedback.txt
+
 # OS
 .DS_Store
 Thumbs.db
