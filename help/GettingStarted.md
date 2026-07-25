@@ -202,11 +202,49 @@ The cut-and-paste way, which also works across scattered selections:
 4. Press **Ctrl+V** (macOS: Command+V) to paste.
 
 **Ctrl+C / Command+C** copies instead of moving. Cut is *deferred* — nothing
-actually changes until you paste, and only then are the originals cleared.
+actually changes until you paste. If the same image and memory section are
+still active, the paste moves the channels and clears the originals. If you
+open or download another radio, or switch to another side or zone first, VRP
+converts each channel for that destination and leaves the original section
+unchanged; the Cut becomes Copy so you can paste again.
 
 If you paste onto a channel that is **already occupied**, VRP does not silently
 clobber it. A dialog asks whether you want to **Overwrite** it, **Make room**
-(shift the existing channels down to insert yours), or **Cancel**.
+(shift the existing channels down to insert yours), or **Cancel** within one
+image. Across radio images the choices are **Overwrite**, **Skip**, or
+**Cancel**. Any incompatible channels are skipped individually, and a
+navigable, copyable details window explains why; compatible channels still
+paste.
+
+Cross-radio bulk migration covers regular numbered channels. **File ▸ Import
+from File** can also transfer one explicitly selected regular or special memory
+to a numbered channel or named special on the destination. It never silently
+includes call channels, scan limits, VFOs, home channels, or other specials in
+a bulk import. A same-name target is only preselected for you to confirm, and
+an occupied special asks separately before overwrite.
+
+If those ordinary source channels use banks, Import and cross-image Paste show
+a filterable **Map source banks** dialog. Exact names may be suggested; matching
+by position happens only when you choose it, and any source bank may be left as
+**Do not import**. The confirmed mapped memberships replace existing bank
+memberships on each imported channel, but bank names are not renamed. An
+unbanked selection asks whether to clear or keep target memberships. A target
+with no banks or fixed banks asks before importing channel contents only. A
+bank failure restores that channel's prior memberships and is shown in the
+details report. Channel plus bank changes are one Undo step. Radio-wide
+settings are not copied.
+
+D-STAR calls are handled with the channel. If the destination radio requires
+master call lists, VRP adds the calls needed by each successfully imported
+channel and lists the additions in the details report. A rejected channel
+leaves neither added calls nor a partially changed destination behind. Undo and
+Redo restore the calls with the memories. A radio without D-STAR support reports
+the channel as incompatible instead of converting it to analog.
+
+When an image has multiple sides, VFOs, bands, or zones, Open and Import show a
+filterable **Memory section** chooser. **Radio ▸ Select memory section…**
+switches the grid later; Save and Upload still include the complete radio
+image.
 
 After any move, the moved channels stay selected at their new home, focus lands
 on the first of them, and the result is announced.
@@ -246,6 +284,9 @@ stops and asks: **Save**, **Don't save**, or **Cancel**.
 
 - **Radio ▸ Settings** (Ctrl+Shift+P / Command+Shift+P) — the radio's own
   settings, laid out as a navigable tree of labelled controls.
+- **Radio ▸ Select memory section…** — on a multi-side or multi-zone radio,
+  choose which section the channel grid shows. Open, Import, and Download also
+  offer this chooser when needed.
 - **Channels ▸ Channel banks** (Ctrl+B / Command+B) — assign a channel to the
   radio's banks, on radios that have them.
 - **Radio ▸ Query Source ▸ RepeaterBook** — look up repeaters by country and
@@ -255,7 +296,12 @@ stops and asks: **Save**, **Don't save**, or **Cancel**.
   lists (NOAA weather, FRS/GMRS, MURS, Marine VHF, aviation, railroad, PMR, and
   more). No internet needed.
 - **File ▸ Import from File** and **File ▸ Export to CSV** — move channels
-  between images, or send someone just the part of your memories they asked for.
+  directly between images, import a CHIRP CSV, or send someone just the part of
+  your memories they asked for.
+  Import and cross-image Paste use the same CHIRP conversion and compatibility
+  report. If either radio has named special memories, Import lets you choose
+  ordinary bulk migration or explicitly map one regular/special memory.
+  Ordinary imports can also explicitly map used source banks.
   (There is no print command; Export to CSV is the accessible equivalent.)
 - **File ▸ Preferences** — how many recent files to show, which band plan region
   to use, whether entering a frequency should also fill in mode/step/tone, and

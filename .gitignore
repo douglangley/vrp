@@ -36,6 +36,15 @@ run_*.log
 # Test cache
 .pytest_cache/
 
+# Disposable pytest --basetemp roots. Named per run (.test-tmp-phase6-full etc);
+# some end up read-only, which makes `git status` warn on every invocation.
+.test-tmp-*/
+
+# Write-only GitHub token used to submit issues from the app (that feature is
+# still to be built). Deliberately local-only — never commit a credential, even
+# a write-only one.
+.feedback.txt
+
 # OS
 .DS_Store
 Thumbs.db

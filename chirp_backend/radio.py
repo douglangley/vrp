@@ -18,6 +18,7 @@ import logging
 import os
 import re
 import threading
+import uuid
 from dataclasses import dataclass, field
 from typing import Callable, Optional
 
@@ -123,11 +124,35 @@ def _ensure_chirp() -> None:
         )
 
 
+@dataclass(frozen=True)
+class RadioImageSet:
+    """A complete image plus the memory views CHIRP exposes for it.
+
+    ``parent`` owns the mmap, file metadata, settings and serial clone.  The
+    entries in ``devices`` are the objects whose memories can be shown in the
+    grid.  Ordinary radios have a one-item tuple containing the parent itself.
+    """
+
+    parent: object
+    devices: tuple[object, ...]
+    path: Optional[str] = None
+
+    @property
+    def labels(self) -> tuple[str, ...]:
+        return _subdevice_labels(self.devices)
+
+
 @dataclass
 class RadioState:
-    """Holds everything about the currently loaded radio."""
-    radio: object = None            # chirp CloneModeRadio instance
+    """Holds the physical radio and the active memory view."""
+    radio: object = None            # selected grid/memory radio
+    parent_radio: object = None     # complete image/settings/clone owner
+    subdevices: tuple[object, ...] = field(default_factory=tuple)
+    subdevice_index: int = 0
     image_path: Optional[str] = None
+    # A new identity for every open/download operation. Clipboard cut may erase
+    # its source only while this exact document is still active.
+    document_id: Optional[str] = None
     is_modified: bool = False
     # Cache of memory objects keyed by channel number, populated on load
     _mem_cache: dict = field(default_factory=dict)
@@ -135,6 +160,26 @@ class RadioState:
     @property
     def loaded(self) -> bool:
         return self.radio is not None
+
+    @property
+    def physical_radio(self):
+        """The object that owns save/settings/upload for the complete image."""
+        return self.parent_radio if self.parent_radio is not None else self.radio
+
+    @property
+    def has_multiple_subdevices(self) -> bool:
+        return len(self.subdevices) > 1
+
+    @property
+    def subdevice_labels(self) -> tuple[str, ...]:
+        return _subdevice_labels(self.subdevices)
+
+    @property
+    def context_id(self) -> Optional[str]:
+        """Identity of this exact document *and* selected memory section."""
+        if self.document_id is None:
+            return None
+        return f"{self.document_id}:{self.subdevice_index}"
 
     @property
     def features(self):
@@ -160,48 +205,151 @@ def get_state() -> RadioState:
 
 def unload() -> None:
     """Clear the active radio (e.g. File ▸ Close), returning to no-radio state."""
-    global _undo
+    _remove_undo_wrapper()
     with _state_lock:
         _state.radio = None
+        _state.parent_radio = None
+        _state.subdevices = ()
+        _state.subdevice_index = 0
         _state.image_path = None
+        _state.document_id = None
         _state.is_modified = False
         _state._mem_cache = {}
-    _undo = None  # drop the undo history with the radio
 
 
-def load_image(path: str) -> tuple[bool, str]:
+def _subdevice_labels(devices) -> tuple[str, ...]:
+    """Build concise, stable labels without exposing generated class names."""
+    if not devices:
+        return ()
+    titles = []
+    for index, device in enumerate(devices):
+        variant = str(getattr(device, "VARIANT", "") or "").strip()
+        titles.append(variant or f"Memory section {index + 1}")
+    counts = {title: titles.count(title) for title in set(titles)}
+    labels = []
+    for index, (device, title) in enumerate(zip(devices, titles)):
+        if counts[title] > 1:
+            title = f"{title} (section {index + 1})"
+        try:
+            low, high = device.get_features().memory_bounds
+            labels.append(f"{title} — channels {low} to {high}")
+        except Exception:  # noqa: BLE001 - a label must never block opening
+            labels.append(title)
+    return tuple(labels)
+
+
+def _build_image_set(parent, path: Optional[str] = None) -> RadioImageSet:
+    """Expand a parsed/downloaded parent using CHIRP's sub-device contract."""
+    features = parent.get_features()
+    if getattr(features, "has_sub_devices", False):
+        devices = tuple(parent.get_sub_devices())
+        if not devices:
+            LOG.warning(
+                "%s %s reports sub-devices but returned none; using parent",
+                getattr(parent, "VENDOR", ""), getattr(parent, "MODEL", ""),
+            )
+            devices = (parent,)
+        else:
+            # This is the same post-get_sub_devices hook CHIRP's editor uses.
+            # It makes external per-memory metadata survive a later parent save.
+            from chirp import chirp_common
+
+            if isinstance(parent, chirp_common.ExternalMemoryProperties):
+                parent.link_device_metadata(devices)
+    else:
+        devices = (parent,)
+    return RadioImageSet(parent=parent, devices=devices, path=path)
+
+
+def load_image_set(path: str) -> tuple[Optional[RadioImageSet], str]:
     """
-    Load a CHIRP .img file from disk.
-    Returns (success, message).
+    Parse an image and discover its memory sections without activating it.
+
+    The two-step API lets the UI ask which section to open while leaving the
+    current document untouched if the user cancels that chooser.
     """
     _ensure_chirp()
     from chirp import directory
 
     if not os.path.exists(path):
-        return False, f"File not found: {path}"
+        return None, f"File not found: {path}"
 
     try:
         # get_radio_by_image inspects the image header/metadata, picks the
         # owning driver, and returns a radio instance already loaded from the
         # file (it constructs the driver with the image path).
-        radio = directory.get_radio_by_image(path)
-        if radio is None:
-            return False, "Unrecognized image format (no matching CHIRP driver)"
-
-        with _state_lock:
-            _state.radio = radio
-            _state.image_path = path
-            _state.is_modified = False
-            _state._mem_cache = {}
-        _install_undo(radio)  # fresh, empty history for the new radio
-
-        LOG.info("Loaded image: %s (%s %s)", path,
-                 radio.VENDOR, radio.MODEL)
-        return True, f"Loaded {radio.VENDOR} {radio.MODEL} from {os.path.basename(path)}"
+        parent = directory.get_radio_by_image(path)
+        if parent is None:
+            return None, "Unrecognized image format (no matching CHIRP driver)"
+        image_set = _build_image_set(parent, path)
+        return image_set, (
+            f"Loaded {parent.VENDOR} {parent.MODEL} "
+            f"from {os.path.basename(path)}"
+        )
 
     except Exception as e:
         LOG.exception("Failed to load image %s", path)
-        return False, f"Failed to load image: {e}"
+        return None, f"Failed to load image: {e}"
+
+
+def activate_image_set(
+    image_set: RadioImageSet,
+    subdevice_index: int = 0,
+    *,
+    modified: bool = False,
+) -> tuple[bool, str]:
+    """Make one memory view active while retaining the complete parent."""
+    if not 0 <= subdevice_index < len(image_set.devices):
+        return False, f"Memory section {subdevice_index + 1} is not available"
+
+    _remove_undo_wrapper()
+    radio = image_set.devices[subdevice_index]
+    with _state_lock:
+        _state.radio = radio
+        _state.parent_radio = image_set.parent
+        _state.subdevices = image_set.devices
+        _state.subdevice_index = subdevice_index
+        _state.image_path = image_set.path
+        _state.document_id = uuid.uuid4().hex
+        _state.is_modified = modified
+        _state._mem_cache = {}
+    _install_undo(radio)
+
+    label = f"{image_set.parent.VENDOR} {image_set.parent.MODEL}"
+    if len(image_set.devices) > 1:
+        label += f", {image_set.labels[subdevice_index]}"
+    LOG.info("Activated image: %s (%s)", image_set.path or "download", label)
+    source = os.path.basename(image_set.path) if image_set.path else "radio"
+    return True, f"Loaded {label} from {source}"
+
+
+def load_image(path: str, subdevice_index: int = 0) -> tuple[bool, str]:
+    """Load an image and activate one of its CHIRP memory sections."""
+    image_set, message = load_image_set(path)
+    if image_set is None:
+        return False, message
+    return activate_image_set(image_set, subdevice_index)
+
+
+def select_subdevice(subdevice_index: int) -> tuple[bool, str]:
+    """Switch the active memory section without replacing the parent image."""
+    with _state_lock:
+        if not _state.loaded:
+            return False, "No radio loaded"
+        if not 0 <= subdevice_index < len(_state.subdevices):
+            return False, f"Memory section {subdevice_index + 1} is not available"
+        if subdevice_index == _state.subdevice_index:
+            return True, f"Already showing {_state.subdevice_labels[subdevice_index]}"
+        next_radio = _state.subdevices[subdevice_index]
+
+    _remove_undo_wrapper()
+    with _state_lock:
+        _state.radio = next_radio
+        _state.subdevice_index = subdevice_index
+        _state._mem_cache = {}
+        label = _state.subdevice_labels[subdevice_index]
+    _install_undo(next_radio)
+    return True, f"Showing {label}. Undo history was reset"
 
 
 def save_image(path: Optional[str] = None) -> tuple[bool, str]:
@@ -217,7 +365,7 @@ def save_image(path: Optional[str] = None) -> tuple[bool, str]:
         if not save_path:
             return False, "No save path specified"
         try:
-            _state.radio.save_mmap(save_path)
+            _state.physical_radio.save_mmap(save_path)
             _state.image_path = save_path
             _state.is_modified = False
             return True, f"Saved to {os.path.basename(save_path)}"
@@ -308,14 +456,31 @@ def invalidate_cache(numbers: Optional[list[int]] = None) -> None:
 # Undo / redo history (see chirp_backend/undo.py and the undo-history plan)
 # ---------------------------------------------------------------------------
 
-# One UndoManager per loaded radio. Reset (and the radio re-wrapped) on every
-# load/download; cleared on close. None when no radio is loaded.
+# One UndoManager per selected memory section. Reset (and the selected device
+# re-wrapped) on every load/download/section switch; cleared on close.
 _undo: Optional[UndoManager] = None
+_undo_wrapped_radio: object = None
+_undo_original_methods: Optional[tuple[object, object]] = None
 
 
 def get_undo_manager() -> Optional[UndoManager]:
     """The active UndoManager, or None when no radio is loaded."""
     return _undo
+
+
+def _remove_undo_wrapper() -> None:
+    """Restore methods on the previously selected device before leaving it."""
+    global _undo, _undo_wrapped_radio, _undo_original_methods
+    radio = _undo_wrapped_radio
+    originals = _undo_original_methods
+    if radio is not None and originals is not None:
+        try:
+            radio.set_memory, radio.erase_memory = originals
+        except Exception:  # noqa: BLE001 - cleanup is best effort
+            LOG.exception("Could not remove undo recorder from radio")
+    _undo = None
+    _undo_wrapped_radio = None
+    _undo_original_methods = None
 
 
 def _install_undo(radio) -> None:
@@ -331,12 +496,14 @@ def _install_undo(radio) -> None:
     Restores (undo/redo) go through the *original* methods, so they never
     re-record, and invalidate the cache so the next read is fresh. If a driver
     refuses attribute assignment, undo is simply disabled for that radio."""
-    global _undo
-    _undo = None
+    global _undo, _undo_wrapped_radio, _undo_original_methods
+    _remove_undo_wrapper()
     try:
         orig_get = radio.get_memory
         orig_set = radio.set_memory
         orig_erase = radio.erase_memory
+        _undo_wrapped_radio = radio
+        _undo_original_methods = (orig_set, orig_erase)
 
         # This wrapper is the single choke point every channel write funnels
         # through (memory_ops._set_mem/_erase_mem call the radio methods directly,
@@ -348,7 +515,7 @@ def _install_undo(radio) -> None:
         # the image is read, and reading an image doesn't call set_memory.
         def recording_set(mem):
             if _undo is not None:
-                _undo.record(mem.number)
+                _undo.record(getattr(mem, "extd_number", "") or mem.number)
             result = orig_set(mem)
             _state.is_modified = True
             return result
@@ -376,32 +543,89 @@ def _install_undo(radio) -> None:
             _state.is_modified = True
             invalidate_cache([number])
 
+        from chirp_backend import bank_ops, dstar_ops
+
+        bank_model = bank_ops.bank_model_for(radio)
+        bank_catalog = bank_ops.describe_banks(radio)
+
+        capture_banks = None
+        restore_banks = None
+        if bank_model is not None and bank_catalog.mutable:
+            def capture_banks(number):
+                return bank_ops.capture_bank_membership(
+                    radio,
+                    number,
+                    mutable_only=True,
+                    model=bank_model,
+                )
+
+            def restore_banks(number, snapshot):
+                bank_ops.restore_bank_membership(radio, number, snapshot)
+                _state.is_modified = True
+
+        # Radio-wide undo state is a composite: D-STAR required call lists and
+        # bank names are independent, and a radio may have either or both. Each
+        # part is snapshotted only when this radio actually has it, and each is
+        # restored independently so one failure cannot abandon the other.
+        wants_call_lists = dstar_ops.requires_call_lists(radio)
+        wants_bank_names = bank_catalog.renameable
+
+        capture_global = None
+        restore_global = None
+        if wants_call_lists or wants_bank_names:
+
+            def capture_global():
+                snapshot = {}
+                if wants_call_lists:
+                    # Raises rather than returning None; record_global() turns
+                    # that into a False result, which is the fail-closed path.
+                    snapshot["calls"] = dstar_ops.capture_call_lists(radio)
+                if wants_bank_names:
+                    names = bank_ops.capture_bank_names(radio)
+                    if names is None:
+                        return None  # fail closed; the caller refuses the write
+                    snapshot["bank_names"] = names
+                return snapshot or None
+
+            def restore_global(snapshot):
+                if not isinstance(snapshot, dict):
+                    return
+                if "calls" in snapshot:
+                    try:
+                        dstar_ops.restore_call_lists(radio, snapshot["calls"])
+                        _state.is_modified = True
+                    except Exception:  # noqa: BLE001 - still restore bank names
+                        LOG.exception("undo: failed to restore D-STAR call lists")
+                if "bank_names" in snapshot:
+                    try:
+                        bank_ops.restore_bank_names(radio, snapshot["bank_names"])
+                        _state.is_modified = True
+                    except Exception:  # noqa: BLE001 - undo must not crash
+                        LOG.exception("undo: failed to restore bank names")
+
         _undo = UndoManager(
             get_memory=lambda n: orig_get(n),
             set_memory=restore_set,
             erase_memory=restore_erase,
+            get_aux_state=capture_banks,
+            set_aux_state=restore_banks,
+            get_global_state=capture_global,
+            set_global_state=restore_global,
         )
     except Exception:  # noqa: BLE001 — undo is best-effort; never block loading
         LOG.exception("Could not install undo recorder; undo disabled for this radio")
-        _undo = None
+        _remove_undo_wrapper()
 
 
-def open_image_as_source(path: str) -> tuple:
+def open_image_as_source(path: str, subdevice_index: int = 0) -> tuple:
     """Load an image into a standalone radio instance for IMPORT, leaving the
     active radio untouched. Returns (radio_or_None, message)."""
-    _ensure_chirp()
-    from chirp import directory
-
-    if not os.path.exists(path):
-        return None, f"File not found: {path}"
-    try:
-        src = directory.get_radio_by_image(path)
-        if src is None:
-            return None, "Unrecognized image format (no matching CHIRP driver)"
-        return src, f"Loaded {src.VENDOR} {src.MODEL} from {os.path.basename(path)}"
-    except Exception as e:  # noqa: BLE001
-        LOG.exception("open_image_as_source failed: %s", path)
-        return None, f"Could not open image: {e}"
+    image_set, message = load_image_set(path)
+    if image_set is None:
+        return None, message
+    if not 0 <= subdevice_index < len(image_set.devices):
+        return None, f"Memory section {subdevice_index + 1} is not available"
+    return image_set.devices[subdevice_index], message
 
 
 def export_to_csv(path: str, numbers=None) -> tuple:
@@ -416,7 +640,7 @@ def export_to_csv(path: str, numbers=None) -> tuple:
             return False, "No radio loaded", 0
         radio = _state.radio
 
-    from chirp import import_logic
+    from chirp import chirp_common, import_logic
     from chirp.drivers import generic_csv
 
     try:
@@ -436,9 +660,17 @@ def export_to_csv(path: str, numbers=None) -> tuple:
         if not rows:
             return False, "No channels to export.", 0
 
-        csv = generic_csv.CSVRadio(None)
+        # CSVRadio(None) creates a synthetic blank channel zero. Size the
+        # in-memory CSV to the real maximum and explicitly erase zero so radios
+        # whose first channel is 1 do not gain a phantom row on export.
+        csv = generic_csv.CSVRadio(None, max_memory=max(mem.number for mem in rows))
+        csv.erase_memory(0)
         for mem in rows:
-            csv.set_memory(import_logic.import_mem(csv, features, mem))
+            csv.set_memory(
+                import_logic.import_mem(
+                    csv, features, mem, mem_cls=chirp_common.Memory
+                )
+            )
         csv.save_mmap(path)
         return True, f"Exported {len(rows)} channel(s) to {os.path.basename(path)}.", len(rows)
     except Exception as e:  # noqa: BLE001
@@ -451,7 +683,9 @@ def has_settings() -> bool:
     with _state_lock:
         if not _state.loaded:
             return False
-        return bool(getattr(_state.radio.get_features(), "has_settings", False))
+        return bool(
+            getattr(_state.physical_radio.get_features(), "has_settings", False)
+        )
 
 
 def get_radio_settings():
@@ -462,7 +696,7 @@ def get_radio_settings():
         if not _state.loaded:
             return None
         try:
-            return _state.radio.get_settings()
+            return _state.physical_radio.get_settings()
         except Exception as e:  # noqa: BLE001
             LOG.exception("get_settings failed")
             return None
@@ -474,7 +708,7 @@ def apply_radio_settings(settings) -> tuple[bool, str]:
         if not _state.loaded:
             return False, "No radio loaded"
         try:
-            _state.radio.set_settings(settings)
+            _state.physical_radio.set_settings(settings)
             _state.is_modified = True
             return True, "Radio settings saved"
         except Exception as e:  # noqa: BLE001
@@ -582,7 +816,7 @@ def get_clone_prompts_for_loaded_radio() -> dict:
     with _state_lock:
         if not _state.loaded:
             return {"experimental": None, "info": None, "pre": None}
-        radio = _state.radio
+        radio = _state.physical_radio
     return _prompts_dict(radio, upload=True)
 
 
@@ -815,12 +1049,10 @@ def download_from_radio(
         radio.sync_in()
         pipe.close()
 
-        with _state_lock:
-            _state.radio = radio
-            _state.image_path = None   # downloaded, not yet saved to disk
-            _state.is_modified = True
-            _state._mem_cache = {}
-        _install_undo(radio)  # a downloaded image starts with empty history
+        image_set = _build_image_set(radio)
+        ok, activate_message = activate_image_set(image_set, modified=True)
+        if not ok:
+            return False, activate_message
 
         return True, f"Downloaded {label} from {port}"
 
@@ -845,7 +1077,7 @@ def upload_to_radio(
     with _state_lock:
         if not _state.loaded:
             return False, "No radio loaded"
-        radio = _state.radio
+        radio = _state.physical_radio
 
     pipe = None
     try:

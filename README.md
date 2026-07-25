@@ -99,7 +99,9 @@ Windows (exposed to MSAA/UIA so **NVDA** reads it):
 - Multi-select (Shift+Arrow for a contiguous block, Ctrl+Space for individual
   rows) drives in-place reordering: move up/down a slot or move-to a chosen
   channel, with the moved block re-selected and focused afterward
-- Whole-row cut/copy/paste and channel-edit undo/redo
+- Whole-row cut/copy/paste and channel-edit undo/redo. Clipboard snapshots can
+  be pasted after opening another radio; CHIRP converts each compatible channel
+  for the destination and reports incompatible rows individually.
 - Channel editing happens in a native wx dialog (F2/Enter); the grid itself is
   read-only/navigable
 - A single native menu bar carries both mnemonics and Ctrl-combo accelerators
@@ -116,8 +118,21 @@ Windows (exposed to MSAA/UIA so **NVDA** reads it):
 - Find / Find Next (frequency, name, or comment) with wrap-around
 - Download from / upload to radio with live progress announcements (background
   thread), favorite-radios list, and a "Radio details" view of any model's specs
-- Radio settings editor, banks editor, and online query sources (AMSAT, SatNOGS;
-  more sources are incremental)
+- Radio settings editor, banks editor, RepeaterBook lookup, and CHIRP stock
+  frequency-list import
+- Direct channel migration from another radio image or CHIRP CSV, with
+  overwrite/skip, partial success, accessible details, and one-step undo
+- Explicit cross-radio bank-membership mapping for ordinary imports and
+  cross-image Paste, with exact-name suggestions, opt-in position matching,
+  per-channel rollback, and memory-plus-bank Undo/Redo
+- Transactional D-STAR migration: required call signs are added on success,
+  reported to the user, exactly rolled back with partially written channels on
+  rejection, and included in Undo/Redo
+- Explicit one-memory transfer between regular channels and driver-defined
+  named specials (call, home, scan-limit, VFO, and similar slots); bulk import
+  remains numeric-only and never silently includes specials
+- Multi-side/zone radio images: accessible memory-section selection for Open,
+  Import, Download, and later switching, while saving/uploading the full image
 - High contrast and forced-colors (Windows High Contrast) support
 - Packages as a Windows installer (Inno Setup) wrapping a PyInstaller build
 
@@ -141,28 +156,47 @@ vrp/
   ops_dialog.py           Native wx dialog for bulk operations.
   find_dialog.py          Native wx Find dialog.
   serial_dialogs.py       Native wx Download / Upload / favorites / progress dialogs.
+  subdevice_dialog.py      Filterable native memory-section chooser.
+  special_memory_dialogs.py
+                         Explicit import mode/destination choices and a
+                         filterable regular/special memory chooser.
   settings_dialog.py      Native wx radio settings editor, Treebook.
   bank_dialog.py          Native wx dialog to assign a channel to banks.
+  bank_mapping_dialog.py  Filterable explicit cross-radio bank mapper.
   query_dialogs.py        Native wx query-source param + import dialogs.
   prefs_dialog.py         Native wx Preferences dialog.
-  info_dialog.py          Read-only multiline edit box (Radio Info / details).
+  info_dialog.py          Read-only multiline edit box (Radio Info, model and
+                         migration details).
   config.py               Persistent JSON config (prefs + recent files + favorites).
   speech.py               prism speech wrapper, graceful no-op if unavailable.
   _chirp_path.py          Makes the editable ./chirp package importable.
 chirp_backend/
-  radio.py               Wraps chirp library: load image, read/write memories,
-                         serial port download/upload, describe_model.
+  radio.py               Wraps chirp library: parent/selected-subdevice image
+                         state, read/write/save, serial clone, describe_model.
+  migration.py           Generic cross-radio Memory/DVMemory conversion and
+                         per-channel compatibility reports.
+  dstar_ops.py           Required D-STAR call-list snapshots and restoration.
   memory_ops.py          Field edits + range operations: set/update channel,
-                         move, copy, delete+shift, sort, arrange, find/goto.
-  undo.py                Channel-edit undo/redo (UndoManager).
+                         move, copy, migrate, delete+shift, sort, arrange,
+                         find/goto.
+  undo.py                Channel, global D-STAR, and auxiliary bank undo/redo.
   col_defs.py            Column definitions mirroring CHIRP's column hierarchy.
-  bank_ops.py            Bank membership operations (assign channels to banks).
+  bank_ops.py            Bank discovery, atomic membership replacement/mapping.
   bandplan.py            Suggested repeater offset + band defaults, by region.
-  query.py               Online query-source registry + threaded fetch runner.
+  repeaterbook.py        RepeaterBook query through CHIRP's mirror.
+  stock_configs.py       Finds/opens pinned CHIRP stock frequency lists.
   serial_trace.py        Byte-level serial trace (written under --debug).
 tests/                   Unit tests (no radio hardware needed).
 tools/
   update_chirp.py        Fetches/tests/pins a new CHIRP commit.
+  audit_migrations.py    Sweeps six VHF/UHF/HF/AM/split/DV cases across every
+                         pinned CHIRP target.
+  audit_special_migrations.py
+                         Sweeps every named special in pinned CHIRP images.
+  audit_bank_migrations.py
+                         Verifies mutable/fixed bank behavior and rollback.
+  audit_dstar_migrations.py
+                         Sweeps DV support and required call-list rollback.
 build.py                 PyInstaller build script.
 pyproject.toml           uv-managed project definition (Python 3.11 pinned).
 ```

@@ -15,6 +15,12 @@ IMAGE = os.path.abspath(
         "Baofeng_UV-5R.img",
     )
 )
+MINI_IMAGE = os.path.abspath(
+    os.path.join(
+        os.path.dirname(__file__), "..", "chirp", "tests", "images",
+        "Baofeng_UV-5R_Mini.img",
+    )
+)
 
 
 def _locations(path):
@@ -84,3 +90,18 @@ class TestExportCsv:
         ok, msg, count = radio_backend.export_to_csv(str(tmp_path / "x.csv"), [1, 2])
         assert not ok
         assert count == 0
+
+    def test_radio_starting_at_one_does_not_export_synthetic_channel_zero(
+        self, tmp_path
+    ):
+        radio_backend.load_image(MINI_IMAGE)
+        expected = _nonempty_numbers()
+        assert expected and expected[0] >= 1
+
+        path = str(tmp_path / "mini.csv")
+        ok, _msg, count = radio_backend.export_to_csv(path)
+
+        assert ok
+        assert count == len(expected)
+        assert _locations(path) == expected
+        assert 0 not in _locations(path)

@@ -39,12 +39,19 @@ class _Clipboard:
 
     ``mems`` are deep-copied Memory snapshots taken at copy/cut time, so the
     clipboard survives later edits to the source. ``source_numbers`` are the
-    original channel numbers — used only for a ``cut`` (to erase the sources when
-    the paste lands, making cut+paste a move); a ``copy`` ignores them."""
+    original channel numbers — used only for a ``cut`` pasted back into the exact
+    same open memory section. Source metadata lets a paste into another radio run
+    through CHIRP's generic migration conversion instead of writing foreign
+    driver objects directly."""
 
     mode: str  # "copy" | "cut"
     mems: list
     source_numbers: list[int]
+    source_features: object
+    source_radio_id: str
+    source_label: str
+    source_document_id: str | None
+    migration_batch: object
 
 # Keyboard shortcuts table (combo, description).
 # Displayed by on_shortcuts (F1).
@@ -358,6 +365,20 @@ class MainWindow(wx.Frame):
         self._add(m, "favorites", "&Favorite radios…", self.on_favorites)
         m.AppendSeparator()
         self._add(m, "settings", "&Settings…\tCtrl+Shift+P", self.on_settings, needs_radio=True)
+        self._add(
+            m,
+            "select_subdevice",
+            "Select &memory section…",
+            self.on_select_subdevice,
+            needs_radio=True,
+        )
+        self._add(
+            m,
+            "manage_banks",
+            "Mana&ge banks…",
+            self.on_manage_banks,
+            needs_radio=True,
+        )
         self._add(m, "radio_info", "Radio &Info…", self.on_radio_info, needs_radio=True)
         m.AppendSeparator()
         # Query Source submenu (online repeater directories). Gated on a loaded
@@ -404,9 +425,13 @@ class MainWindow(wx.Frame):
         return m
 
     def _update_menu_state(self) -> None:
-        loaded = radio_backend.get_state().loaded
+        state = radio_backend.get_state()
+        loaded = state.loaded
         for key in self._radio_gated_keys:
             self._menu_items[key].Enable(loaded)
+        self._menu_items["select_subdevice"].Enable(
+            loaded and state.has_multiple_subdevices
+        )
 
     # -- channel handlers ---------------------------------------------
 
@@ -751,14 +776,22 @@ class MainWindow(wx.Frame):
         # The op rewrote these channels; refresh the whole grid (a structural op
         # may have shifted rows) and re-anchor on the affected block.
         self.grid.rebuild()
-        numbers = sorted(n for n in numbers) if numbers else []
-        if numbers:
+        numeric = sorted(n for n in (numbers or []) if isinstance(n, int))
+        specials = [
+            str(n) for n in (numbers or []) if not isinstance(n, int)
+        ]
+        if numeric:
             low, high = radio_backend.get_state().memory_bounds
-            target = min(max(numbers[0], low), high)
-            self.grid.select_channels([n for n in numbers if low <= n <= high])
+            target = min(max(numeric[0], low), high)
+            self.grid.select_channels([n for n in numeric if low <= n <= high])
             self.grid.focus_channel(target)
             self.announce.announce(f"{verb}: {label}. Now on channel {target}.",
                                    assertive=True)
+        elif specials:
+            self.announce.announce(
+                f"{verb}: {label}. Special memory {', '.join(specials)}.",
+                assertive=True,
+            )
         else:
             self.announce.announce(f"{verb}: {label}.", assertive=True)
 
@@ -817,29 +850,65 @@ class MainWindow(wx.Frame):
 
     def on_copy(self, _evt=None) -> None:
         """Copy the selected channel(s) to the in-app clipboard (source kept)."""
+        from chirp_backend import migration
+
         snap = self._snapshot_selection()
         if snap is None:
             return
         numbers, mems = snap
-        self._clipboard = _Clipboard("copy", mems, list(numbers))
+        state = radio_backend.get_state()
+        batch = migration.batch_from_radio(
+            state.radio,
+            numbers=numbers,
+            source_document_id=state.context_id,
+        )
+        self._clipboard = _Clipboard(
+            "copy",
+            mems,
+            list(numbers),
+            state.features,
+            migration.radio_id(state.radio),
+            migration.radio_label(state.radio),
+            state.context_id,
+            batch,
+        )
         self.announce.announce(f"Copied {len(mems)} channel(s).")
 
     def on_cut(self, _evt=None) -> None:
         """Cut the selected channel(s) to the clipboard. Deferred: the source is
         untouched until paste, which then moves them (erasing the source)."""
+        from chirp_backend import migration
+
         snap = self._snapshot_selection()
         if snap is None:
             return
         numbers, mems = snap
-        self._clipboard = _Clipboard("cut", mems, list(numbers))
+        state = radio_backend.get_state()
+        batch = migration.batch_from_radio(
+            state.radio,
+            numbers=numbers,
+            source_document_id=state.context_id,
+        )
+        self._clipboard = _Clipboard(
+            "cut",
+            mems,
+            list(numbers),
+            state.features,
+            migration.radio_id(state.radio),
+            migration.radio_label(state.radio),
+            state.context_id,
+            batch,
+        )
         self.announce.announce(f"Cut {len(mems)} channel(s). Paste to move them.")
 
     def on_paste(self, _evt=None) -> None:
-        """Paste the clipboard at the focused channel. Overwrites by default; when
-        the destination is occupied, asks whether to overwrite or make room (shift
-        the existing channels down). A cut paste moves (erases the source) and
-        empties the clipboard; a copy paste keeps it for pasting again."""
-        from chirp_backend import memory_ops
+        """Paste whole rows at the focused channel.
+
+        A same-document paste preserves the native move/make-room behavior. A
+        paste after another image is opened uses generic migration; a deferred
+        cut becomes a copy because the inactive source cannot be erased safely.
+        """
+        from chirp_backend import memory_ops, migration
 
         if not radio_backend.get_state().loaded:
             self.announce.announce("No radio image is open.", assertive=True)
@@ -853,7 +922,61 @@ class MainWindow(wx.Frame):
             self.announce.announce("No channel selected.")
             return
         n = len(clip.mems)
-        low, high = radio_backend.get_state().memory_bounds
+        _low, high = radio_backend.get_state().memory_bounds
+        same_document = bool(
+            clip.source_document_id
+            and clip.source_document_id == radio_backend.get_state().context_id
+        )
+
+        if not same_document:
+            batch = clip.migration_batch
+            occupied = []
+            for k in range(dest, min(high, dest + len(batch.entries) - 1) + 1):
+                mem = radio_backend.get_memory(k)
+                if mem is not None and not mem.empty:
+                    occupied.append(k)
+            overwrite = True
+            if occupied:
+                choice = self._ask_migration_conflict(
+                    dest,
+                    min(high, dest + len(batch.entries) - 1),
+                    len(occupied),
+                )
+                if choice is None:
+                    return
+                overwrite = choice
+
+            proceed, bank_mapping = self._choose_bank_mapping(batch)
+            if not proceed:
+                self.grid.SetFocus()
+                return
+            ok, message, affected, report = memory_ops.apply_migration_batch(
+                batch,
+                dest,
+                overwrite,
+                bank_mapping=bank_mapping,
+            )
+            if affected:
+                self.grid.reorder_refresh()
+                self.grid.select_channels(affected)
+                self.grid.focus_channel(affected[0])
+            else:
+                self.grid.SetFocus()
+
+            cut_note = ""
+            if clip.mode == "cut":
+                # The original image is no longer active, so it cannot be
+                # changed safely. Preserve the snapshots for another paste.
+                clip.mode = "copy"
+                cut_note = " Source image was unchanged; clipboard is now Copy."
+            if report.has_issues or report.warning_count:
+                self._show_migration_report(report, "Paste details")
+            self.announce.announce(
+                message + cut_note,
+                assertive=not ok or report.has_issues,
+            )
+            return
+
         if dest + n - 1 > high:
             self.announce.announce(
                 f"Not enough room: pasting {n} channel(s) at {dest} runs past "
@@ -898,6 +1021,37 @@ class MainWindow(wx.Frame):
         if clip.mode == "cut":
             self._clipboard = None  # cut is one-shot
         self.announce.announce(f"{message}. Now on channel {dest}.", assertive=True)
+
+    def _ask_migration_conflict(
+        self, first: int, last: int, occupied: int
+    ) -> bool | None:
+        """Ask whether cross-radio migration should overwrite occupied rows.
+
+        Returns True for overwrite, False for skip, and None for cancel. Unlike
+        a same-document paste, migration never shifts model-specific raw rows.
+        """
+        where = f"Channel {first} is" if first == last else f"Channels {first} to {last} are"
+        msg = (
+            f"{where} not empty ({occupied} occupied). Overwrite those channels, "
+            "or skip them during migration?"
+        )
+        dlg = wx.MessageDialog(
+            self,
+            msg,
+            "Paste — destination not empty",
+            wx.YES_NO | wx.CANCEL | wx.ICON_QUESTION,
+        )
+        dlg.SetYesNoCancelLabels("Overwrite", "Skip", "Cancel")
+        try:
+            result = dlg.ShowModal()
+        finally:
+            dlg.Destroy()
+            self.grid.SetFocus()
+        if result == wx.ID_YES:
+            return True
+        if result == wx.ID_NO:
+            return False
+        return None
 
     def _ask_paste_conflict(self, first: int, last: int, occupied: int) -> str | None:
         """Ask how to resolve a paste onto occupied channels. Returns
@@ -954,6 +1108,7 @@ class MainWindow(wx.Frame):
         dlg = ChannelBanksDialog(self, state)
         applied = dlg.ShowModal() == wx.ID_OK and not state["read_only"]
         desired = dlg.get_desired_indexes() if applied else None
+        manage = dlg.manage_requested
         dlg.Destroy()
 
         if desired is not None:
@@ -965,6 +1120,93 @@ class MainWindow(wx.Frame):
                 wx.MessageBox(message, "Banks", wx.OK | wx.ICON_ERROR, self)
         # Return focus to the channel row.
         self.grid.select_channels([number])
+        if manage:
+            self.on_manage_banks()
+
+    def _read_bank_overview(self) -> tuple:
+        """Return ``(catalog, channels_by_position)`` for the active radio."""
+        from chirp_backend import bank_ops
+
+        radio = radio_backend.get_state().radio
+        catalog = bank_ops.describe_banks(radio)
+        _ok, _message, channels = bank_ops.scan_bank_channels(radio)
+        return catalog, channels
+
+    def on_manage_banks(self, _evt=None) -> None:
+        """Radio > Manage banks — rename a bank and review its channels."""
+        from chirp_backend import bank_ops
+        from vrp.bank_manager_dialog import BankManagerDialog
+
+        catalog, channels = self._read_bank_overview()
+        if not catalog.available or not catalog.banks:
+            message = catalog.message or "This radio has no banks."
+            self.announce.announce(message, assertive=True)
+            wx.MessageBox(message, "Manage banks", wx.OK | wx.ICON_INFORMATION, self)
+            return
+
+        dlg = BankManagerDialog(self, catalog, channels)
+        dlg.Bind(wx.EVT_BUTTON, lambda _e: self._rename_bank(dlg), dlg.rename_button)
+        dlg.Bind(
+            wx.EVT_BUTTON, lambda _e: self._show_bank_channels(dlg), dlg.channels_button
+        )
+        dlg.ShowModal()
+        target = dlg.goto_channel
+        dlg.Destroy()
+        # Renames change the bank labels shown against channels; refresh first,
+        # then move focus, or the rebuild would discard it.
+        if bank_ops.describe_banks(radio_backend.get_state().radio) != catalog:
+            self.grid.rebuild()
+        if target is None:
+            self.grid.SetFocus()
+            return
+        self.grid.select_channels([target])
+        self.grid.focus_channel(target)
+        self.announce.announce(f"Channel {target}")
+
+    def _rename_bank(self, dlg) -> None:
+        """Prompt for and apply a new bank name, then re-read the dialog."""
+        from chirp_backend import bank_ops
+
+        bank = dlg.get_bank()
+        if bank is None:
+            return
+        prompt = wx.TextEntryDialog(
+            dlg, f"New name for {bank.label}:", "Rename bank", bank.name
+        )
+        proceed = prompt.ShowModal() == wx.ID_OK
+        value = prompt.GetValue()
+        prompt.Destroy()
+        if not proceed:
+            return
+
+        ok, message, _stored = bank_ops.rename_bank(bank.position, value)
+        if ok:
+            self.announce.announce(message)
+            catalog, channels = self._read_bank_overview()
+            dlg.refresh(catalog, channels)
+        else:
+            self.announce.announce(message, assertive=True)
+            wx.MessageBox(message, "Rename bank", wx.OK | wx.ICON_ERROR, dlg)
+        # Focus returns to the list the rename was launched from.
+        dlg.list.SetFocus()
+
+    def _show_bank_channels(self, dlg) -> None:
+        """Open the read-only channel list; Go to channel closes both dialogs."""
+        bank = dlg.get_bank()
+        if bank is None:
+            return
+        from vrp.bank_manager_dialog import BankChannelsDialog
+
+        sub = BankChannelsDialog(dlg, bank.label, dlg.channels_for(bank))
+        go = sub.ShowModal() == wx.ID_OK
+        number = sub.get_channel() if go else None
+        sub.Destroy()
+        if number is None:
+            dlg.list.SetFocus()
+            return
+        # The manager closes and its caller performs the navigation.
+        dlg.goto_channel = number
+        dlg.EndModal(wx.ID_CANCEL)
         self.grid.focus_channel(number)
 
     @staticmethod
@@ -1264,11 +1506,21 @@ class MainWindow(wx.Frame):
         state = radio_backend.get_state()
         if state.loaded:
             self.grid.set_state(state)
-            self.SetTitle(f"{state.radio.VENDOR} {state.radio.MODEL} — VRP")
+            self._set_radio_title(state)
         else:
             self.grid.clear()
             self.SetTitle("Versatile Radio Programmer")
         self._update_menu_state()
+
+    def _set_radio_title(self, state) -> None:
+        parent = state.physical_radio
+        label = f"{parent.VENDOR} {parent.MODEL}"
+        if state.has_multiple_subdevices:
+            variant = getattr(state.radio, "VARIANT", "") or (
+                f"section {state.subdevice_index + 1}"
+            )
+            label += f" — {variant}"
+        self.SetTitle(f"{label} — VRP")
 
     def _confirm(self, message: str) -> bool:
         """Show a Yes/No confirmation dialog. Returns True if the user chose Yes."""
@@ -1304,6 +1556,50 @@ class MainWindow(wx.Frame):
             dlg.Destroy()
             self.grid.SetFocus()
 
+    def _show_migration_report(self, report, title: str = "Import details") -> None:
+        """Show an itemised, keyboard-readable migration result."""
+        from vrp.info_dialog import InfoDialog
+
+        dlg = InfoDialog(
+            self,
+            title,
+            report.details_text(),
+            name="Migration details",
+            size=(650, 420),
+            ok_button=True,
+        )
+        try:
+            dlg.ShowModal()
+        finally:
+            dlg.Destroy()
+            self.grid.SetFocus()
+
+    def _choose_memory_section(
+        self,
+        labels,
+        *,
+        title: str,
+        action_label: str,
+        current_index: int = 0,
+    ) -> int | None:
+        """Return a section index, or None when the user cancels."""
+        labels = tuple(labels)
+        if len(labels) <= 1:
+            return 0 if labels else None
+        from vrp.subdevice_dialog import SubdeviceDialog
+
+        dlg = SubdeviceDialog(
+            self,
+            labels,
+            title=title,
+            action_label=action_label,
+            current_index=current_index,
+        )
+        try:
+            return dlg.get_index() if dlg.ShowModal() == wx.ID_OK else None
+        finally:
+            dlg.Destroy()
+
     # -- file handlers ------------------------------------------------
 
     def on_open(self, _evt=None) -> None:
@@ -1327,10 +1623,22 @@ class MainWindow(wx.Frame):
         if not self._confirm_discard_or_save():
             return False
 
-        ok, message = radio_backend.load_image(path)
-        if not ok:
+        image_set, message = radio_backend.load_image_set(path)
+        if image_set is None:
             # A modal (not just announce) so the error is reliably read — see
             # _show_error. This is the "unsupported file error not read" fix.
+            self._show_error("Could not open file", message)
+            return False
+        section = self._choose_memory_section(
+            image_set.labels,
+            title=f"Open {image_set.parent.VENDOR} {image_set.parent.MODEL}",
+            action_label="Open",
+        )
+        if section is None:
+            self.grid.SetFocus()
+            return False
+        ok, message = radio_backend.activate_image_set(image_set, section)
+        if not ok:
             self._show_error("Could not open file", message)
             return False
         self._load_into_grid()
@@ -1405,7 +1713,7 @@ class MainWindow(wx.Frame):
         ok, message = radio_backend.save_image(path)
         self.announce.announce(message, assertive=not ok)
         if ok:
-            self.SetTitle(f"{state.radio.VENDOR} {state.radio.MODEL} — VRP")
+            self._set_radio_title(state)
         return ok
 
     def _confirm_discard_or_save(self) -> bool:
@@ -1476,32 +1784,302 @@ class MainWindow(wx.Frame):
             )
             return
         with wx.FileDialog(
-            self, "Import channels from radio image file",
-            wildcard="Radio images (*.img)|*.img|All files (*.*)|*.*",
+            self, "Import channels from radio image or CSV file",
+            wildcard=(
+                "Radio images and CSV (*.img;*.csv)|*.img;*.csv|"
+                "Radio images (*.img)|*.img|CSV files (*.csv)|*.csv|"
+                "All files (*.*)|*.*"
+            ),
             style=wx.FD_OPEN | wx.FD_FILE_MUST_EXIST,
         ) as dlg:
             if dlg.ShowModal() != wx.ID_OK:
                 return
             path = dlg.GetPath()
 
-        src, message = radio_backend.open_image_as_source(path)
-        if src is None:
+        image_set, message = radio_backend.load_image_set(path)
+        if image_set is None:
             self.announce.announce(message, assertive=True)
             wx.MessageBox(message, "Import", wx.OK | wx.ICON_ERROR, self)
             return
-
-        lo, hi = src.get_features().memory_bounds
-        count = 0
-        for n in range(lo, hi + 1):
-            try:
-                if not getattr(src.get_memory(n), "empty", True):
-                    count += 1
-            except Exception:  # noqa: BLE001
-                continue
-        if count == 0:
-            self.announce.announce("That image has no channels to import.")
+        section = self._choose_memory_section(
+            image_set.labels,
+            title=f"Import from {image_set.parent.VENDOR} {image_set.parent.MODEL}",
+            action_label="Import",
+        )
+        if section is None:
+            self.grid.SetFocus()
             return
-        self._import_results(src, count)
+        src = image_set.devices[section]
+
+        self._import_open_source(src)
+
+    def _import_open_source(self, src_radio) -> None:
+        """Choose numeric bulk or one explicit regular/special memory."""
+        from chirp_backend import migration
+
+        regular = migration.list_memory_locations(
+            src_radio, include_special=False
+        )
+        specials = migration.list_memory_locations(
+            src_radio, include_regular=False
+        )
+        target_specials = migration.list_memory_locations(
+            radio_backend.get_state().radio,
+            include_regular=False,
+            include_empty=True,
+        )
+
+        if not regular and not specials:
+            self.announce.announce("That image has no programmed memories to import.")
+            self.grid.SetFocus()
+            return
+
+        # Preserve the original one-dialog bulk flow unless either side exposes
+        # specials. Specials are never silently appended to a bulk batch.
+        mode = "bulk"
+        if specials or target_specials:
+            mode = self._choose_import_mode(
+                len(regular), len(specials), bool(target_specials)
+            )
+            if mode is None:
+                self.grid.SetFocus()
+                return
+
+        if mode == "bulk":
+            if not regular:
+                self.announce.announce(
+                    "That image has no ordinary channels to import."
+                )
+                self.grid.SetFocus()
+                return
+            self._import_results(src_radio, len(regular))
+            return
+
+        source = self._choose_memory_location(
+            regular + specials,
+            title="Choose source memory",
+            prompt=(
+                "Choose exactly one memory. Named special memories are marked "
+                "Special and are never part of bulk import."
+            ),
+            action_label="Select",
+        )
+        if source is None:
+            self.grid.SetFocus()
+            return
+        batch = migration.batch_from_identifiers(
+            src_radio, [source.identifier]
+        )
+
+        destination_type = "regular"
+        if target_specials:
+            destination_type = self._choose_destination_type(source.label)
+            if destination_type is None:
+                self.grid.SetFocus()
+                return
+        if destination_type == "regular":
+            self._import_batch(batch, 1)
+            return
+
+        default_special = (
+            source.identifier
+            if isinstance(source.identifier, str)
+            and any(
+                location.identifier == source.identifier
+                for location in target_specials
+            )
+            else None
+        )
+        destination = self._choose_memory_location(
+            target_specials,
+            title="Choose destination special memory",
+            prompt=(
+                "Choose the exact target special memory. VRP does not assume "
+                "that similarly named call, scan-limit, VFO, or home memories "
+                "mean the same thing on different radios."
+            ),
+            action_label="Import",
+            current_identifier=default_special,
+        )
+        if destination is None:
+            self.grid.SetFocus()
+            return
+        if not destination.empty and not self._confirm_special_overwrite(
+            destination
+        ):
+            self.grid.SetFocus()
+            return
+        self._import_batch_to_special(batch, str(destination.identifier))
+
+    def _choose_import_mode(
+        self, regular_count: int, special_count: int, target_has_specials: bool
+    ) -> str | None:
+        from vrp.special_memory_dialogs import ImportModeDialog
+
+        dlg = ImportModeDialog(
+            self,
+            regular_count,
+            special_count,
+            target_has_specials=target_has_specials,
+        )
+        try:
+            return dlg.get_mode() if dlg.ShowModal() == wx.ID_OK else None
+        finally:
+            dlg.Destroy()
+
+    def _choose_destination_type(self, source_label: str) -> str | None:
+        from vrp.special_memory_dialogs import DestinationTypeDialog
+
+        dlg = DestinationTypeDialog(self, source_label)
+        try:
+            return (
+                dlg.get_destination_type()
+                if dlg.ShowModal() == wx.ID_OK
+                else None
+            )
+        finally:
+            dlg.Destroy()
+
+    def _choose_memory_location(
+        self,
+        locations,
+        *,
+        title: str,
+        prompt: str,
+        action_label: str,
+        current_identifier=None,
+    ):
+        from vrp.special_memory_dialogs import MemoryPickerDialog
+
+        dlg = MemoryPickerDialog(
+            self,
+            locations,
+            title=title,
+            prompt=prompt,
+            action_label=action_label,
+            current_identifier=current_identifier,
+        )
+        try:
+            return dlg.get_selection() if dlg.ShowModal() == wx.ID_OK else None
+        finally:
+            dlg.Destroy()
+
+    def _confirm_special_overwrite(self, destination) -> bool:
+        dlg = wx.MessageDialog(
+            self,
+            (
+                f"{destination.label} is already programmed. Overwrite this "
+                "exact named special memory?"
+            ),
+            "Special memory is not empty",
+            wx.YES_NO | wx.NO_DEFAULT | wx.ICON_WARNING,
+        )
+        dlg.SetYesNoLabels("Overwrite", "Cancel")
+        try:
+            return dlg.ShowModal() == wx.ID_YES
+        finally:
+            dlg.Destroy()
+
+    def _confirm_import_without_banks(self, reason: str) -> bool:
+        """Confirm a channel-only import when source bank metadata cannot apply."""
+        dlg = wx.MessageDialog(
+            self,
+            (
+                f"{reason}\n\n"
+                "Continue importing the channel contents without changing "
+                "destination bank memberships?"
+            ),
+            "Bank memberships cannot be imported",
+            wx.OK | wx.CANCEL | wx.CANCEL_DEFAULT | wx.ICON_WARNING,
+        )
+        dlg.SetOKCancelLabels("Import channels only", "Cancel")
+        try:
+            return dlg.ShowModal() == wx.ID_OK
+        finally:
+            dlg.Destroy()
+
+    def _choose_unbanked_source_policy(self) -> tuple[bool, dict | None]:
+        """Choose whether an explicitly unbanked source clears target banks."""
+        dlg = wx.MessageDialog(
+            self,
+            (
+                "The selected source channels belong to no banks.\n\n"
+                "For successfully imported channels, clear existing destination "
+                "bank memberships or keep the destination memberships?"
+            ),
+            "Source channels have no bank memberships",
+            wx.YES_NO | wx.CANCEL | wx.CANCEL_DEFAULT | wx.ICON_QUESTION,
+        )
+        dlg.SetYesNoCancelLabels(
+            "Clear destination banks",
+            "Keep destination banks",
+            "Cancel",
+        )
+        try:
+            result = dlg.ShowModal()
+        finally:
+            dlg.Destroy()
+        if result == wx.ID_YES:
+            return True, {}
+        if result == wx.ID_NO:
+            return True, None
+        return False, None
+
+    def _choose_bank_mapping(self, batch) -> tuple[bool, dict | None]:
+        """Return ``(proceed, mapping)`` for optional explicit bank transfer."""
+        from chirp_backend import bank_ops, migration
+
+        source_banks = migration.used_source_banks(batch)
+        source_has_banks = bool(batch.source_banks)
+        if (
+            not source_banks
+            and not batch.bank_read_errors
+            and not source_has_banks
+        ):
+            return True, None
+
+        catalog = bank_ops.describe_banks(radio_backend.get_state().radio)
+        if not source_banks and batch.bank_read_errors:
+            return self._confirm_import_without_banks(
+                "The selected source channels' bank memberships could not be "
+                "read."
+            ), None
+        if not source_banks:
+            if not catalog.available:
+                return True, None
+            if not catalog.mutable:
+                return self._confirm_import_without_banks(
+                    catalog.message
+                    or "The destination radio's banks cannot be reassigned."
+                ), None
+            return self._choose_unbanked_source_policy()
+        if not catalog.available:
+            return self._confirm_import_without_banks(
+                "The destination radio has no banks."
+            ), None
+        if not catalog.mutable or not catalog.banks:
+            return self._confirm_import_without_banks(
+                catalog.message
+                or "The destination radio's banks cannot be reassigned."
+            ), None
+
+        from vrp.bank_mapping_dialog import BankMappingDialog
+
+        suggested = bank_ops.suggest_name_mapping(
+            source_banks, catalog.banks
+        )
+        dlg = BankMappingDialog(
+            self,
+            source_banks,
+            catalog.banks,
+            initial_mapping=suggested,
+        )
+        try:
+            if dlg.ShowModal() != wx.ID_OK:
+                return False, None
+            return True, dlg.get_mapping()
+        finally:
+            dlg.Destroy()
 
     def _import_results(self, src_radio, count: int, numbers=None) -> None:
         """Shared import flow: pick destination, import, refresh grid, focus.
@@ -1509,6 +2087,13 @@ class MainWindow(wx.Frame):
         ``numbers`` optionally restricts the import to specific source channel
         numbers (the rows checked in the results picker); None imports all.
         """
+        from chirp_backend import migration
+
+        batch = migration.batch_from_radio(src_radio, numbers=numbers)
+        self._import_batch(batch, count)
+
+    def _import_batch(self, batch, count: int) -> None:
+        """Pick a regular destination and apply a prepared migration batch."""
         from chirp_backend import memory_ops
         from vrp.query_dialogs import ImportDestinationDialog
 
@@ -1524,8 +2109,16 @@ class MainWindow(wx.Frame):
             self.grid.SetFocus()
             return
 
-        ok, message, affected = memory_ops.import_memories(
-            src_radio, dest, overwrite, numbers=numbers
+        proceed, bank_mapping = self._choose_bank_mapping(batch)
+        if not proceed:
+            self.grid.SetFocus()
+            return
+
+        ok, message, affected, report = memory_ops.apply_migration_batch(
+            batch,
+            dest,
+            overwrite,
+            bank_mapping=bank_mapping,
         )
         if ok:
             self._load_into_grid()
@@ -1534,7 +2127,27 @@ class MainWindow(wx.Frame):
             self.announce.announce(message)
         else:
             self.announce.announce(message, assertive=True)
-            wx.MessageBox(message, "Import", wx.OK | wx.ICON_ERROR, self)
+        if report.has_issues or report.warning_count:
+            self._show_migration_report(report)
+
+    def _import_batch_to_special(self, batch, destination_name: str) -> None:
+        """Apply one prepared source memory to one explicit named special."""
+        from chirp_backend import memory_ops
+
+        ok, message, _affected, report = (
+            memory_ops.apply_migration_batch_to_special(
+                batch, destination_name, overwrite=True
+            )
+        )
+        if ok:
+            self.announce.announce(
+                f"{message} Destination special memory {destination_name}."
+            )
+        else:
+            self.announce.announce(message, assertive=True)
+        if report.has_issues or report.warning_count:
+            self._show_migration_report(report)
+        self.grid.SetFocus()
 
     def _first_empty_channel(self) -> int:
         low, high = radio_backend.get_state().memory_bounds
@@ -1862,7 +2475,8 @@ class MainWindow(wx.Frame):
             self.announce.announce("Upload canceled.")
             self.grid.SetFocus()
             return
-        label = f"{state.radio.VENDOR} {state.radio.MODEL}"
+        physical = state.physical_radio
+        label = f"{physical.VENDOR} {physical.MODEL}"
         if not self._confirm(
             f"This will overwrite ALL memory channels on the {label} connected to "
             f"{port}. The radio's current contents cannot be recovered. Continue?"
@@ -1939,6 +2553,20 @@ class MainWindow(wx.Frame):
                 self.grid.SetFocus()
                 return
             if ok:
+                state = radio_backend.get_state()
+                section = self._choose_memory_section(
+                    state.subdevice_labels,
+                    title=(
+                        f"Show {state.physical_radio.VENDOR} "
+                        f"{state.physical_radio.MODEL} memory section"
+                    ),
+                    action_label="Show",
+                    current_index=state.subdevice_index,
+                )
+                if section is not None and section != state.subdevice_index:
+                    switched, switch_message = radio_backend.select_subdevice(section)
+                    if not switched:
+                        self._show_error("Could not show memory section", switch_message)
                 self._load_into_grid()
                 low, _high = radio_backend.get_state().memory_bounds
                 self.grid.focus_channel(low)
@@ -1987,6 +2615,37 @@ class MainWindow(wx.Frame):
             self.announce.announce("No settings were changed.")
         self.grid.SetFocus()
 
+    def on_select_subdevice(self, _evt=None) -> None:
+        """Radio > Select memory section — switch the grid's active child."""
+        state = radio_backend.get_state()
+        if not state.loaded or not state.has_multiple_subdevices:
+            self.announce.announce("This radio has only one memory section.")
+            return
+        section = self._choose_memory_section(
+            state.subdevice_labels,
+            title=(
+                f"Choose {state.physical_radio.VENDOR} "
+                f"{state.physical_radio.MODEL} memory section"
+            ),
+            action_label="Show",
+            current_index=state.subdevice_index,
+        )
+        if section is None:
+            self.grid.SetFocus()
+            return
+        if section == state.subdevice_index:
+            self.grid.SetFocus()
+            return
+        ok, message = radio_backend.select_subdevice(section)
+        if not ok:
+            self._show_error("Could not show memory section", message)
+            return
+        self._load_into_grid()
+        low, _high = radio_backend.get_state().memory_bounds
+        self.grid.focus_channel(low)
+        self.announce.announce(message)
+        self.grid.SetFocus()
+
     def on_radio_info(self, _evt=None) -> None:
         """Radio > Radio Info — plain-text summary of the loaded radio.
 
@@ -1999,9 +2658,10 @@ class MainWindow(wx.Frame):
             self.announce.announce("No radio image is open.")
             return
 
-        radio = state.radio
-        f = radio.get_features()
-        variant = getattr(radio, "VARIANT", "") or ""
+        radio = state.physical_radio
+        memory_radio = state.radio
+        f = memory_radio.get_features()
+        variant = getattr(memory_radio, "VARIANT", "") or ""
         source = (
             os.path.basename(state.image_path)
             if state.image_path
@@ -2015,8 +2675,11 @@ class MainWindow(wx.Frame):
             f"  Vendor:           {radio.VENDOR}",
             f"  Model:            {radio.MODEL}",
         ]
-        if variant:
-            lines.append(f"  Variant:          {variant}")
+        if state.has_multiple_subdevices:
+            section = variant or f"section {state.subdevice_index + 1}"
+            lines.append(f"  {'Memory section:':<18}{section}")
+        elif variant:
+            lines.append(f"  {'Variant:':<18}{variant}")
         lines += [
             f"  Source:           {source}",
             f"  Unsaved changes:  {'Yes' if state.is_modified else 'No'}",

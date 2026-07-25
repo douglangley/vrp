@@ -53,15 +53,17 @@ main.py  (entry; launches the native UI)
        ├─ native wx dialogs (input/editing — first-class NVDA support):
        │    edit_dialog · ops_dialog · find_dialog · serial_dialogs ·
        │    settings_dialog · bank_dialog · query_dialogs · prefs_dialog ·
-       │    info_dialog
+       │    subdevice_dialog · special_memory_dialogs · bank_mapping_dialog ·
+       │    info_dialog (including migration issue reports)
        ├─ vrp/native/announce.py : Announcer — writes the status bar (field 0;
        │    field 1 permanently holds the CHIRP attribution) and speaks via
        │    vrp/speech.py (prism) if available. The PRIMARY announcement
        │    signal is still focus management (handlers move focus to the
        │    result row); the announcer covers summaries/errors with no
        │    natural focus target
-       └─ chirp_backend/: radio.py, memory_ops.py, undo.py, bandplan.py,
-            col_defs.py, bank_ops.py, serial_trace.py (framework-agnostic)
+       └─ chirp_backend/: radio.py, migration.py, memory_ops.py, undo.py,
+            dstar_ops.py, bandplan.py, col_defs.py, bank_ops.py, serial_trace.py
+            (framework-agnostic)
             └─ chirp  (vendored ./chirp, used unmodified; serial + driver library)
 ```
 
@@ -114,6 +116,99 @@ main.py  (entry; launches the native UI)
   the real `chirp/chirp` package instead of the empty `./chirp` repo dir.
 - Never import `chirp.wxui` (that's the inaccessible GUI we replace). Use the
   library: `directory`, `chirp_common`, drivers, settings, banks, sources.
+
+### Cross-radio migration
+
+Cross-model channel transfer is one generic pipeline, not a matrix of radio
+pairs:
+
+```text
+ source image / CSV / query / clipboard snapshots or one memory identifier
+                  │
+                  ▼
+ migration.MigrationBatch
+ (Memory snapshots + source features/identity + optional bank memberships)
+                  │
+                  ▼
+ chirp.import_logic.import_mem(target, source_features, memory,
+                               overrides=destination)
+                  │
+                  ▼
+ required D-STAR calls + target validation + set_memory
+                  │
+                  └──────────────► MigrationReport ──► InfoDialog/Announcer
+```
+
+- `chirp_backend/migration.py` owns the wx-free payload, conversion, and
+  per-channel result model. It uses CHIRP's `Memory`/`DVMemory`,
+  `RadioFeatures`, `directory.radio_class_id`, and `import_logic.import_mem`.
+- `chirp_backend/dstar_ops.py` discovers whether a target requires master call
+  lists and owns their snapshots, exact restoration, and added-call
+  accounting. Direct-call D-STAR targets need no global-list transaction.
+- `chirp_backend.memory_ops.apply_migration_batch` supplies the active target
+  radio and wraps all successful writes in one undo transaction.
+  `apply_migration_batch_to_special` does the same for one explicitly selected
+  named destination. The older `import_memories` API is a compatibility wrapper
+  around the ordinary path.
+- `MainWindow._import_results` (File Import, RepeaterBook, Frequency lists) and
+  cross-image `on_paste` use the ordinary engine. File Import additionally
+  offers a one-memory path when source or target exposes specials: the user
+  explicitly selects a regular/special source and a numbered/named-special
+  destination. Same-document-and-section Paste continues to use raw
+  `paste_block`, because only that exact context may safely erase/move sources
+  or shift existing rows to make room.
+- A CHIRP subdevice parent is retained as `RadioState.physical_radio` for Save,
+  Settings, prompts, and Upload. The selected child remains `RadioState.radio`
+  for the memory grid, banks, export, and migration. `load_image_set` discovers
+  static/dynamic children before `activate_image_set` changes active state.
+- `RadioState.context_id` combines the open document UUID and selected memory
+  section. A Cut pasted after switching images or sections becomes Copy; it
+  never erases matching channel numbers in the new destination context.
+- Open, Import, and post-Download use the filterable native
+  `SubdeviceDialog`; Radio ▸ Select memory section… switches later. Section
+  switching preserves parent edits/dirty state and starts a fresh section-local
+  undo history.
+- Driver-private `Memory.extra` values are kept only when CHIRP radio class IDs
+  match. Cross-driver extras are cleared before conversion/write.
+- A batch captured from a bank-capable source includes its ordered bank catalog
+  and per-channel memberships. For ordinary File Import and cross-image Paste,
+  `BankMappingDialog` shows only used source banks and requires an explicit
+  mapping confirmation. Unique exact-name matches may be suggested; position
+  matching is opt-in, unmapped banks are omitted, and destination bank names
+  are never renamed.
+- When bank transfer is enabled, each successful channel gets exactly the
+  mapped target memberships. `bank_ops.replace_bank_memberships` validates the
+  plan, verifies the driver write, and restores the exact prior memberships and
+  index ordering after a failure. A bank failure becomes a per-channel warning
+  without discarding the compatible memory import.
+- `UndoManager` accepts optional auxiliary snapshot/restore callables. Mutable
+  bank radios use them so the memory and bank changes from an import—and direct
+  Channel banks edits—undo and redo together.
+- `UndoManager` also accepts optional radio-global snapshot/restore callables.
+  Required D-STAR call lists opt in once per migration transaction. Undo/Redo
+  restores global lists before memory images because list-indexed driver
+  setters require the matching calls to exist.
+- CHIRP may add D-STAR calls before later validation fails, and some drivers
+  partially change raw memory before their setter raises. Every DV attempt
+  snapshots the required lists and every write attempt snapshots its
+  destination. A rejected row restores both exactly; earlier successful rows
+  in a partial batch keep their changes.
+- Migration is intentionally partial: incompatible, occupied, failed, and
+  out-of-space rows are retained in `MigrationReport`, while compatible rows
+  still write. Issue/warning reports use the read-only, copyable `InfoDialog`.
+- Ordinary bulk migration is deliberately numeric-only. Named special memories
+  transfer only through the explicit one-source/one-target File Import flow;
+  same-name targets may be preselected but never applied automatically.
+  Special→regular, regular→special, and special→special all use CHIRP import
+  conversion and remain one-step undoable.
+- Current migration boundary: memory contents, required D-STAR call-list
+  additions, and explicitly mapped ordinary channel bank memberships.
+  Other radio-wide settings and bank names are not transferred; subdevice
+  selection and explicit named-special transfer are implemented.
+
+See
+`docs/superpowers/plans/2026-07-21-cross-radio-migration.md` for decisions,
+verification, and the sequenced follow-up work.
 
 ## Packaging
 

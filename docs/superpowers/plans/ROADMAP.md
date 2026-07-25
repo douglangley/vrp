@@ -11,6 +11,33 @@ Status marks: ☐ not started · ◐ in progress · ☑ done.
 
 ## Current priority
 
+- ◐ **Generic cross-radio migration.** Phases 1–5 landed through 2026-07-24:
+  direct
+  cross-image Copy/Paste and `.img`/`.csv` Import share CHIRP's model-generic
+  conversion, preserve partial success with per-channel accessible reports,
+  safely turn cross-image/section Cut into Copy, and are one-step undoable.
+  Static and dynamic CHIRP subdevices now have an accessible chooser for Open,
+  Import, post-Download, and later section switching; parent Save/Settings/
+  Upload ownership is retained. File Import can explicitly map one regular or
+  named special source to a numbered or named-special target; bulk import never
+  includes specials. Ordinary import and cross-image Paste now offer explicit,
+  filterable bank mapping with exact-name suggestions, opt-in position
+  matching, per-channel rollback, and memory+bank Undo/Redo. Verified with 479
+  project tests, all 23 pinned subdevice parents (50 views), all 1,989 special
+  slots across 70 targets, and all 70 bank models (54 mutable, 16 fixed)—all
+  audits have zero unexpected failures.
+  D-STAR migrations now transactionally add required call signs, exactly roll
+  back call lists and partially written memories on rejection, and include
+  radio-global state in Undo/Redo. The D-STAR audit
+  covers all 240 actual DV fixture memories against four required-list targets
+  (960 cases) plus a 385-target representative sweep, with zero unexpected
+  failures. Phase 6's expanded audit now covers six VHF/UHF/HF/AM/split/DV
+  sources across all 385 targets: 2,310 migrations with 814 imports, 1,496
+  expected incompatibilities, and zero unexpected failures. Windows/NVDA is a
+  user-confirmed pass as of 2026-07-25. **Next:** complete the versioned
+  VoiceOver hand-pass matrix on macOS. Detailed status/resume plan:
+  [2026-07-21-cross-radio-migration.md](2026-07-21-cross-radio-migration.md).
+
 - ☑ **Serial port hardware verification.** Both **Download and Upload are
   verified on real hardware** (Baofeng UV-5R Mini over COM4 — download
   2026-06-23, upload 2026-06-24), and the serial backend was hardened against
@@ -24,10 +51,12 @@ Status marks: ☐ not started · ◐ in progress · ☑ done.
 ## Other open work
 
 Accessibility / screen-reader passes owed (no blocker, just need a hand pass):
-- ☐ NVDA-on-Windows pass for the native UI (menu accelerators, grid
-  navigation/selection, dialog focus) — must be **re-run** after the grid
-  migrated to `DataViewListCtrl` (PROGRESS_LOG "2026-06-25"), since that changes
-  the control NVDA reads.
+- ☑ NVDA-on-Windows pass for the Phase 6 migration flows (matrix sections A–G)
+  — user-confirmed 2026-07-25 after the grid migrated to `DataViewListCtrl`;
+  the exact reader version and per-check transcript were not supplied.
+- ☑ NVDA-on-Windows pass for Phase 6.1 bank names and the channels-in-a-bank
+  overview (matrix section H) — user-confirmed 2026-07-25 on `ea153dd`, same
+  caveat on version and transcript.
 - ☐ **VoiceOver hand pass on the native UI's `DataViewListCtrl` grid** — the
   migration (PROGRESS_LOG "2026-06-25") is designed to read under VoiceOver via
   NSTableView, but the actual on-device VoiceOver pass on macOS is still owed
@@ -40,8 +69,9 @@ Query sources (Phase 7):
 - The generic query framework and the earlier sources (AMSAT, SatNOGS, DMR-MARC,
   mapy73.pl) were **removed 2026-07-05** — they weren't going to be used. The
   `chirp_backend/query.py` framework and `QueryParamsDialog` are gone; the shared
-  `ImportDestinationDialog` + `memory_ops.import_memories` stay (they back Import
-  from File and will back a future query import). Recoverable from git history.
+  `ImportDestinationDialog` + `memory_ops.apply_migration_batch` path stays (it
+  backs Import from File, RepeaterBook, and Frequency lists). Recoverable from
+  git history.
 - ◐ RepeaterBook — **wired via CHIRP's mirror** (2026-07-09). Radio ▸ Query
   Source ▸ RepeaterBook…: country→state cascade + filter/open-only/mode form,
   background fetch, shared import flow. Backend `chirp_backend/repeaterbook.py`
@@ -62,8 +92,23 @@ Query sources (Phase 7):
 - ☐ RadioReference — purpose-built after RepeaterBook (credentials/login form).
 
 Smaller deferred items (chirp-feature-coverage.md "☐"/"◐" rows):
-- ☐ Bank renaming + "channels in a bank" overview (Phase 6.1).
-- ☑ Cut/Paste clipboard (done 2026-06-27 — native grid row clipboard).
+- ☑ **Bank renaming + "channels in a bank" overview (Phase 6.1).** Done
+  2026-07-25; Windows/NVDA is a user-confirmed pass, and macOS/VoiceOver is
+  covered by the single outstanding Phase 6 Mac pass below rather than
+  separately. Radio ▸ Manage banks… renames a
+  bank where the driver actually stores names and lists a bank's channels
+  read-only with Go to channel; Ctrl+B keeps per-channel assignment and
+  cross-links to it. Every rename is confirmed by rereading the bank — the
+  pinned Kenwood TK-890 exposes `set_name` but stores nothing, and ID-880H
+  truncates to six characters, both of which are now reported rather than
+  hidden. Renames are undoable through a composite radio-wide snapshot shared
+  with D-STAR call lists. Migration still never renames a destination bank.
+  519 tests; the bank audit adds 36 verified renames across 70 models with zero
+  unexpected failures. Plan:
+  [2026-07-25-bank-names-and-overview.md](2026-07-25-bank-names-and-overview.md).
+- ☑ Cut/Paste clipboard (same-image row clipboard done 2026-06-27; generic
+  cross-image conversion done 2026-07-21 — remaining metadata phases are linked
+  under Current priority).
 - ☐ File menu: New (empty image), New Window, Load Module — all need a
   model-picker UX decision first. (Open Stock Config is covered as an import —
   see Frequency lists above.)

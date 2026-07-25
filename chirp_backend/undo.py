@@ -36,33 +36,55 @@ DEFAULT_MAX_DEPTH = 30
 
 @dataclass
 class _Entry:
-    """One undoable operation: the touched channels' state before and after.
+    """One undoable operation: the touched memories' state before and after.
 
     ``before``/``after`` are lists of Memory snapshots (each carries ``.number``
-    and ``.empty``); an empty snapshot means the slot was blank, so restoring it
-    erases rather than sets."""
+    and ``.empty``). Empty ordinary channels restore by erasing their numbered
+    slot; named special memories restore through ``set_memory`` so their
+    ``extd_number`` identity is preserved."""
 
     label: str
     before: list
     after: list
+    before_aux: dict
+    after_aux: dict
+    before_global: object | None
+    after_global: object | None
 
 
 class UndoManager:
     """A bounded undo + redo history over injected radio read/write callables."""
 
-    def __init__(self, get_memory, set_memory, erase_memory,
-                 max_depth: int = DEFAULT_MAX_DEPTH) -> None:
+    def __init__(
+        self,
+        get_memory,
+        set_memory,
+        erase_memory,
+        max_depth: int = DEFAULT_MAX_DEPTH,
+        *,
+        get_aux_state=None,
+        set_aux_state=None,
+        get_global_state=None,
+        set_global_state=None,
+    ) -> None:
         self._get = get_memory
         self._set = set_memory
         self._erase = erase_memory
+        self._get_aux = get_aux_state
+        self._set_aux = set_aux_state
+        self._get_global = get_global_state
+        self._set_global = set_global_state
         self._max = max_depth
         self._undo: list[_Entry] = []
         self._redo: list[_Entry] = []
         # Open-transaction state.
         self._depth = 0
         self._label: str | None = None
-        self._before: dict[int, object] = {}
-        self._order: list[int] = []
+        self._before: dict[int | str, object] = {}
+        self._before_aux: dict[int | str, object] = {}
+        self._before_global: object | None = None
+        self._global_recorded = False
+        self._order: list[int | str] = []
         self._applying = False  # True while restoring (suppresses recording)
 
     # -- transaction --------------------------------------------------
@@ -86,6 +108,9 @@ class UndoManager:
         if outermost:
             self._label = label
             self._before = {}
+            self._before_aux = {}
+            self._before_global = None
+            self._global_recorded = False
             self._order = []
         self._depth += 1
         return outermost
@@ -96,7 +121,7 @@ class UndoManager:
         if self._depth > 0:
             self._label = label
 
-    def record(self, number: int) -> None:
+    def record(self, number: int | str) -> None:
         """Capture the current (pre-write) state of ``number`` once per
         transaction. Call **before** the write. No-op when no transaction is open
         or while applying an undo/redo."""
@@ -107,7 +132,39 @@ class UndoManager:
         except Exception:  # noqa: BLE001 — can't snapshot: skip (best effort)
             LOG.exception("undo: failed to snapshot channel %s", number)
             return
+        if self._get_aux is not None:
+            try:
+                state = self._get_aux(number)
+                if state is not None:
+                    self._before_aux[number] = state
+            except Exception:  # noqa: BLE001 - memory undo still remains useful
+                LOG.exception("undo: failed to snapshot auxiliary state for %s", number)
         self._order.append(number)
+
+    def record_global(self) -> bool:
+        """Capture radio-wide pre-state once for the open transaction.
+
+        This is opt-in because radio-wide state may be expensive. D-STAR
+        migration (required call lists) and bank renaming both use it. Returns
+        ``False`` if no safe snapshot could be made, allowing the caller to
+        refuse a mutation.
+        """
+        if self._depth == 0 or self._applying:
+            return False
+        if self._global_recorded:
+            return True
+        if self._get_global is None:
+            return False
+        try:
+            state = self._get_global()
+        except Exception:  # noqa: BLE001
+            LOG.exception("undo: failed to snapshot radio-wide state")
+            return False
+        if state is None:
+            return False
+        self._before_global = state
+        self._global_recorded = True
+        return True
 
     def commit(self) -> None:
         if self._depth == 0:
@@ -115,17 +172,46 @@ class UndoManager:
         self._depth -= 1
         if self._depth > 0:
             return  # inner transaction; the outermost commits
-        if not self._order:  # nothing was written
+        # An op that only changed radio-wide state (a bank rename) writes no
+        # memory, so ``_order`` stays empty while ``_global_recorded`` is set.
+        # That is still a real undoable entry.
+        if not self._order and not self._global_recorded:  # nothing was written
             self._reset_txn()
             return
         before = [self._before[n] for n in self._order]
         after = []
+        after_aux = {}
+        after_global = None
         for n in self._order:
             try:
                 after.append(self._get(n).dupe())
             except Exception:  # noqa: BLE001
                 LOG.exception("undo: failed to capture after-image for %s", n)
-        self._undo.append(_Entry(self._label or "", before, after))
+            if n in self._before_aux and self._get_aux is not None:
+                try:
+                    state = self._get_aux(n)
+                    if state is not None:
+                        after_aux[n] = state
+                except Exception:  # noqa: BLE001
+                    LOG.exception(
+                        "undo: failed to capture auxiliary after-state for %s", n
+                    )
+        if self._global_recorded and self._get_global is not None:
+            try:
+                after_global = self._get_global()
+            except Exception:  # noqa: BLE001
+                LOG.exception("undo: failed to capture radio-wide after-state")
+        self._undo.append(
+            _Entry(
+                self._label or "",
+                before,
+                after,
+                dict(self._before_aux),
+                after_aux,
+                self._before_global,
+                after_global,
+            )
+        )
         if len(self._undo) > self._max:
             self._undo.pop(0)
         self._redo.clear()
@@ -141,41 +227,73 @@ class UndoManager:
     def _reset_txn(self) -> None:
         self._label = None
         self._before = {}
+        self._before_aux = {}
+        self._before_global = None
+        self._global_recorded = False
         self._order = []
 
     # -- undo / redo --------------------------------------------------
 
-    def undo(self) -> tuple[str, list[int]] | None:
+    def undo(self) -> tuple[str, list[int | str]] | None:
         """Restore the most recent op's before-images. Returns ``(label,
-        restored_channel_numbers)`` or ``None`` when there's nothing to undo."""
+        restored_memory_identifiers)`` or ``None`` when there's nothing to
+        undo."""
         if not self._undo:
             return None
         entry = self._undo.pop()
-        self._apply(entry.before)
+        self._apply(entry.before, entry.before_aux, entry.before_global)
         self._redo.append(entry)
-        return entry.label, [m.number for m in entry.before]
+        return entry.label, [
+            getattr(m, "extd_number", "") or m.number for m in entry.before
+        ]
 
-    def redo(self) -> tuple[str, list[int]] | None:
+    def redo(self) -> tuple[str, list[int | str]] | None:
         """Re-apply the most recently undone op's after-images. Returns ``(label,
-        restored_channel_numbers)`` or ``None`` when there's nothing to redo."""
+        restored_memory_identifiers)`` or ``None`` when there's nothing to
+        redo."""
         if not self._redo:
             return None
         entry = self._redo.pop()
-        self._apply(entry.after)
+        self._apply(entry.after, entry.after_aux, entry.after_global)
         self._undo.append(entry)
-        return entry.label, [m.number for m in entry.after]
+        return entry.label, [
+            getattr(m, "extd_number", "") or m.number for m in entry.after
+        ]
 
-    def _apply(self, images: list) -> None:
+    def _apply(
+        self,
+        images: list,
+        aux_states: dict,
+        global_state=None,
+    ) -> None:
         """Write a set of snapshots back to the radio without recording them.
-        An empty snapshot erases its slot; otherwise it is set (from a dupe, so
-        the stored snapshot stays pristine for a later undo/redo)."""
+        An empty ordinary snapshot erases its slot. Named special snapshots and
+        populated ordinary snapshots are set from a dupe, so the stored
+        snapshot stays pristine for a later undo/redo. Optional radio-wide state
+        (D-STAR call lists and bank names) is restored *before* memory contents
+        so list-indexed DV drivers can write safely. Per-memory auxiliary state
+        (currently bank memberships/order) is restored afterward."""
         self._applying = True
         try:
+            if global_state is not None and self._set_global is not None:
+                self._set_global(global_state)
             for mem in images:
-                if getattr(mem, "empty", False):
+                if (
+                    getattr(mem, "empty", False)
+                    and not getattr(mem, "extd_number", "")
+                ):
                     self._erase(mem.number)
                 else:
                     self._set(mem.dupe())
+            if self._set_aux is not None:
+                for number, state in aux_states.items():
+                    try:
+                        self._set_aux(number, state)
+                    except Exception:  # noqa: BLE001 - restore remaining entries
+                        LOG.exception(
+                            "undo: failed to restore auxiliary state for %s",
+                            number,
+                        )
         finally:
             self._applying = False
 

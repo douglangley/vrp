@@ -91,8 +91,11 @@ obscure it. Any future help/docs page must carry it too.
   - serial_dialogs.py  — native wx Download/Upload/Favorites/progress dialogs +
                          the shared filter ModelPicker and type-ahead
                          RadioListView (a wx.ListCtrl)
+  - subdevice_dialog.py — accessible filterable chooser for CHIRP memory
+                         sections (multi-side/VFO/band/zone images)
   - settings_dialog.py — native wx radio settings editor, Treebook
   - bank_dialog.py     — native wx dialog to assign a channel to banks
+  - bank_mapping_dialog.py — filterable explicit cross-radio bank mapping
   - query_dialogs.py   — native wx ImportDestinationDialog (shared by Import
                          from File + query import) and RepeaterBookQueryDialog
                          (country/state + filters); RepeaterBook backend is
@@ -109,7 +112,10 @@ obscure it. Any future help/docs page must carry it too.
                          button is pressed, and is also in Preferences, so
                          dismissing the screen loses nothing.
   - info_dialog.py     — read-only multiline edit box for reviewing text (Radio
-                         Info, "Radio details…"); navigable + copyable
+                         Info, "Radio details…", migration issue reports);
+                         navigable + copyable
+  - special_memory_dialogs.py — explicit import-mode/destination choices and
+                         filterable regular/special memory picker
   - about_dialog.py    — Help ▸ About: build info + the CHIRP acknowledgement in
                          two read-only edit boxes (navigable/copyable, unlike
                          wx.adv.AboutBox's static text)
@@ -121,11 +127,16 @@ obscure it. Any future help/docs page must carry it too.
   - speech.py          — prism speech wrapper, graceful no-op if unavailable
   - _chirp_path.py     — makes the editable ./chirp package importable
 - chirp_backend/       — all chirp library interaction (framework-agnostic):
-                         radio (incl. describe_model), memory_ops, undo
-                         (channel-edit undo/redo), bandplan (suggested repeater
-                         offset + band defaults, by region), col_defs, bank_ops,
-                         serial_trace, repeaterbook (RepeaterBook query via
-                         CHIRP's mirror; direct-API seam for a future VRP UA)
+                         radio (incl. parent/selected-subdevice ownership,
+                         context identity + describe_model),
+                         migration (generic cross-radio conversion + detailed
+                         reports), dstar_ops (required call-list transactions),
+                         memory_ops, undo (channel + radio-global D-STAR +
+                         auxiliary bank state undo/redo),
+                         bandplan (suggested repeater offset + band defaults, by
+                         region), col_defs, bank_ops, serial_trace, stock_configs,
+                         repeaterbook (RepeaterBook query via CHIRP's mirror;
+                         direct-API seam for a future VRP UA)
 - help/                — the shipped user documentation (Getting Started in md/
                          txt/html + KeyboardCommands.html). `build.py`'s
                          `stage_help()` copies the whole folder BESIDE the exe in
@@ -133,7 +144,12 @@ obscure it. Any future help/docs page must carry it too.
                          browser. Adding a doc = drop it here + link it from
                          `_build_help_menu`.
 - tests/               — unit tests (no hardware needed)
-- tools/               — update_chirp.py (CHIRP version bump); throwaway spikes
+- tools/               — update_chirp.py (CHIRP version bump),
+                         audit_migrations.py + audit_special_migrations.py +
+                         audit_bank_migrations.py + audit_dstar_migrations.py
+                         (all pinned driver fixtures, named special slots, bank
+                         models, and actual DV memories),
+                         release helpers, and throwaway spikes
 - build.py             — PyInstaller build script
 - chirp/               — upstream CHIRP library (DO NOT EDIT)
 
@@ -223,11 +239,96 @@ months.
 - mem.empty == True means the channel slot is unused
 - mem.immutable is a list of field names that cannot be changed for that memory
 
+### Cross-radio migration invariants (updated 2026-07-24)
+
+- Cross-model channel transfer is **generic**, never a pairwise model matrix.
+  Build a `chirp_backend.migration.MigrationBatch` containing source
+  `RadioFeatures`, stable `directory.radio_class_id`, and duplicated
+  `Memory`/`DVMemory` snapshots; convert each through
+  `chirp.import_logic.import_mem` against the destination.
+- Pass the destination location to `import_mem` in `overrides` (`number` and
+  cleared `extd_number`) so CHIRP's immutable-policy check inspects the target
+  slot. Do not renumber only after conversion.
+- `Memory.extra` is driver-private. Preserve it only when source and target
+  radio class IDs match; clear it before cross-driver conversion/write.
+- File Import, RepeaterBook, Frequency lists, and cross-image clipboard Paste
+  must converge on `memory_ops.apply_migration_batch`. Keep
+  `import_memories` only as the compatibility wrapper. Never add a separate
+  converter to one of those entry points.
+- Ordinary bulk batches enumerate numeric channels only. Named specials are
+  never silently included. File Import's explicit one-memory path may select a
+  regular or special source and map it to a numbered or named-special target;
+  named writes use `apply_migration_batch_to_special`.
+- Same-name special targets may be preselected but never auto-applied. Preserve
+  the target special's virtual number, `extd_number`, and real immutable values,
+  and require a separate confirmation before overwriting an occupied special.
+- Preserve partial success and every per-channel reason in `MigrationReport`.
+  A UI issue report must use the navigable/copyable `InfoDialog`, not a long
+  static `MessageBox`.
+- `RadioState.context_id` combines the exact open/downloaded document UUID and
+  selected memory-section index. A deferred Cut may erase source rows only when
+  that context still matches. Across images or sections it becomes Copy.
+  Same-document-and-section raw `paste_block` is the only path that offers Make
+  room/row shifting.
+- A CHIRP parent reporting `has_sub_devices` owns Save/Settings/prompts/Upload
+  as `RadioState.physical_radio`; its selected child owns memory/bank/export/
+  migration operations as `RadioState.radio`. Discover static or dynamic
+  children with `load_image_set` before calling `activate_image_set`, and call
+  `ExternalMemoryProperties.link_device_metadata` as the backend already does.
+  Never replace the current document before the memory-section chooser returns.
+- Switching sections preserves the parent image and dirty state, but resets
+  section-local Undo after restoring the prior child's original write methods.
+  Open, Import, post-Download, and Radio ▸ Select memory section… share the
+  accessible `SubdeviceDialog`; never expose generated child class names as
+  labels—use CHIRP `VARIANT` and channel bounds.
+- Capture source bank metadata while the source image/section is active.
+  Cross-image clipboard state stores that complete `MigrationBatch`; do not try
+  to reread source banks after the context changes.
+- Bank mapping is explicit. Show only used source banks; unique non-empty exact
+  names may be suggested but require confirmation, position matching is
+  user-invoked, and unmapped source banks are omitted. Never rename destination
+  banks or silently emulate CHIRP's positional `import_bank`.
+- When a bank plan is enabled, replace each successfully imported channel's
+  memberships exactly. Unbanked sources require a clear-versus-keep choice;
+  fixed/no-bank targets require channels-only confirmation. Verify every bank
+  write and restore exact membership/order on failure, retaining the memory
+  import with a report warning.
+- Bank state participates in the same Undo/Redo transaction as its memory
+  write through `UndoManager` auxiliary snapshots. Direct Channel banks edits
+  are undoable too. Preserve support for drivers whose live behavior allows
+  multiple memberships even when their class hierarchy says otherwise.
+- CHIRP may mutate required D-STAR `urcalls`/`rptcalls` before a later
+  conversion, validation, or write failure. Snapshot both lists before every DV
+  attempt on an `IcomDstarSupport` destination with
+  `requires_call_lists=True`; restore them exactly after rejection. Do not
+  mutate master lists on direct-call drivers.
+- Treat every attempted driver write as potentially partial. On failure,
+  restore the prior destination memory as well as its per-channel call-list
+  snapshot. Preserve call additions from earlier successful rows in the same
+  batch.
+- Required call lists participate in the batch's one Undo/Redo transaction
+  through `UndoManager` global state. Restore global state before memory images
+  because list-indexed setters need the calls. If the initial global snapshot
+  fails, write no memories. Report successful additions; do not add a second
+  confirmation dialog.
+- A destination without DV support remains incompatible. Never coerce a
+  `DVMemory` to analog to make an import appear successful.
+- Current migration scope is ordinary numbered memories, explicitly mapped
+  one-at-a-time special memories, required D-STAR call-list additions, and
+  explicitly mapped ordinary bank memberships. Other radio-wide settings and
+  bank names remain out of scope; never silently claim they moved. Phases 2–5
+  are complete.
+  See
+  `docs/superpowers/plans/2026-07-21-cross-radio-migration.md`.
+
 ## Memory Operations Reference
 
-All implemented in chirp_backend/memory_ops.py. When adding new operations,
-follow the same pattern: pure functions taking a radio object + parameters,
-returning (success: bool, message: str, affected_channels: list).
+Ordinary operations are implemented in `chirp_backend/memory_ops.py`. When
+adding new operations, follow the same pattern: pure functions taking a radio
+object + parameters, returning `(success: bool, message: str,
+affected_memory_identifiers: list)`. `apply_migration_batch` and
+`apply_migration_batch_to_special` deliberately return a fourth
+`MigrationReport` so the UI never loses itemised incompatibilities.
 
 Operations that modify the radio must call radio.set_memory() or
 radio.erase_memory() — never modify the memory map directly.
@@ -276,6 +377,19 @@ venv and errors clearly if pytest is missing. The run scripts use
 `uv sync --inexact`, so launching the app no longer prunes pytest from the venv.
 Tests use chirp/tests/images/ image files — no radio hardware needed.
 Every memory operation in memory_ops.py must have a corresponding test.
+After migration or CHIRP-pin changes, also run all opt-in broad audits:
+`.venv\Scripts\python.exe tools\audit_migrations.py` and
+`.venv\Scripts\python.exe tools\audit_special_migrations.py`, plus
+`.venv\Scripts\python.exe tools\audit_bank_migrations.py` and
+`.venv\Scripts\python.exe tools\audit_dstar_migrations.py`. The baselines are
+2,310 ordinary-corpus migrations (six VHF/UHF/HF/AM/split/DV sources × 385
+targets); 1,989 named special slots across 70 targets; 70 bank models (54
+mutable, 16 fixed); a 385-target DV sweep; and 960 actual-DV/required-call-list
+cases from 358 pinned images, all with zero unexpected failures. Normal
+band/feature/driver incompatibilities are expected and must remain classified
+rather than treated as crashes. The screen-reader acceptance matrix is
+`docs/testing/2026-07-25-cross-radio-migration-accessibility.md`; never mark a
+reader/platform pass from automated evidence alone.
 
 ## Running
 

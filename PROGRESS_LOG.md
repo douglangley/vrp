@@ -6,6 +6,353 @@ architecture, keyboard map, and CHIRP feature-coverage checklist.
 
 ---
 
+## 2026-07-25 — Phase 6.1 NVDA acceptance
+
+**Outcome:** The user confirmed **section H** of
+`docs/testing/2026-07-25-cross-radio-migration-accessibility.md` on
+Windows/NVDA at commit `ea153dd` — bank rename announcement and truncation
+wording, the bank and channel list readouts, Go to channel focus landing,
+Undo/Redo, the names-cannot-be-changed case, and the Ctrl+B cross-link. Phase
+6.1 is therefore complete.
+
+As with the Phase 6 sections A–G pass, the exact NVDA version and a per-check
+speech transcript were **not supplied**, and the acceptance record says so
+rather than inventing them. This is a human acceptance result, not an inference
+from the 519-test suite or the audits.
+
+**Still open:** the macOS/VoiceOver pass, which covers sections A–H together
+and needs the Mac tester. It is now the single outstanding item on
+`feature/cross-radio-migration`. Note that the separate NVDA passes still owed
+on the **radio settings editor** and on the **Ctrl+B banks editor's** own
+membership readout/checkbox state are unrelated to section H and remain open.
+
+## 2026-07-25 — Bank names and channels-in-a-bank (Phase 6.1)
+
+**Outcome:** Cross-radio migration deliberately never renames a destination
+bank, and membership was only ever visible one channel at a time. **Radio ▸
+Manage banks…** (`vrp/bank_manager_dialog.py`) now renames a bank where the
+driver really stores names, and lists a bank's channels read-only with **Go to
+channel**. Ctrl+B keeps per-channel assignment and cross-links to the new
+dialog. No new accelerator, so `APP_SHORTCUTS`/F1/`KeyboardCommands.html` are
+untouched — that surface is only for accelerator-bearing commands.
+
+**Verify by rereading; capability is not evidence.** `chirp_common.NamedBank`
+ships a base `set_name` that only assigns an attribute, so `hasattr` (CHIRP's
+own test, `wxui/bankedit.py:189`) cannot tell a real implementation from a
+no-op. The pinned **Kenwood TK-890** is worse than the base case: `MemBank`
+implements a genuine `set_name`, but the image configures `grp_name_length` as
+**0**, so `set_group_name` filters the whole name away and stores nothing
+without raising. **Icom ID-880H** truncates to six characters ("Repeaters" →
+"Repeat"). Both are now reported to the user instead of being announced as a
+clean success, and both are pinned regression tests.
+
+**The overview avoids a broken upstream helper.** `scan_bank_channels` asks each
+memory which banks it is in rather than calling
+`MappingModel.get_mapping_memories`, whose `StaticBankModel` implementation
+divides with `/` and hands `range()` a float (`chirp_common.py:794`).
+`chirp/` is not edited; `tests/test_bank_overview.py` asserts the upstream
+`TypeError` so a future CHIRP fix surfaces loudly.
+
+**Undo needed two changes.** Bank names are radio-wide, so `UndoManager`'s
+global snapshot — previously wired *exclusively* to D-STAR call lists and only
+installed for radios requiring them — became a **composite** covering call
+lists and bank names independently. Separately, `commit()` discarded any
+transaction that wrote no memory (`_order` only grows per-channel), so a rename
+produced no history entry at all; it now commits when radio-wide state was
+recorded. Snapshot failure stays fail-closed.
+
+**Verification:** full suite **519 passed** (was 479). All four audits hold
+their baselines, which is the evidence that the composite global state left
+D-STAR alone: ordinary 2,310/814/1,496; special 1,989/1,007/982; D-STAR
+385-target 13/372 plus 960 call-list cases 482/478; bank 70 models (16 fixed,
+54 mutable). `tools/audit_bank_migrations.py` gained a rename
+write/verify/exact-restore sweep: **36 names verified, 33 unsupported, 1
+ignored by the driver**, zero unexpected failures.
+
+**Next:** the NVDA hand pass, written up as **section H** of
+`docs/testing/2026-07-25-cross-radio-migration-accessibility.md` and marked
+"Not run". It deliberately covers the truncation wording, which is the string
+most likely to be wrong out loud. Plan:
+`docs/superpowers/plans/2026-07-25-bank-names-and-overview.md`.
+
+## 2026-07-25 — Expanded compatibility corpus (Phase 6 checkpoint)
+
+**Outcome:** The opt-in ordinary migration audit no longer extrapolates from
+one 443.1 MHz FM/DTCS channel. `tools/audit_migrations.py` now builds six
+independent sources: VHF/Tone, UHF/DTCS, HF/AM, airband AM, cross-band split,
+and a real IC-2200H D-STAR memory. Every source/target pairing starts from a
+freshly parsed fixture, successful writes must reread as populated, rejected
+writes must preserve the destination's meaningful state, and rollback warnings
+fail the audit. Repeatable `--source-channel` remains available for targeted
+Generic CSV debugging.
+
+**Verification:** full suite **479 passed**. All **2,310 migrations** across
+**385 radio targets from 358 pinned images** completed with zero unexpected
+failures: **814 imported** and **1,496 expected incompatibilities**. Per-case
+results were VHF/Tone 250/135, UHF/DTCS 276/109, HF/AM 11/374, airband AM
+104/281, split 160/225, and D-STAR 13/372 (imported/incompatible). HF/AM and
+split use actual IC-M710 and WP-9900 fixture memories. The unchanged
+special audit remains 1,007/982 across 1,989 slots; all 70 bank models remain
+clean; and the 960-case required-call-list D-STAR audit remains 482/478, all
+with zero unexpected failures.
+
+**Preview decision:** A generic pre-import “preview” is deferred. CHIRP
+conversion may mutate D-STAR call lists, validation without the destination
+setter cannot predict actual driver/bank failures, and a truthful non-mutating
+preview would require cloning complete parent, bank, and radio-global state.
+The transactional write, itemized report, and one-step Undo are the truthful
+safety path today.
+
+**Accessibility checkpoint:** A repeatable NVDA/VoiceOver matrix now lives in
+`docs/testing/2026-07-25-cross-radio-migration-accessibility.md`. The user
+confirmed the Windows/NVDA side working on commit `a556e71`. The NVDA version
+and exact per-check speech/focus transcript were not supplied, so the acceptance
+record says that explicitly rather than inventing details. A separate tester
+will run VoiceOver on a Mac. Phase 6 remains in progress only for that macOS
+pass.
+
+**Next:** run and record the matrix with VoiceOver, including its version,
+exact speech/focus results, and any on-device repairs, before marking Phase 6
+complete.
+
+## 2026-07-24 — Transactional D-STAR migration (Phase 5)
+
+**Outcome:** Cross-radio migration now treats required D-STAR master call lists
+as part of the channel transaction. VRP still delegates all DV conversion and
+compatibility decisions to CHIRP; a destination without DV support reports an
+incompatibility and is never silently coerced to analog. Successful imports
+retain any required URCALL/RPTCALL additions and itemize them in the migration
+report without adding another confirmation dialog.
+
+**Exact failure rollback.** CHIRP's `import_mem` calls `ensure_has_calls` before
+frequency conversion, immutable checks, validation, and the final driver write.
+Some setters also modify raw memory before raising. New
+`chirp_backend/dstar_ops.py` snapshots/restores required call lists exactly, and
+`migration.apply_batch` restores both those lists and the destination memory
+after every rejected write attempt. This was required by a real ID-4100 →
+IC-2200H case: CHIRP added padded `CQCQCQ` data, then the IC-2200H driver
+partially wrote the target before rejecting it. A partial batch keeps additions
+from earlier successful rows while removing only the failed row's side effects.
+Direct-call D-STAR radios do not have their master lists touched.
+
+**Undo/Redo and fail-closed behavior.** `UndoManager` now supports opt-in
+radio-global state in addition to memory and auxiliary bank state. Required
+call lists are restored before channel memories during Undo/Redo so
+list-indexed driver setters see the correct calls. The memory and calls still
+form one history entry and persist through Save/reopen. If a required call-list
+snapshot cannot be captured, the entire batch is refused before any write.
+
+**Verification:** full suite **475 passed**. Focused D-STAR and special-memory
+coverage passed **22 tests**. The ordinary audit remains **385 targets: 276
+imported, 109 expected incompatibilities**; the special audit remains **1,989:
+1,007 imported, 982 expected incompatibilities**; and all **70 bank models**
+remain clean. The new D-STAR audit inventories **15 DV-capable targets** and
+**240 populated actual `DVMemory` records**. Its representative sweep covered
+**385 targets: 13 imported, 372 expected incompatibilities**. Its required-list
+corpus covered **960 cases** across IC-2200H, IC-U82, IC-V82, and ID-800H:
+**482 imported, 478 expected incompatibilities**. All four audits had **zero
+unexpected failures**, rejected destinations/call lists restored exactly, and
+the vendored `chirp/` tree remains unmodified.
+
+**Next:** Phase 6 expands the source corpus beyond one representative ordinary
+channel, then performs the cross-radio NVDA and VoiceOver acceptance matrix.
+
+## 2026-07-23 — Explicit cross-radio bank mapping (Phase 4)
+
+**Outcome:** Cross-image Paste and ordinary File ▸ Import can now migrate bank
+membership without assuming that bank indexes or names mean the same thing on
+different radios. Only source banks used by the selected channels are shown.
+Unique exact-name matches are suggestions, position matching is an explicit
+button, every mapping is reviewable, and an unmapped source bank is omitted.
+Destination bank names are not changed.
+
+**Explicit safety policy.** When mapping is enabled, each successfully imported
+channel receives exactly its mapped memberships, replacing its prior target
+memberships. An entirely unbanked selection asks whether to clear or keep
+target memberships. No-bank and fixed-bank destinations require a separate
+**Import channels only** confirmation. Cancel occurs before memory writes.
+Bank-driver failures roll that channel back to its exact prior membership and
+ordering, leave the compatible memory import intact, and appear as warnings in
+the detailed report.
+
+**Backend and history.** `MigrationBatch` now captures source bank catalog and
+per-channel membership while the source image/section is active; the clipboard
+retains that complete batch across context changes. `bank_ops` discovers actual
+CHIRP bank models, supports opaque indexes and indexed ordering, verifies
+writes, and performs atomic rollback. `UndoManager` now supports optional
+auxiliary snapshots, so imported memories and banks are one Undo/Redo step.
+The existing Channel banks editor is consequently undoable too.
+
+**Accessible UX.** `vrp/bank_mapping_dialog.py` uses the shared native
+`RadioListView`, adjacent labels, filtering, match counts, explicit Map/Skip/
+exact-name/position/clear actions, and Escape. This remains usable for drivers
+with hundreds of banks without creating hundreds of checkbox controls.
+
+**Verification:** full suite **464 passed**. The ordinary audit remains **385
+targets: 276 imported, 109 expected incompatibilities, 0 unexpected failures**;
+the special audit remains **1,989 slots: 1,007 imported, 982 expected
+incompatibilities, 0 unexpected failures**. The new bank audit found **70 bank
+models across 63 image files from 358 pinned images**: all **54 mutable models**
+passed write/verify/exact-rollback, all **16 fixed models** rejected
+reassignment, and there were **0 unexpected failures**. The vendored `chirp/`
+tree remains unmodified.
+
+**Next:** Phase 5 D-STAR call-list and validation side effects, followed by
+Phase 6 broader source-corpus and NVDA/VoiceOver acceptance.
+
+## 2026-07-22 — Explicit special-memory migration (Phase 3)
+
+**Outcome:** File ▸ Import can now transfer one explicitly selected regular or
+named special memory to either a numbered channel or a named special memory.
+Ordinary bulk import remains numeric-only: it never silently includes call
+channels, scan limits, VFOs, home channels, weather memories, or other
+driver-defined specials. A same-name destination may be preselected, but the
+user must still confirm the mapping; an occupied special requires a separate
+overwrite confirmation.
+
+**CHIRP-compatible backend.** `chirp_backend/migration.py` now catalogs regular
+and special memory identifiers, builds a one-memory batch from either kind, and
+routes special→regular, regular→special, and special→special conversion through
+CHIRP `import_logic.import_mem`. Named targets preserve the destination
+driver's virtual number, `extd_number`, and real immutable fields. Foreign
+driver extras are discarded as in ordinary cross-model migration. Known driver
+limitations—invalid immutable declarations, special slots that cannot be
+reread by virtual number, and plain out-of-band setter exceptions—produce
+per-memory incompatibility results instead of crashes.
+
+**Accessible UX and history.** New native dialogs provide explicit bulk-versus-
+single and numbered-versus-special choices plus a filterable source/target
+memory picker with adjacent labels, match counts, keyboard operation, and
+Escape. Same-name special mapping is only a convenience preselection. The
+single write is one undo/redo transaction; undo restores an empty or populated
+special by name, and edits survive Save/reopen through the physical parent
+image.
+
+**Verification:** full suite **440 passed**. The new opt-in special audit swept
+all **1,989 named special slots across 70 radio targets from 358 pinned
+images**: 1,007 imports succeeded, 982 returned expected incompatibilities, and
+**0 unexpected failures**. The ordinary audit remains **385 targets: 276
+imported, 109 expected incompatibilities, 0 unexpected failures**. The vendored
+`chirp/` tree remains unmodified.
+
+**Next:** Phase 4 explicit bank mapping and undo policy, followed by Phase 5
+D-STAR call-list side-effect tests and Phase 6 NVDA/VoiceOver and hardware
+acceptance.
+
+## 2026-07-21 — Generic cross-radio channel migration (Phase 2)
+
+**Outcome:** CHIRP images that expose multiple memory devices—sides, bands,
+VFOs, or dynamically parsed zones—can now be opened, imported, downloaded, and
+switched inside VRP. The selected child supplies memories/features to the grid
+and migration engine; the physical parent remains the owner of Save/Save As,
+radio Settings, clone prompts, and Upload. Work is on
+`feature/cross-radio-migration`, commit `00af255`; the dated migration plan is
+the detailed handoff.
+
+**Backend ownership.** `RadioImageSet` holds one parsed parent and its memory
+views. `load_image_set` discovers views without mutating active state, then
+`activate_image_set` selects one after the UI choice, so canceling Open does not
+replace the existing document. Parents with only one child still activate that
+child automatically. Dynamic subdevices are discovered after image parsing,
+and `ExternalMemoryProperties.link_device_metadata` mirrors CHIRP's editor so
+child metadata survives a parent save.
+
+**Accessible UX.** New `SubdeviceDialog` is a real filterable modal using the
+same platform-native `RadioListView` as the model/frequency-list pickers, with
+adjacent screen-reader labels, match count, explicit Open/Import/Show and Cancel
+buttons, and Escape. It appears for multi-view Open, File Import, and successful
+Download. Radio ▸ Select memory section… changes the view later. The window
+title and Radio Info identify the selected section. Labels come from CHIRP's
+`VARIANT` and channel bounds—never generated class names (dynamic Kenwood class
+names can exceed 20,000 characters).
+
+**Safety and history.** Clipboard identity is now the document UUID plus
+selected section. Raw move/make-room Paste is restricted to that exact context;
+after a side/zone switch, Paste uses the generic migration engine and deferred
+Cut becomes Copy, so it cannot erase a same-numbered row in another section.
+Switching restores the previous child's original write methods and installs a
+fresh Undo recorder on the next child. Existing image edits and the dirty flag
+remain, while section-local Undo history resets cleanly.
+
+**Verification:** full suite **420 passed**. `tests/test_subdevices.py` covers
+all **23 pinned CHIRP subdevice parents** and their expected **50 child views**,
+including one-child dynamic parents; static FT-8800 and dynamic TK-3180K2 edits
+both survive parent Save/reopen. GUI tests cover chooser accessibility/filtering,
+selected-section Open, cancel-without-replacement, menu/title behavior, and
+cross-section Cut safety. The full migration audit remains **385 targets from
+358 images: 276 imported, 109 normal incompatibilities, zero unexpected
+failures**. `chirp/` remains unmodified.
+
+**Next:** Phase 3 special-memory semantics, followed by explicit bank mapping,
+D-STAR call-list side-effect tests, and NVDA/VoiceOver acceptance passes. A
+multi-section physical-radio Download/Upload hand test belongs in that
+acceptance work.
+
+## 2026-07-21 — Generic cross-radio channel migration (Phase 1)
+
+**Outcome:** ordinary numbered channels can now move directly between different
+radio images with Copy/Paste or File ▸ Import; a CSV round-trip is optional, not
+required. The implementation is model-generic and delegates compatibility to
+CHIRP instead of adding UV-5R/UV-5R Mini (or any other) pairwise converters.
+Implemented on `feature/cross-radio-migration`, commit `69cf9b1`. Detailed
+handoff and remaining phases:
+[`docs/superpowers/plans/2026-07-21-cross-radio-migration.md`](docs/superpowers/plans/2026-07-21-cross-radio-migration.md).
+
+**CHIRP behavior confirmed.** CHIRP's editor transports model-neutral
+`Memory`/`DVMemory` objects plus the source `RadioFeatures` and stable
+`directory.radio_class_id`, then runs `import_logic.import_mem` against the
+destination. That routine already adapts/checks frequency, name, power, tones,
+DTCS, mode, duplex/split/off, immutability, target validation, and D-STAR. Its
+own `test_copy_all` follows the same generic principle across driver fixtures.
+There is no model-pair migration table to reproduce.
+
+**Shared backend.** New `chirp_backend/migration.py` supplies
+`MigrationBatch`, per-item results, `MigrationReport`, source snapshot helpers,
+radio identity/labels, and `apply_batch`. File import, RepeaterBook/frequency
+list imports, and cross-image clipboard paste now converge on the undoable
+`memory_ops.apply_migration_batch`. `import_memories` remains as a compatibility
+wrapper. The destination number is passed to `import_mem` as an override so its
+immutable-policy check sees the correct target slot. Populated source channels
+are packed in order; every attempted row is reported as imported, occupied,
+incompatible, failed, or out of space. Partial success is allowed and all writes
+form one Undo operation.
+
+**Driver-private extras.** Raw clipboard writes failed both UV-5R ↔ Mini
+directions because their `PowerLevel`/`Memory.extra` objects are driver-specific;
+Mini → UV-5R specifically failed on `sqmode`. A cross-radio batch now clears
+`Memory.extra` when CHIRP radio class IDs differ (before import/write); exact
+same-driver transfers retain it. This matches CHIRP's class boundary while
+avoiding the Mini extra reaching the UV-5R setter.
+
+**Safe clipboard identity.** `RadioState.document_id` is regenerated on every
+image open/download and copied into `_Clipboard`. Same-document Cut/Paste keeps
+the existing move + Make room behavior. After another image is opened, Paste
+uses the migration engine, occupied rows offer Overwrite / Skip / Cancel, and a
+deferred Cut becomes Copy rather than erasing same-numbered rows in the new
+radio. Incompatibilities/warnings open a keyboard-navigable, copyable
+`InfoDialog` with source/destination and exact reasons.
+
+**CSV fixes.** File Import now exposes both `.img` and `.csv`. Export mirrors
+CHIRP's generic CSV path: size `CSVRadio` to the real maximum channel, erase its
+synthetic channel 0, and import into base `chirp_common.Memory`. This fixes a
+radio whose memories begin at 1 exporting an extra channel zero.
+
+**Verification:** full suite **383 passed**; focused migration tests **71
+passed**. Real pinned fixtures: Mini → UV-5R imported all 21 populated channels;
+UV-5R → Mini imported 36 and correctly reported one invalid transmit-frequency
+channel. New `tools/audit_migrations.py` exercised a representative Generic CSV
+channel against **385 targets from 358 pinned image files** (including exposed
+subdevices): 276 imported, 109 returned normal band/feature incompatibilities,
+and **zero unexpected failures**. The vendored `chirp/` tree was not modified.
+
+**Scope boundary at the Phase 1 checkpoint:** Phase 1 covered ordinary numbered
+memories. Radio-wide settings, bank memberships, special memories, and active/
+source subdevice-selection UX were not yet migrated; the Phase 2 entry above
+records that subdevice UX is now complete. D-STAR conversion is wired through
+CHIRP, but real call-list side effects need focused fixture coverage. NVDA and
+VoiceOver hand passes of the cross-image/report flow are also owed. See the
+dated plan for the remaining phases and resume checklist.
+
 ## 2026-07-15 — `--portable` builds a real macOS artifact (ready for a Mac run)
 
 Prep for cutting a Mac release from the developer's Mac. `build_portable` was
