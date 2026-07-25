@@ -6,6 +6,67 @@ architecture, keyboard map, and CHIRP feature-coverage checklist.
 
 ---
 
+## 2026-07-25 — CHIRP pin bumped to c2e70ff
+
+**Outcome:** `CHIRP_COMMIT` moves from `906e039` (2026-06-25) to **`c2e70ff`**
+(2026-07-24) via `tools/update_chirp.py`. Four upstream commits: two add
+`RadioSetting.set_doc` text to `uv5r.py` and `btech.py`, and two touch CHIRP's
+own `tools/check_commit.sh`, which VRP neither ships nor runs.
+
+**Zero behavioural risk, confirmed rather than assumed.** Both driver commits
+are pure additions — 582/0 and 295/0 lines, no deletions — and every added line
+is a `set_doc` call. Nothing touches `import_logic`, `chirp_common`, bank
+models, or memory handling.
+
+**Verification:** suite **519 passed**, and all four audits returned numbers
+*identical* to the previous baseline, not merely passing: ordinary
+2,310/814/1,496; special 1,989/1,007/982; bank 70 models (16 fixed, 54 mutable,
+36 names verified); D-STAR 385-target 13/372 plus 960 call-list cases 482/478.
+Fixture corpus unchanged at 358 images.
+
+## 2026-07-25 — Plain-language help for radio settings
+
+**Outcome:** The settings editor now explains what each control does. CHIRP
+exposes settings as bare identifiers — `tot`, `abr`, `ste`, `scode` — which
+mean nothing unless you already know the radio. A sighted user reaches for the
+manual; a screen-reader user had nothing. A read-only, navigable **Description**
+box at the bottom of `RadioSettingsDialog` now updates as focus moves.
+
+**Two sources, driver first.** A handful of CHIRP drivers call
+`RadioSetting.set_doc` (upstream began this for the UV-5R and KT-8900 in July
+2026); that text is written for that exact radio and always wins. Everything
+else falls back to VRP's own `chirp_backend/settings_help.py`.
+
+**It could not live in `chirp/`.** The obvious place for this text is the
+driver, but that tree is vendored, pinned, and re-cloned — help added there
+would be destroyed by the next `update_chirp.py` and would break `build.py`'s
+pin verification. VRP owns the table instead, which also means it covers every
+driver rather than the two upstream has documented.
+
+**Scope, chosen from real data.** A scan of the pinned corpus found 312 drivers
+exposing **35,033 settings under 9,307 distinct names**; normalizing still
+leaves 4,588 concepts, and the top 100 cover only 44% of driver-setting pairs.
+Full coverage is neither achievable nor useful, because the largest buckets
+(`code` ×1640, `name` ×1177, DTMF slots, FM presets, 2-tone tables) are data
+rows, not features. The table therefore covers ~75 genuinely explainable
+features. Normalization plus aliases stretches those to match **462 distinct
+names**: `settings.beep`/`beep`, `tot`/`timeouttimer`, `bclo`/`bcl`,
+`lamp`/`backlight`.
+
+**Verification:** full suite **539 passed** (was 519). Per-radio coverage —
+UV-5R 100% (upstream's own docs), Yaesu FT-60 72%, BF-F8HP-PRO 41%, KG-UV8D
+19%, TH-UV88 8%. Adding Yaesu's abbreviations alone lifted the FT-60 from 6% to
+72%. IC-2200H reads 0% and that is **correct**: its only "settings" are
+numbered DTMF memory rows, not features.
+
+**Not spoken on focus.** Announcing the description as focus lands would talk
+over NVDA announcing the control itself. The box is a real focusable control
+instead, so it can be read on demand.
+
+**Next:** the NVDA pass on this dialog (already owed for the Treebook F6 hop
+and non-1-step SpinCtrls) should now also confirm the description box reads
+well and does not disrupt tab order.
+
 ## 2026-07-25 — Phase 6.1 NVDA acceptance
 
 **Outcome:** The user confirmed **section H** of
