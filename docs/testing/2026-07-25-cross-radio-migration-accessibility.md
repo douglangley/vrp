@@ -8,13 +8,18 @@ NVDA or VoiceOver can approve spoken output, focus order, and report navigation.
 
 | Environment | Status | Last attempt |
 |---|---|---|
-| Windows + NVDA | Pending hand pass | 2026-07-25: NVDA was running, but the Windows-control connection was unavailable, so no interactive result is claimed |
-| macOS + VoiceOver | Pending hand pass | Requires a Mac; cannot be evaluated from Windows |
+| Windows + NVDA | Pass — user confirmed | 2026-07-25 on `a556e71`: the user confirmed the Windows side is working; the NVDA version and exact per-check speech/focus transcript were not supplied |
+| macOS + VoiceOver | Pending hand pass | A separate tester will run this later on a Mac |
 | Automated migration corpus | Pass | 2,310 migrations: 814 imported, 1,496 expected incompatibilities, zero failures |
 
 Record the screen reader and version, VRP commit, Pass/Fail, exact speech, final
 focus, and any issue link for every numbered check. Do not turn “not run” into a
 pass based only on unit tests.
+
+The Windows result above is a human acceptance result, not an inference from
+automation. Its missing version and per-check transcript are recorded explicitly
+rather than invented. The result lines below retain that distinction; macOS is
+the remaining Phase 6 platform pass.
 
 ## Preparation
 
@@ -47,7 +52,8 @@ IC-2200H channel 17 is DV and channel 18 is empty; IC-2720H channel 17 is empty.
 4. Press `Ctrl+Z`, then `Ctrl+Y`. Confirm each operation is announced and focus
    remains on channel 22 after the grid refresh.
 
-Result: **Not run**
+Result: **Windows/NVDA covered by the user-confirmed pass; detailed transcript
+not supplied. macOS/VoiceOver pending.**
 
 ## B. Cross-image Cut safety
 
@@ -59,7 +65,8 @@ Result: **Not run**
    clipboard became Copy.
 5. Reopen the UV-5R copy and confirm channel 1 was never erased.
 
-Result: **Not run**
+Result: **Windows/NVDA covered by the user-confirmed pass; detailed transcript
+not supplied. macOS/VoiceOver pending.**
 
 ## C. Occupied destination choices
 
@@ -76,7 +83,8 @@ NVDA/VoiceOver must announce the dialog title, message, and the distinct
 **Overwrite**, **Skip**, and **Cancel** buttons. It must never offer
 **Make room** for a cross-radio paste.
 
-Result: **Not run**
+Result: **Windows/NVDA covered by the user-confirmed pass; detailed transcript
+not supplied. macOS/VoiceOver pending.**
 
 ## D. Incompatibility report navigation and copy
 
@@ -91,7 +99,8 @@ Result: **Not run**
 6. Tab to OK, close it, and confirm focus returns to the channel grid. Channel 2
    must remain empty.
 
-Result: **Not run**
+Result: **Windows/NVDA covered by the user-confirmed pass; detailed transcript
+not supplied. macOS/VoiceOver pending.**
 
 ## E. Explicit bank mapping
 
@@ -104,7 +113,8 @@ Result: **Not run**
    `Ctrl+B`.
 4. Undo and Redo; both memory and bank membership must move together.
 
-Result: **Not run**
+Result: **Windows/NVDA covered by the user-confirmed pass; detailed transcript
+not supplied. macOS/VoiceOver pending.**
 
 ## F. Explicit named-special transfer
 
@@ -117,7 +127,8 @@ Result: **Not run**
 4. Complete the import, then Undo and Redo. The announcement must say
    “Special memory C1,” not expose its driver virtual number as a grid row.
 
-Result: **Not run**
+Result: **Windows/NVDA covered by the user-confirmed pass; detailed transcript
+not supplied. macOS/VoiceOver pending.**
 
 ## G. Multi-section Cut safety
 
@@ -128,7 +139,8 @@ Result: **Not run**
    section switching preserves image modifications while starting section-local
    Undo history.
 
-Result: **Not run**
+Result: **Windows/NVDA covered by the user-confirmed pass; detailed transcript
+not supplied. macOS/VoiceOver pending.**
 
 ## Platform-specific observations
 

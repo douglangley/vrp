@@ -35,13 +35,16 @@ The transactional write, itemized report, and one-step Undo are the truthful
 safety path today.
 
 **Accessibility checkpoint:** A repeatable NVDA/VoiceOver matrix now lives in
-`docs/testing/2026-07-25-cross-radio-migration-accessibility.md`. NVDA was
-running on the Windows machine, but the automation connection was unavailable,
-so no interactive pass is claimed. VoiceOver requires a Mac. Phase 6 remains
-in progress until those hand passes are recorded.
+`docs/testing/2026-07-25-cross-radio-migration-accessibility.md`. The user
+confirmed the Windows/NVDA side working on commit `a556e71`. The NVDA version
+and exact per-check speech/focus transcript were not supplied, so the acceptance
+record says that explicitly rather than inventing details. A separate tester
+will run VoiceOver on a Mac. Phase 6 remains in progress only for that macOS
+pass.
 
-**Next:** run the matrix with NVDA and VoiceOver, record exact speech/focus
-results, and repair any on-device failures before marking Phase 6 complete.
+**Next:** run and record the matrix with VoiceOver, including its version,
+exact speech/focus results, and any on-device repairs, before marking Phase 6
+complete.
 
 ## 2026-07-24 — Transactional D-STAR migration (Phase 5)
 

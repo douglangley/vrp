@@ -101,8 +101,9 @@ update (`git pull` ./chirp) in case new dialogs appear.
   required-list targets (960 cases). All four audits have zero unexpected
   failures. Phase 6's six-source ordinary audit covers 2,310
   VHF/UHF/HF/AM/split/DV migrations (814 imported, 1,496 expected
-  incompatibilities) with zero unexpected failures. Still open: the versioned
-  NVDA and VoiceOver hand passes. See
+  incompatibilities) with zero unexpected failures. Windows/NVDA is a
+  user-confirmed pass as of 2026-07-25. Still open: the versioned VoiceOver
+  hand pass on macOS. See
   `docs/superpowers/plans/2026-07-21-cross-radio-migration.md`.
 - **Favorite radios (VRP-only, not a CHIRP feature):** Radio ▸ Favorite radios…
   manages a starred-radio list (`vrp/serial_dialogs.py` `FavoritesDialog`,

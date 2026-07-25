@@ -298,7 +298,7 @@ Run all audits from the repository root:
 ### Phase 2 — Subdevice-aware image UX — complete
 
 Implemented as described above. Hardware downloads of a multi-section radio and
-NVDA/VoiceOver hand passes remain part of Phase 6 acceptance, not backend gaps.
+the remaining VoiceOver hand pass are Phase 6 acceptance work, not backend gaps.
 
 ### Phase 3 — Special memories — complete
 
@@ -309,8 +309,8 @@ point. Physical-radio and screen-reader hand passes remain Phase 6 acceptance.
 ### Phase 4 — Banks and mapping metadata — complete
 
 Implemented as described above. Bank names remain destination-owned; this
-phase maps membership only. NVDA/VoiceOver hand passes remain Phase 6
-acceptance.
+phase maps membership only. The remaining VoiceOver hand pass is Phase 6
+acceptance work.
 
 ### Phase 5 — D-STAR and validation side effects — complete
 
@@ -321,9 +321,10 @@ are included in the migration report.
 
 ### Phase 6 — Acceptance and stronger compatibility audit — in progress
 
-- NVDA hand pass: cross-image Copy/Paste, cross-image Cut safety,
-  Overwrite/Skip/Cancel, issue report navigation/copy, and Undo.
-- VoiceOver pass on the same flow.
+- **Windows/NVDA pass user-confirmed 2026-07-25 on `a556e71`:** the Windows
+  side is working. The exact NVDA version and per-check speech/focus transcript
+  were not supplied and are not inferred.
+- VoiceOver pass on the same flow remains pending for a separate Mac tester.
 - **Automated corpus complete 2026-07-25.** The default audit now covers
   VHF/Tone, UHF/DTCS, HF/AM, airband AM, cross-band split, and a real D-STAR
   memory against all 385 targets: 2,310 migrations, 814 imported, 1,496
@@ -335,7 +336,7 @@ are included in the migration report.
   speech/focus, report copying, banks, specials, and multi-section safety are
   recorded in
   `docs/testing/2026-07-25-cross-radio-migration-accessibility.md`.
-  NVDA and VoiceOver results remain pending.
+  Windows/NVDA is user-confirmed; VoiceOver remains pending.
 - **Non-mutating preview considered and deferred.** CHIRP conversion itself can
   mutate required call lists, while conversion/validation without a real
   setter cannot predict driver and bank failures. A truthful preview needs a
@@ -359,7 +360,8 @@ are included in the migration report.
 3. Run `tools/audit_migrations.py`, `tools/audit_special_migrations.py`,
    `tools/audit_bank_migrations.py`, and `tools/audit_dstar_migrations.py` after
    any CHIRP pin or migration change.
-4. Run and record the NVDA/VoiceOver matrix in
-   `docs/testing/2026-07-25-cross-radio-migration-accessibility.md`.
+4. Run and record the remaining VoiceOver matrix in
+   `docs/testing/2026-07-25-cross-radio-migration-accessibility.md`, including
+   the reader version, exact speech, and final focus.
 5. Keep `chirp/` unmodified and add a real pinned fixture for every new edge
    case.

@@ -33,8 +33,9 @@ Status marks: ☐ not started · ◐ in progress · ☑ done.
   (960 cases) plus a 385-target representative sweep, with zero unexpected
   failures. Phase 6's expanded audit now covers six VHF/UHF/HF/AM/split/DV
   sources across all 385 targets: 2,310 migrations with 814 imports, 1,496
-  expected incompatibilities, and zero unexpected failures. **Next:** complete
-  the versioned NVDA/VoiceOver hand-pass matrix. Detailed status/resume plan:
+  expected incompatibilities, and zero unexpected failures. Windows/NVDA is a
+  user-confirmed pass as of 2026-07-25. **Next:** complete the versioned
+  VoiceOver hand-pass matrix on macOS. Detailed status/resume plan:
   [2026-07-21-cross-radio-migration.md](2026-07-21-cross-radio-migration.md).
 
 - ☑ **Serial port hardware verification.** Both **Download and Upload are
@@ -50,10 +51,9 @@ Status marks: ☐ not started · ◐ in progress · ☑ done.
 ## Other open work
 
 Accessibility / screen-reader passes owed (no blocker, just need a hand pass):
-- ☐ NVDA-on-Windows pass for the native UI (menu accelerators, grid
-  navigation/selection, dialog focus) — must be **re-run** after the grid
-  migrated to `DataViewListCtrl` (PROGRESS_LOG "2026-06-25"), since that changes
-  the control NVDA reads.
+- ☑ NVDA-on-Windows pass for the Phase 6 migration flows — user-confirmed
+  2026-07-25 after the grid migrated to `DataViewListCtrl`; the exact reader
+  version and per-check transcript were not supplied.
 - ☐ **VoiceOver hand pass on the native UI's `DataViewListCtrl` grid** — the
   migration (PROGRESS_LOG "2026-06-25") is designed to read under VoiceOver via
   NSTableView, but the actual on-device VoiceOver pass on macOS is still owed
