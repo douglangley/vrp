@@ -393,6 +393,15 @@ section H); macOS/VoiceOver pending.
 
 ### Radio settings
 
+Each setting carries a plain-language **Description** shown in a read-only,
+navigable text box at the bottom of the dialog, updated as focus moves between
+controls. Driver identifiers like `tot`, `abr`, or `ste` mean nothing on their
+own, and a screen-reader user has no manual or tooltip to fall back on. Text
+comes from the driver's own `RadioSetting.set_doc` where CHIRP provides it, and
+otherwise from VRP's own table (`chirp_backend/settings_help.py`). A setting
+with no description says so rather than showing an empty box.
+
+
 Radio ▸ Settings… (`Ctrl+Shift+P`) opens a native dialog with a `wx.Treebook`:
 the tree lists the radio's top-level setting groups; each page is a scrolled
 panel of labelled controls (CheckBox / Choice / SpinCtrl / TextCtrl by value

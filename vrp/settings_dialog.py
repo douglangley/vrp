@@ -23,8 +23,15 @@ import wx
 
 from chirp import settings as cs
 
+from chirp_backend import settings_help
+
 
 class RadioSettingsDialog(wx.Dialog):
+    _DEFAULT_DESCRIPTION = (
+        "Move to a setting to read what it does."
+    )
+    _NO_DESCRIPTION = "No description is available for this setting."
+
     def __init__(self, parent, groups) -> None:
         super().__init__(
             parent, title="Radio settings",
@@ -33,6 +40,8 @@ class RadioSettingsDialog(wx.Dialog):
         )
         self._controls: list[tuple] = []      # (RadioSettingValue, wx control)
         self._page_of: dict[int, int] = {}     # ctrl id -> treebook page index
+        # ctrl id -> plain-language help, shown in the description box on focus.
+        self._description_of: dict[int, str] = {}
         # ctrl id -> the control's value at build time, so on OK we only write
         # back controls the user actually changed (see _on_ok).
         self._initial: dict[int, object] = {}
@@ -43,6 +52,23 @@ class RadioSettingsDialog(wx.Dialog):
 
         for group in groups:
             self._add_top_group(group)
+
+        # Plain-language help for the focused setting. A driver identifier like
+        # "tot" or "abr" tells a screen-reader user nothing on its own, and
+        # there is no tooltip or manual to fall back on. This is a real
+        # read-only TextCtrl rather than StaticText so the text can be arrowed
+        # through and copied, the same reasoning as vrp/info_dialog.py.
+        # LABEL BEFORE CONTROL — wxMSW names the control from the preceding
+        # sibling.
+        outer.Add(wx.StaticText(self, label="Description:"), 0,
+                  wx.LEFT | wx.RIGHT, 10)
+        self._description = wx.TextCtrl(
+            self, style=wx.TE_MULTILINE | wx.TE_READONLY | wx.TE_NO_VSCROLL,
+            size=(-1, 52),
+        )
+        self._description.SetName("Setting description")
+        self._description.SetValue(self._DEFAULT_DESCRIPTION)
+        outer.Add(self._description, 0, wx.EXPAND | wx.LEFT | wx.RIGHT, 10)
 
         self._status = wx.StaticText(self, label="")
         self._status.SetName("Settings status")
@@ -93,13 +119,36 @@ class RadioSettingsDialog(wx.Dialog):
     def _render_setting(self, setting, panel, sizer, page_controls) -> None:
         values = list(setting)
         name = setting.get_shortname() or setting.get_name()
+        # The driver's own text (RadioSetting.set_doc) beats VRP's generic
+        # table, because it was written for this exact radio.
+        description = settings_help.help_for(
+            setting.get_name(), setting.__dict__.get("__doc__")
+        )
         for i, value in enumerate(values):
             label_text = name if len(values) == 1 else f"{name} {i + 1}"
             sizer.Add(wx.StaticText(panel, label=label_text + ":"), 0,
                       wx.ALIGN_CENTER_VERTICAL)
             ctrl = self._make_control(panel, value, label_text)
+            self._attach_description(ctrl, description)
             sizer.Add(ctrl, 0, wx.EXPAND)
             page_controls.append((value, ctrl))
+
+    def _attach_description(self, ctrl, description: str | None) -> None:
+        """Show ``description`` in the description box whenever ctrl is focused.
+
+        Deliberately not spoken on focus: that would talk over the screen
+        reader announcing the control itself. The box is a real focusable
+        control, so it can be reached and read on demand.
+        """
+        text = description or self._NO_DESCRIPTION
+        self._description_of[ctrl.GetId()] = text
+        ctrl.SetToolTip(text)  # sighted users get it on hover
+
+        def on_focus(event):
+            event.Skip()
+            self._description.SetValue(text)
+
+        ctrl.Bind(wx.EVT_SET_FOCUS, on_focus)
 
     def _make_control(self, panel, value, label_text):
         mutable = value.get_mutable()
