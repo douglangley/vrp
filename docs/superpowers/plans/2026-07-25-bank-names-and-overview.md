@@ -1,8 +1,11 @@
 # Plan — Bank names and channels-in-a-bank overview (Phase 6.1)
 
-> **Status:** Implemented 2026-07-25 on branch `feature/cross-radio-migration`
+> **Status:** Complete 2026-07-25 on branch `feature/cross-radio-migration`
 > (from docs baseline `6d1bfa7`). Suite **519 passed**; all four migration
-> audits hold their baselines. The NVDA hand pass is the remaining work.
+> audits hold their baselines; the Windows/NVDA hand pass (section H) is a
+> user-confirmed pass on `ea153dd`. Only the shared Phase 6 macOS/VoiceOver
+> pass remains, and it covers the whole feature set rather than this phase
+> alone.
 
 ## Goal
 
@@ -160,13 +163,15 @@ real-driver regression test
 Icom ID-880H supplied the truncation case: a 6-character limit turns
 "Repeaters" into "Repeat", which the announcement states rather than hides.
 
-## Remaining work
+## Acceptance
 
-1. Manual NVDA pass on Windows; add a Phase 6.1 section to
-   `docs/testing/2026-07-25-cross-radio-migration-accessibility.md` covering
-   rename announcement, truncation wording, overview navigation, Go to channel
-   focus landing, and Undo/Redo.
-2. macOS/VoiceOver stays with the existing Phase 6 Mac tester backlog.
+- **Windows/NVDA: user-confirmed pass 2026-07-25 on `ea153dd`.** Section H of
+  `docs/testing/2026-07-25-cross-radio-migration-accessibility.md` covers the
+  rename announcement, truncation wording, overview navigation, Go to channel
+  focus landing, and Undo/Redo. The NVDA version and per-check speech/focus
+  transcript were not supplied and are not inferred.
+- **macOS/VoiceOver: pending.** It stays with the existing Phase 6 Mac tester
+  backlog, which covers sections A–H together rather than this phase alone.
 
 ## Explicit non-goals
 

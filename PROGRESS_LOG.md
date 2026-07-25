@@ -6,6 +6,26 @@ architecture, keyboard map, and CHIRP feature-coverage checklist.
 
 ---
 
+## 2026-07-25 — Phase 6.1 NVDA acceptance
+
+**Outcome:** The user confirmed **section H** of
+`docs/testing/2026-07-25-cross-radio-migration-accessibility.md` on
+Windows/NVDA at commit `ea153dd` — bank rename announcement and truncation
+wording, the bank and channel list readouts, Go to channel focus landing,
+Undo/Redo, the names-cannot-be-changed case, and the Ctrl+B cross-link. Phase
+6.1 is therefore complete.
+
+As with the Phase 6 sections A–G pass, the exact NVDA version and a per-check
+speech transcript were **not supplied**, and the acceptance record says so
+rather than inventing them. This is a human acceptance result, not an inference
+from the 519-test suite or the audits.
+
+**Still open:** the macOS/VoiceOver pass, which covers sections A–H together
+and needs the Mac tester. It is now the single outstanding item on
+`feature/cross-radio-migration`. Note that the separate NVDA passes still owed
+on the **radio settings editor** and on the **Ctrl+B banks editor's** own
+membership readout/checkbox state are unrelated to section H and remain open.
+
 ## 2026-07-25 — Bank names and channels-in-a-bank (Phase 6.1)
 
 **Outcome:** Cross-radio migration deliberately never renames a destination

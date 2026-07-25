@@ -51,9 +51,12 @@ Status marks: ☐ not started · ◐ in progress · ☑ done.
 ## Other open work
 
 Accessibility / screen-reader passes owed (no blocker, just need a hand pass):
-- ☑ NVDA-on-Windows pass for the Phase 6 migration flows — user-confirmed
-  2026-07-25 after the grid migrated to `DataViewListCtrl`; the exact reader
-  version and per-check transcript were not supplied.
+- ☑ NVDA-on-Windows pass for the Phase 6 migration flows (matrix sections A–G)
+  — user-confirmed 2026-07-25 after the grid migrated to `DataViewListCtrl`;
+  the exact reader version and per-check transcript were not supplied.
+- ☑ NVDA-on-Windows pass for Phase 6.1 bank names and the channels-in-a-bank
+  overview (matrix section H) — user-confirmed 2026-07-25 on `ea153dd`, same
+  caveat on version and transcript.
 - ☐ **VoiceOver hand pass on the native UI's `DataViewListCtrl` grid** — the
   migration (PROGRESS_LOG "2026-06-25") is designed to read under VoiceOver via
   NSTableView, but the actual on-device VoiceOver pass on macOS is still owed
@@ -89,8 +92,10 @@ Query sources (Phase 7):
 - ☐ RadioReference — purpose-built after RepeaterBook (credentials/login form).
 
 Smaller deferred items (chirp-feature-coverage.md "☐"/"◐" rows):
-- ◐ **Bank renaming + "channels in a bank" overview (Phase 6.1).** Implemented
-  2026-07-25; only the NVDA hand pass is left. Radio ▸ Manage banks… renames a
+- ☑ **Bank renaming + "channels in a bank" overview (Phase 6.1).** Done
+  2026-07-25; Windows/NVDA is a user-confirmed pass, and macOS/VoiceOver is
+  covered by the single outstanding Phase 6 Mac pass below rather than
+  separately. Radio ▸ Manage banks… renames a
   bank where the driver actually stores names and lists a bank's channels
   read-only with Go to channel; Ctrl+B keeps per-channel assignment and
   cross-links to it. Every rename is confirmed by rereading the bank — the

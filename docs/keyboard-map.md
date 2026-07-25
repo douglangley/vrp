@@ -378,7 +378,18 @@ fixed-bank radios show the membership read-only. An intro line states current
 membership in words. OK applies the add/remove diff and announces the new
 membership; failures are reported truthfully. Only enabled on bank-capable
 radios (the menu item is disabled / `Ctrl+B` announces "no banks" otherwise).
-Bank renaming and a "channels in a bank" overview are deferred. NVDA pass owed.
+A **Manage banks…** button hands off to the radio-level dialog below. An NVDA
+pass on this dialog's own membership readout and checkbox/radiobox state is
+still owed — the Phase 6.1 pass covered Manage banks…, not this.
+
+Radio ▸ Manage banks… renames a bank and reviews a bank's channels. The bank
+list carries each bank's channel count; **Rename…** is offered only where the
+driver actually stores names, and the result is confirmed by rereading, so a
+driver that truncates ("Repeaters" → "Repeat" on an ID-880H) or silently
+discards the name is reported rather than announced as success. **Show
+channels…** lists a bank's channels read-only with **Go to channel**.
+Renames are undoable. Windows/NVDA pass confirmed 2026-07-25 (matrix
+section H); macOS/VoiceOver pending.
 
 ### Radio settings
 

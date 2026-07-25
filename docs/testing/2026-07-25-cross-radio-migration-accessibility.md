@@ -11,7 +11,7 @@ NVDA or VoiceOver can approve spoken output, focus order, and report navigation.
 | Windows + NVDA | Pass — user confirmed | 2026-07-25 on `a556e71`: the user confirmed the Windows side is working; the NVDA version and exact per-check speech/focus transcript were not supplied |
 | macOS + VoiceOver | Pending hand pass | A separate tester will run this later on a Mac |
 | Automated migration corpus | Pass | 2,310 migrations: 814 imported, 1,496 expected incompatibilities, zero failures |
-| Phase 6.1 bank names (section H) | Pending hand pass | Backend and dialogs landed 2026-07-25; no reader pass yet on either platform |
+| Phase 6.1 bank names (section H) | Pass — user confirmed | 2026-07-25 on `ea153dd`: the user confirmed section H on Windows/NVDA; the NVDA version and exact per-check speech/focus transcript were not supplied. macOS/VoiceOver still pending |
 
 Record the screen reader and version, VRP commit, Pass/Fail, exact speech, final
 focus, and any issue link for every numbered check. Do not turn “not run” into a
@@ -168,7 +168,8 @@ characters, which is what makes check 3 meaningful.
 8. From `Ctrl+B` on any channel, press **Manage banks…** and confirm the
    per-channel dialog closes and the manager opens with focus in its filter.
 
-Result: **Not run**
+Result: **Windows/NVDA user-confirmed pass 2026-07-25 on `ea153dd`; detailed
+transcript not supplied. macOS/VoiceOver pending.**
 
 ## Platform-specific observations
 
