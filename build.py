@@ -218,6 +218,11 @@ def build(onefile: bool) -> int:
         # that at runtime — without it, zero drivers register and the app can
         # neither open an image nor list a radio. See PROGRESS_LOG 2026-07-15.
         "--collect-submodules=chirp.drivers",
+        # VRP's out-of-tree drivers are imported dynamically by
+        # chirp_backend.extra_drivers.register_all() (importlib.import_module),
+        # which PyInstaller's static analysis can't follow — collect explicitly
+        # so the packaged exe ships them (e.g. the Wouxun KG-UV96M driver).
+        "--collect-submodules=chirp_backend.extra_drivers",
         # NOTE: chirp.sources needs no collect directive. RepeaterBook came back
         # on 2026-07-09 and chirp_backend/repeaterbook.py imports it statically
         # (`from chirp.sources import repeaterbook`, inside functions — which
