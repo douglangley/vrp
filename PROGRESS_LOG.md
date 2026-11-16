@@ -49,6 +49,65 @@ Upstream's new 2 s serial `write_timeout` (in `chirp.wxui.clone.open_serial`)
 is not yet mirrored in VRP's `_open_radio_serial`; that lands separately once
 verified on a real radio.
 
+## 2026-08-08 — CHIRP pin bumped to 5b1bba6
+
+**Outcome:** the vendored CHIRP moved `c2e70ff` → **`5b1bba6`** (upstream tip,
+2026-08-02) via `tools/update_chirp.py`, which only writes the pin on a green
+suite. Registered driver classes **552 → 553**; the 358 image fixtures are
+unchanged, so every audit baseline stays directly comparable.
+
+**What upstream actually changed** (31 files, +6,820/−2,916 — the clone is
+shallow, so the tree diff is the honest view, not a commit range):
+
+- One new radio, the Kenwood **TK-3180E** (`tk8180.py`).
+- **`kenwood_tone.py` gained BCD tone/DCS encoding** — a new `tone_enc_base`,
+  and `dcs_enc_base` now accepts 16 alongside 8/10. This is the change with
+  teeth: it alters how affected drivers *decode and encode* tones, which is
+  exactly the kind of thing that shows up as silent value drift rather than a
+  crash. Upstream grew its own tone tests by 2,094 lines alongside it.
+- Tone/feature additions to `h777.py`, `radtel_t18.py`, `retevis_rt22.py`.
+- `settings.py`: `MemSetting.apply_to_memobj` refactored into a static
+  `set_by_path`, with the leaf write changing from `setattr(parent, leaf, value)`
+  to `obj.set_value(value)`; plus a new `RadioSettingValueMap.get_selection()`.
+  **VRP touches neither API** — no `MemSetting`/`apply_to_memobj` anywhere in
+  `vrp/` or `chirp_backend/`, including the out-of-tree `kguv96m.py` — so this is
+  driver-internal. (VRP's own `get_selection` methods are unrelated dialog code.)
+- 17 locale `.po` files account for most of the raw line count.
+- New `chirp/wxui/accessibility.py` (+429) with additions to `common.py` and
+  `memedit.py`. Irrelevant to VRP's code — we never import `chirp.wxui` — but
+  worth knowing upstream has started its own accessibility work in the GUI VRP
+  replaces.
+
+**Verification.** Suite **584 passed**. All four opt-in broad audits re-run per
+CLAUDE.md, every one matching its prior baseline exactly with zero unexpected
+failures — which is the real result here, given the tone-encoding change:
+
+| Audit | Result |
+|---|---|
+| Ordinary migrations | 2,310 migrations (6 sources × 385 targets): 814 imported, 1,496 expected incompatibilities |
+| Named specials | 1,989 slots across 70 targets: 1,007 imported, 982 incompatible |
+| Banks | 70 models (16 fixed, 54 mutable verified); 36 names verified, 33 unsupported, 1 write ignored by driver |
+| D-STAR | 385-target sweep (13/372) + 960 actual-DV cases (482/478) |
+
+Beyond the suite: everything byte-compiles, all 39 `vrp`/`chirp_backend` modules
+import, and a real `MainWindow` + `DataViewListCtrl` loaded and rendered eight
+images — deliberately including every driver upstream touched (TK-3180K2,
+TK-8180, TK-890, Radtel T18, Retevis H777S, Retevis RT22) plus the UV-5R and a
+D-STAR ID-51 — reading each cell through `cell_display`, the same text the
+Left/Right cell cursor speaks. Tones read correctly on the retuned drivers
+(TSQL 88.5/67.0 where expected). The app itself launches: window shown, title,
+five menus, grid enabled, and the CHIRP attribution still in status-bar field 1.
+prism bound to the NVDA backend at startup.
+
+**Docs:** `CLAUDE.md` (two places) and `README.md` recorded the pin as `906e039`
+— three bumps stale, predating both `c2e70ff` and this one. All three now read
+`5b1bba6`. The pin is quoted in prose in enough places that it drifts silently;
+worth considering generating those from the `CHIRP_COMMIT` file.
+
+**Not done:** no rebuild of the frozen app against the new pin, and no
+hardware pass. A driver change of this kind can only be fully cleared on a real
+radio, and the tone work touches models nobody here has.
+
 ## 2026-07-25 — A real macOS installer, and a way to find the sample images
 
 **Outcome:** `build.py --dmg` produces

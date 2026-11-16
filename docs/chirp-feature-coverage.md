@@ -36,7 +36,8 @@ update (`git pull` ./chirp) in case new dialogs appear.
 | Copy to / Move to (bulk)        | 3         | ☑      |
 | Delete / Delete + shift         | 3         | ☑      |
 | Insert / Move / Sort / Arrange  | 3         | ☑ (Sort: any column + synthetic Transmit frequency, non-contiguous-safe; also a quick Sort submenu in the row context menu) |
-| Cut / Paste (clipboard)         | 3         | ☑ (same-image move/make-room; cross-image Paste uses generic migration and cross-image Cut safely becomes Copy) |
+| Cut / Paste (internal clipboard)| 3         | ☑ (same-image move/make-room; cross-image Paste uses generic migration and cross-image Cut safely becomes Copy) |
+| System clipboard interchange    | fidelity 4 | ☐ (CHIRP-compatible TSV while retaining the rich internal payload) |
 | Undo / Redo (channel + bank ops)| —         | ☑      |
 | Find / Find Next                | 3         | ☑      |
 | Goto channel                    | 3         | ☑      |
@@ -68,12 +69,26 @@ update (`git pull` ./chirp) in case new dialogs appear.
 | Feature                          | VRP phase | Status |
 |----------------------------------|-----------|--------|
 | Memory editor grid (read)        | 1         | ☑      |
-| Memory editor grid (edit fields) | 2         | ☑      |
+| Base memory fields (frequency, name, tone/DTCS, duplex, mode, step, skip, comment) | 2 / fidelity 1 | ◐ (editing exists; capability flags and driver-specific choice lists need parity) |
+| Capability-derived field visibility, choices, and immutability | fidelity 1 | ◐ (must use the active driver's complete `RadioFeatures`) |
+| Power (fixed and variable)       | fidelity 1 | ☐      |
+| Driver-specific `Memory.extra` settings | fidelity 1 | ☐      |
+| D-STAR call/code fields          | fidelity 1 | ☐ (migration preserves DV metadata; direct editing is absent) |
+| Channel validation warnings/errors | fidelity 2 | ◐ (migration validates; ordinary direct edits do not yet share it) |
+| Upload validation preflight      | fidelity 2 | ☐      |
 | Radio settings editor            | 5         | ☑ (NVDA pass owed) |
 | Banks editor (assign membership) | 6 / migration 4 | ☑ (undoable; explicit cross-radio mapping; NVDA pass owed) |
 | Bank renaming + channels-in-a-bank | 6.1     | ☑ (verified write, undoable; NVDA-confirmed) |
 | Radio info                       | 8         | ☑      |
 | About                            | 0         | ☑      |
+| Report a problem (sanitized diagnostics) | fidelity 5 | ☐      |
+
+## Engineering coverage
+
+| Coverage                         | VRP phase | Status |
+|----------------------------------|-----------|--------|
+| Pinned-image editor fidelity audit | fidelity 3 | ☐ (358 current image fixtures plus subdevices; no-op round trips, extras, DV, and validation) |
+| Modular `main_window.py` workflow boundaries | fidelity 7 | ☐ (behavior-preserving extraction after fidelity tests land) |
 
 ## Notes
 
@@ -111,8 +126,14 @@ update (`git pull` ./chirp) in case new dialogs appear.
   `vrp/config.py` favorites); the Download dialog gains a **Show: All radios /
   Favorites** toggle (default All). Lets users who program a few radios browse a
   short list instead of ~552.
-- Developer-only items (reload driver/module, interact with driver, serial
-  trace, bug report) are lower priority; revisit in Phase 10.
+- The editor-fidelity source audit and implementation plan for power,
+  driver-specific extras, DV fields, validation/preflight, corpus coverage,
+  system clipboard interchange, problem reporting, and `main_window.py`
+  modularization is in
+  `docs/superpowers/plans/2026-08-07-chirp-editor-fidelity-and-workflow.md`.
+  Reload driver/module, interact-with-driver tools, and a serial-trace viewer
+  remain lower-priority developer work; problem reporting is no longer in that
+  bucket.
 - **Auto edits (offset suggestion):** a partial form of CHIRP's "auto edits" is
   implemented — the channel editor auto-fills the **Offset** field with the
   band's standard repeater shift (from CHIRP's band plan) when you enter a

@@ -11,6 +11,15 @@ Status marks: ☐ not started · ◐ in progress · ☑ done.
 
 ## Current priority
 
+- ☐ **CHIRP editor fidelity and workflow hardening.** Make channel fields and
+  choices follow each driver's `RadioFeatures`; add power, driver-specific
+  extras, and D-STAR editing; share validation through direct edits, migration,
+  and upload preflight; prove the result over the pinned image corpus; add safe
+  CHIRP-TSV system clipboard interchange and a sanitized report-a-problem flow;
+  then modularize `main_window.py` behind the new behavior tests. Detailed
+  scope, sequencing, and acceptance criteria:
+  [2026-08-07-chirp-editor-fidelity-and-workflow.md](2026-08-07-chirp-editor-fidelity-and-workflow.md).
+
 - ◐ **Generic cross-radio migration.** Phases 1–5 landed through 2026-07-24:
   direct
   cross-image Copy/Paste and `.img`/`.csv` Import share CHIRP's model-generic
@@ -106,9 +115,9 @@ Smaller deferred items (chirp-feature-coverage.md "☐"/"◐" rows):
   519 tests; the bank audit adds 36 verified renames across 70 models with zero
   unexpected failures. Plan:
   [2026-07-25-bank-names-and-overview.md](2026-07-25-bank-names-and-overview.md).
-- ☑ Cut/Paste clipboard (same-image row clipboard done 2026-06-27; generic
-  cross-image conversion done 2026-07-21 — remaining metadata phases are linked
-  under Current priority).
+- ☑ Cut/Paste internal clipboard (same-image row clipboard done 2026-06-27;
+  generic cross-image conversion done 2026-07-21). ☐ CHIRP-compatible system
+  clipboard interchange is now planned under Current priority.
 - ☐ File menu: New (empty image), New Window, Load Module — all need a
   model-picker UX decision first. (Open Stock Config is covered as an import —
   see Frequency lists above.)
@@ -117,8 +126,9 @@ Smaller deferred items (chirp-feature-coverage.md "☐"/"◐" rows):
   magnitude only), opt-in "Apply band-plan defaults" (mode/step/tone), and the
   band-plan **region** chosen in Preferences (not the Radio menu — it's a global
   setting). See PROGRESS_LOG and `chirp_backend/bandplan.py`.
-- ☐ Developer-only items (reload driver/module, serial trace, bug report) —
-  Phase 10, low priority.
+- ☐ Developer-only items (reload driver/module and a serial-trace viewer) —
+  Phase 10, low priority. A user-facing, sanitized report-a-problem workflow is
+  now planned under Current priority.
 
 New since 2026-06-28 (VRP-only enhancements, done — see PROGRESS_LOG):
 - ☑ Favorite radios (Radio ▸ Favorite radios… manager + Download All/Favorites
