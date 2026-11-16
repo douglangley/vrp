@@ -39,6 +39,8 @@ def test_open_radio_serial_applies_driver_settings(monkeypatch):
     values = dict(pipe.events)
     assert values["baudrate"] == 19200
     assert values["timeout"] == 0.25
+    # Bounded writes: pyserial's default (None) hangs forever on a dead link.
+    assert values["write_timeout"] == 2
     assert values["rtscts"] is True
     assert values["rts"] is False
     assert values["dtr"] is True

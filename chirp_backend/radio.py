@@ -974,6 +974,13 @@ def _open_radio_serial(port: str, radio_class, *, trace: bool = False):
     pipe = TracingSerial(trace_enabled=trace)
     pipe.baudrate = radio_class.BAUD_RATE
     pipe.timeout = 0.25
+    # pyserial's default write_timeout is None, which blocks forever if the
+    # radio stops reading (a dead cable, a Bluetooth SPP link that drops). A
+    # hung write would freeze the clone thread with the progress dialog up and
+    # nothing announced. 2 s matches CHIRP's open_serial (adopted upstream at
+    # 7052107); a timeout raises SerialTimeoutException, which the clone
+    # paths' handlers report as a failed download/upload and close the port.
+    pipe.write_timeout = 2
     pipe.rtscts = radio_class.HARDWARE_FLOW
     pipe.rts = radio_class.WANTS_RTS
     pipe.dtr = radio_class.WANTS_DTR

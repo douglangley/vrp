@@ -6,7 +6,7 @@ architecture, keyboard map, and CHIRP feature-coverage checklist.
 
 ---
 
-## 2026-11-16 — CHIRP pin bumped to 7052107
+## 2026-11-16 — CHIRP pin bumped to 7052107, and bounded serial writes
 
 **Outcome:** vendored CHIRP moved `5b1bba6` → **`7052107`** (upstream tip,
 2026-11-15) via `tools/update_chirp.py`. 213 files, +46,611/−7,806. Registered
@@ -30,6 +30,17 @@ source itself, so it no longer depends on fixture contents; it passes on both
 pins. Worth remembering: a fixture refresh can quietly remove the only case a
 test was exercising.
 
+**Serial: adopted upstream's write timeout.** CHIRP's `open_serial` now sets
+`write_timeout = 2` on real ports, because pyserial's default (`None`) blocks
+forever if the radio stops reading — a dead cable, a dropped Bluetooth SPP
+link. `chirp_backend.radio._open_radio_serial` mirrors that function and had
+the same hang, which for VRP means a frozen clone thread under a progress dialog
+with nothing announced. It now sets the same 2 s bound; a timeout raises
+`SerialTimeoutException`, which the existing download/upload handlers already
+report and clean up. `tests/test_serial_open.py` asserts it. VRP keeps its own
+`TracingSerial`: CHIRP's relocated core `serialtrace.py` still imports
+`chirp.wxui.config`, which VRP must not import.
+
 **Verification.** Suite **584 passed** on the new pin. All four opt-in audits
 re-run, zero unexpected failures:
 
@@ -44,10 +55,11 @@ Two kinds of harmless console noise appear in audit output: "Failed to parse
 version '0.3.0dev'" (CHIRP logging an old version string stored in a fixture)
 and "dirty blocks: […]" (a bare `print` in upstream's `thd72.py`).
 
-**Not done:** no frozen rebuild against the new pin, and no hardware pass.
-Upstream's new 2 s serial `write_timeout` (in `chirp.wxui.clone.open_serial`)
-is not yet mirrored in VRP's `_open_radio_serial`; that lands separately once
-verified on a real radio.
+**Hardware:** the write timeout was **user-confirmed on real hardware**
+2026-11-16 (radio model and transcript not recorded). It was held out of the
+pin commit until then, since a too-short bound on a slow radio would surface as
+a spurious "Write timeout" failure. Still not done: a frozen rebuild against
+the new pin.
 
 ## 2026-08-08 — CHIRP pin bumped to 5b1bba6
 
