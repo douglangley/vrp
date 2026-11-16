@@ -414,11 +414,13 @@ class MainWindow(wx.Frame):
 
     def _build_help_menu(self) -> wx.Menu:
         m = wx.Menu()
-        # Mnemonics here are all distinct: G, K, S, A. "Keyboard Shortcuts" gave
-        # up its K (it was the only K) so the full reference — the document a
-        # user is told to go read — can have it.
+        # Mnemonics here are all distinct: G, K, R, S, A. "Keyboard Shortcuts"
+        # gave up its K (it was the only K) so the full reference — the document
+        # a user is told to go read — can have it, and "Sample Radio Images"
+        # takes R because S was already spoken for.
         self._add(m, "getting_started", "&Getting Started", self.on_getting_started)
         self._add(m, "keyboard_commands", "&Keyboard Commands", self.on_keyboard_commands)
+        self._add(m, "sample_images", "Sample &Radio Images", self.on_sample_images)
         m.AppendSeparator()
         self._add(m, "shortcuts", "Keyboard &Shortcuts\tF1", self.on_shortcuts)
         self._add(m, "about", "&About", self.on_about)
@@ -2772,6 +2774,29 @@ class MainWindow(wx.Frame):
         """Help > Keyboard Commands — the full reference, in the browser. The
         quick in-app list is still on F1 (on_shortcuts)."""
         self._open_help_doc(vrp_help.KEYBOARD_COMMANDS, "Keyboard Commands list")
+
+    def on_sample_images(self, _evt=None) -> None:
+        """Help > Sample Radio Images — show the bundled images in the file
+        manager, so File > Open Image File has somewhere to point.
+
+        Every build ships CHIRP's test images (one per supported model), but
+        until now nothing in the app said where. On Windows the installer adds a
+        Start-menu shortcut; a Mac .app has no equivalent, and after an
+        /Applications install the folder is inside the bundle where the only
+        route is Show Package Contents. This is that route, on both platforms.
+        """
+        folder = vrp_help.samples_dir()
+        if vrp_help.open_samples():
+            self.announce.announce(
+                "Opening the sample radio images folder. "
+                "Open one with File, Open Image File."
+            )
+            return
+        self.announce.announce(
+            f"The sample radio images folder could not be found. It should be "
+            f"at {folder}.",
+            assertive=True,
+        )
 
     def _open_help_doc(self, name: str, description: str) -> None:
         """Open a help document, announcing either outcome.

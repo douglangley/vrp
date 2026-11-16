@@ -1,6 +1,6 @@
 ; installer.iss — Inno Setup script for Versatile Radio Programmer (VRP)
 ;
-; Wraps the PyInstaller *onedir* output (dist\vrp\) into a Windows installer
+; Wraps the PyInstaller *onedir* output (dist\VRP\) into a Windows installer
 ; with a Start-menu shortcut and an uninstaller — the way upstream CHIRP ships
 ; its PyInstaller build, rather than as a loose self-extracting .exe.
 ;
@@ -10,7 +10,7 @@
 ;
 ; or, equivalently, by hand:
 ;
-;   uv run python build.py                     (produces dist\vrp\)
+;   uv run python build.py                     (produces dist\VRP\)
 ;   ISCC installer.iss /DMyAppVersion=20260715.1
 ;
 ; Requires Inno Setup 6: https://jrsoftware.org/isinfo.php
@@ -24,7 +24,8 @@
 #endif
 
 #define MyAppName "Versatile Radio Programmer"
-#define MyAppExeName "vrp.exe"
+; Must match build.py's APP_NAME (PyInstaller's --name), which produces VRP.exe.
+#define MyAppExeName "VRP.exe"
 #define MyAppPublisher "Versatile Radio Programmer"
 ; Driver support is CHIRP's; the attribution also lives in the app (status bar
 ; field 1 + About box) per CLAUDE.md.
@@ -49,7 +50,7 @@ UninstallDisplayIcon={app}\{#MyAppExeName}
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 OutputDir=dist
-OutputBaseFilename=vrp-{#MyAppVersion}-setup
+OutputBaseFilename=VRP-{#MyAppVersion}-setup
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
@@ -65,11 +66,21 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Files]
-; Pull in the entire PyInstaller onedir tree (the .exe plus _internal/).
-Source: "dist\vrp\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignoreversion
+; Pull in the entire PyInstaller onedir tree: the .exe, _internal/, and the two
+; folders build.py stages beside the exe — help\ (the Help menu opens these) and
+; sample-images\ (CHIRP's test images, so a user with no radio or no cable can
+; still open a real image). Because this recurses, both arrive with no rule of
+; their own; build.py --no-samples simply leaves sample-images\ out of dist\VRP\
+; and the Check below drops its shortcut to match.
+Source: "dist\VRP\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignoreversion
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
+; A Start-menu route to the samples. They install into {app}\sample-images,
+; which a user would otherwise have to know to go hunting for in Program Files —
+; and "browse to the install directory" is a poor instruction for the screen
+; reader users this app is built for. Opens the folder in Explorer.
+Name: "{group}\Sample radio images"; Filename: "{app}\sample-images"; Check: DirExists(ExpandConstant('{app}\sample-images'))
 Name: "{group}\{cm:UninstallProgram,{#MyAppName}}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 

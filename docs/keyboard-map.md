@@ -59,6 +59,7 @@ arrow keys move across top-level menus; NVDA reads it like any native app menu.
 | Channels | Find next | `F3` | needs a loaded radio |
 | Help | Getting Started | — | opens `help/GettingStarted.html` in the default browser |
 | Help | Keyboard Commands | — | opens `help/KeyboardCommands.html` in the default browser |
+| Help | Sample Radio Images | — | opens the bundled `sample-images/` folder in Explorer/Finder; works with no radio loaded, which is the point |
 | Help | Keyboard Shortcuts | `F1` | shows this list as a plain-text message box |
 | Help | About | — | build info + the CHIRP acknowledgement, in two read-only edit boxes |
 

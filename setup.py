@@ -10,11 +10,13 @@ ditto-zipped-with-sample-images artifact PyInstaller's macOS path does.
 
 Usage:
   uv sync --extra py2app
-  uv run python setup.py py2app              Build to
-                                              dist/VRP-<version>-macos-<arch>.app.
+  uv run python setup.py py2app              Build to dist/VRP.app.
   uv run python setup.py py2app --portable    Also zip it as
-                                               dist/VRP-<version>-macos-<arch>.zip
+                                               dist/VRP-<version>-macos-<arch>.zip,
+                                               holding VRP/VRP.app
                                                (see build_portable() below).
+
+The bundle is plain VRP.app on purpose — see the comment above `final_app`.
 
 Notes on how this differs from the PyInstaller build:
   - PyInstaller freezes pure-Python modules into a zipped PYZ archive, which
@@ -29,6 +31,11 @@ Notes on how this differs from the PyInstaller build:
     imported, this also picks up chirp/stock_configs/*.csv and prism's
     native libprism.dylib for free, without PyInstaller's targeted
     --add-data / --collect-binaries flags.
+  - What 'packages' does NOT pick up is anything that isn't an importable
+    tree — help/ and CHIRP's test images are both top-level repo folders, not
+    Python packages. stage_bundle_extras() copies them into
+    Contents/Resources/ after the build, mirroring build.py's stage_help and
+    stage_samples. Skip it and the Help menu opens nothing.
   - Requires a macOS "framework" Python build (real .so/.dylib files for
     stdlib extensions) — uv's managed python-build-standalone interpreter is
     statically linked and py2app cannot introspect it (fails partway through
@@ -60,6 +67,7 @@ CHIRP_DIR = os.path.join(PROJECT_ROOT, "chirp")
 CHIRP_PIN_FILE = os.path.join(PROJECT_ROOT, "CHIRP_COMMIT")
 RELEASE_PREFIX = "VRP"
 SAMPLES_DIRNAME = "sample-images"
+HELP_DIRNAME = "help"
 
 _SAMPLES_README = """\
 Sample radio images
@@ -178,20 +186,75 @@ def _sample_files() -> list:
     ]
 
 
+def stage_bundle_extras(app_path: str, include_samples: bool = True) -> int:
+    """Copy help/ and sample-images/ into the .app's Contents/Resources/.
+
+    py2app's `packages` only copies importable trees, and there is no `resources`
+    option set, so without this the bundle ships with NEITHER: the Help menu
+    finds no documents and comes up empty (vrp/help.py looks in
+    Contents/Resources/help/), and nothing lets a user without a radio open a
+    real image. build.py's PyInstaller path has done this from the start via
+    stage_help/stage_samples; this is the missing py2app counterpart, deliberately
+    producing the identical layout so the two macOS builds are interchangeable.
+
+    Resources/ is the bundle convention and the only copy that survives dragging
+    VRP.app to /Applications. build_portable ALSO drops sample-images/ beside the
+    bundle in the zip, because a .app's interior is not reachable from a
+    File > Open dialog without Show Package Contents.
+
+    Re-copied from scratch, so a document deleted from the repo (or an image
+    dropped by a CHIRP bump) does not linger in an old dist/ and ship forever.
+    """
+    resources = os.path.join(app_path, "Contents", "Resources")
+    if not os.path.isdir(resources):
+        print(f"! {resources} not found - skipping help/ and samples.")
+        return 1
+
+    src_help = os.path.join(PROJECT_ROOT, HELP_DIRNAME)
+    if os.path.isdir(src_help):
+        dest = os.path.join(resources, HELP_DIRNAME)
+        shutil.rmtree(dest, ignore_errors=True)
+        shutil.copytree(src_help, dest)
+        count = sum(len(files) for _r, _d, files in os.walk(dest))
+        print(f"  + {count} help documents in Contents/Resources/{HELP_DIRNAME}")
+    else:
+        print(f"! No help documents at {src_help} - skipping them.")
+
+    if include_samples:
+        files = _sample_files()
+        if files:
+            dest = os.path.join(resources, SAMPLES_DIRNAME)
+            shutil.rmtree(dest, ignore_errors=True)
+            os.makedirs(dest)
+            for full in files:
+                shutil.copy2(full, dest)
+            with open(os.path.join(dest, "README.txt"), "w",
+                      encoding="utf-8") as fh:
+                fh.write(_SAMPLES_README.format(chirp_pin=_chirp_pin_short()))
+            print(f"  + {len(files)} sample images in "
+                  f"Contents/Resources/{SAMPLES_DIRNAME}")
+    return 0
+
+
 def build_portable(app_path: str, version: str, include_samples: bool = True) -> int:
     """Stage the .app + sample-images, then zip with ditto — same approach as
     build.py's _build_portable_macos (see that function's docstring for why
     ditto, not zipfile, is required for a .app bundle). Output:
-    dist/VRP-<version>-macos-<arch>.zip, holding
-    VRP-<version>/VRP-<version>-macos-<arch>.app (+ sample-images/).
+    dist/VRP-<version>-macos-<arch>.zip, holding VRP/VRP.app (+ sample-images/).
+
+    The version is on the zip and nowhere inside it: the download has to be
+    tellable apart, the installed bundle has to keep one stable identity so
+    dragging a new release into /Applications replaces the old one. See the
+    `final_app` comment near the bottom of this file.
     """
     if shutil.which("ditto") is None:
         print("Cannot build the portable zip: `ditto` not found on PATH.")
         return 1
 
-    top = f"{RELEASE_PREFIX}-{version}"
+    top = RELEASE_PREFIX
     zip_path = os.path.join(
-        PROJECT_ROOT, "dist", f"{top}-{artifact_suffix()}.zip"
+        PROJECT_ROOT, "dist",
+        f"{RELEASE_PREFIX}-{version}-{artifact_suffix()}.zip",
     )
     staging_root = os.path.join(PROJECT_ROOT, "build", "py2app_portable")
     staging = os.path.join(staging_root, top)
@@ -256,6 +319,9 @@ if not ensure_chirp_on_pin():
     print("\nAborting: ./chirp is not at the tested CHIRP_COMMIT pin.")
     sys.exit(1)
 
+# setuptools' distribution name only — it does NOT name the bundle. py2app
+# builds "<CFBundleName>.app" (so "Versatile Radio Programmer.app"), which the
+# tail of this file then renames to VRP.app.
 APP_NAME = "vrp"
 DISPLAY_NAME = "Versatile Radio Programmer"
 VERSION = _read_version()
@@ -334,19 +400,26 @@ finally:
     os.chdir(PROJECT_ROOT)
 
 built_app = os.path.join(STAGE_DIR, "dist", f"{DISPLAY_NAME}.app")
-# Named to match the portable zip exactly (VRP-<version>-macos-<arch>.app),
-# not the generic "vrp.app" build.py's PyInstaller path uses — a tester with
-# several builds on disk (or unzipped side by side) can tell them apart by
-# the .app name alone, the same way the zip and its VRP-<version>/ top folder
-# already do.
-RELEASE_APP_NAME = f"{RELEASE_PREFIX}-{VERSION}-{artifact_suffix()}"
-final_app = os.path.join(DIST_DIR, f"{RELEASE_APP_NAME}.app")
+# Plain "VRP.app", NOT VRP-<version>-macos-<arch>.app, and matching the name
+# build.py's PyInstaller path produces. The bundle name is the app's identity
+# in /Applications: drag a versioned bundle there and macOS has no way to know
+# it supersedes the last one, so every release accumulates as a separate app
+# and the user is one Spotlight hit away from launching a stale build. An
+# unversioned name means the Finder copy asks "replace?" and upgrading works
+# the way it does for every other Mac app. The version is still legible — it
+# is on the zip, in CFBundleShortVersionString (Get Info), and in About.
+final_app = os.path.join(DIST_DIR, f"{RELEASE_PREFIX}.app")
 if os.path.isdir(built_app):
     os.makedirs(DIST_DIR, exist_ok=True)
     if os.path.isdir(final_app):
         shutil.rmtree(final_app)
     shutil.move(built_app, final_app)
     print(f"\nBuild succeeded.\nOutput: {os.path.relpath(final_app, PROJECT_ROOT)}")
+
+    # After the move, so the paths are the final ones. Not optional: without it
+    # the Help menu has nothing to open.
+    print("\nStaging help documents and sample images into the bundle...")
+    stage_bundle_extras(final_app)
 
     if PORTABLE:
         rc = build_portable(final_app, VERSION)

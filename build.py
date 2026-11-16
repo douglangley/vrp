@@ -1,32 +1,46 @@
 """build.py — PyInstaller build script for Versatile Radio Programmer.
 
 Usage:
-  python build.py                  Build to a dist/vrp/ folder (onedir; the
+  python build.py                  Build to a dist/VRP/ folder (onedir; the
                                    default). Starts instantly — no per-launch
                                    self-extraction.
-  python build.py --onefile        Build a single dist/vrp.exe instead. Slower
+  python build.py --onefile        Build a single dist/VRP.exe instead. Slower
                                    cold start (it re-extracts the interpreter +
                                    wxPython + 552 drivers to a temp dir on every
                                    launch) and trips Defender/SmartScreen more
                                    often — handy only for a quick throwaway test.
   python build.py --installer      Build onedir, then compile a Windows installer
                                    (installer.iss) with Inno Setup. This is how
-                                   the app is meant to ship.
+                                   the app is meant to ship on Windows.
+                                   Windows-only.
+  python build.py --dmg            The macOS counterpart: wrap dist/VRP.app in
+                                   dist/VRP-<version>-macos-<arch>.dmg, holding
+                                   the app beside an /Applications symlink to
+                                   drag it onto. This is how the app is meant to
+                                   ship on a Mac. macOS-only.
   python build.py --portable       Build onedir, then zip it as
                                    dist/VRP-<version>-<platform>.zip — a
                                    no-install build to hand to testers: unzip
-                                   anywhere and run it from the folder.
-                                   Windows: -win64.zip holding vrp.exe +
+                                   anywhere and run it from the folder. The zip
+                                   carries the version; what comes OUT of it is
+                                   named plain "VRP" so a new release lands on
+                                   top of the old one instead of beside it.
+                                   Windows: -win64.zip holding VRP/VRP.exe +
                                    _internal/. macOS: -macos-<arch>.zip holding
-                                   vrp.app, zipped with ditto (zipfile would
-                                   break the bundle). Includes CHIRP's test
-                                   images in a top-level sample-images/ folder so
-                                   a tester with no radio can still open a real
-                                   image (--no-samples omits them). Combinable
-                                   with --installer (Windows only).
+                                   VRP/VRP.app, zipped with ditto (zipfile would
+                                   break the bundle). Combinable with --installer
+                                   (Windows only).
+  python build.py --no-samples     Leave CHIRP's test images out of the build.
   python build.py --no-chirp-sync  Verify ./chirp matches the CHIRP_COMMIT pin
                                    but don't auto-checkout it (abort on mismatch
                                    instead of fixing the clone).
+
+EVERY build stages two things into the app before anything packages it up:
+help/ (the Help menu opens these) and sample-images/ (CHIRP's test images, so
+anyone with no radio or no cable can still open a real image). Both land at the
+TOP level beside the executable — never under _internal/ — and on macOS in the
+bundle's Contents/Resources/. The portable zip and the Inno Setup installer then
+inherit them from that one staged copy rather than each assembling their own.
 
 Every build first ensures ./chirp is checked out at the tested CHIRP_COMMIT pin
 (a clean clone is synced to it automatically) so the frozen app bundles the exact
@@ -84,7 +98,12 @@ import subprocess
 import sys
 import zipfile
 
-APP_NAME = "vrp"           # Versatile Radio Programmer short form
+# Drives PyInstaller's --name, so it IS the shipped filename: VRP.exe / VRP.app
+# / the dist/VRP/ onedir folder. Uppercase because it is user-facing (the Dock,
+# /Applications, a Start-menu target), and STABLE across releases on purpose —
+# macOS keys "is this the same app?" off the bundle name, so a versioned name
+# would install a second copy every release instead of replacing the first.
+APP_NAME = "VRP"           # Versatile Radio Programmer short form
 RELEASE_PREFIX = "VRP"     # release/tag name: VRP-<version> (tools/release_version.py)
 DISPLAY_NAME = "Versatile Radio Programmer"
 ENTRY_POINT = "main.py"
@@ -178,8 +197,8 @@ def build(onefile: bool) -> int:
         "--clean",           # don't reuse a stale PyInstaller cache
 
         # ---- Output mode ----
-        # onedir (default): a dist/vrp/ folder that launches with no extraction
-        # step. onefile: a single self-extracting dist/vrp.exe (slower start).
+        # onedir (default): a dist/VRP/ folder that launches with no extraction
+        # step. onefile: a single self-extracting dist/VRP.exe (slower start).
         *(["--onefile"] if onefile else ["--onedir"]),
 
         # ---- No console window (GUI app) ----
@@ -282,7 +301,7 @@ def stage_help(onefile: bool = False) -> int:
 
     The Help menu opens these in the user's browser (see vrp/help.py), so they
     must ship with EVERY build, not just the portable zip the way sample-images
-    does. Staging them into dist/vrp/ means both downstream artifacts get them
+    does. Staging them into dist/VRP/ means both downstream artifacts get them
     for free: the portable zip walks that folder, and installer.iss recurses
     dist\\vrp\\*.
 
@@ -304,7 +323,7 @@ def stage_help(onefile: bool = False) -> int:
         # onefile puts the exe straight in dist/, so help/ goes beside it there.
         dests = [os.path.join(PROJECT_ROOT, "dist", HELP_DIRNAME)]
     elif sys.platform == "darwin":
-        # Inside a .app, sys.executable is vrp.app/Contents/MacOS/vrp, so
+        # Inside a .app, sys.executable is VRP.app/Contents/MacOS/VRP, so
         # "beside the executable" is not a place a user can see. Contents/
         # Resources/ is the bundle convention and is what vrp/help.py's macOS
         # candidate looks for. The raw COLLECT folder gets a copy too, since
@@ -322,7 +341,7 @@ def stage_help(onefile: bool = False) -> int:
     for dest in dests:
         parent = os.path.dirname(dest)
         if not os.path.isdir(parent):
-            # e.g. dist/vrp.app absent because --windowed didn't run.
+            # e.g. dist/VRP.app absent because --windowed didn't run.
             print(f"! {parent} not found - skipping help/ there.")
             continue
         if os.path.isdir(dest):
@@ -394,32 +413,100 @@ def _sample_files() -> list:
     ]
 
 
+def stage_samples(onefile: bool = False) -> int:
+    """Copy CHIRP's test images into the built app, exactly as stage_help does.
+
+    They used to be added straight into the portable zip, which meant the
+    *installer* never carried them: a user who ran setup.exe got no way to try
+    the app without a radio and a cable in hand. Staging them into the app
+    folder instead gives every downstream artifact the same content from one
+    source of truth - the portable zip walks dist/VRP/, installer.iss recurses
+    dist\\VRP\\*, and the macOS bundle carries its own copy.
+
+    Placement mirrors stage_help for the same reason: TOP LEVEL, beside the
+    executable, never under _internal/. A tester has to reach these from a
+    File > Open Image File dialog, and the app's plumbing is not somewhere a
+    user should be asked to go digging.
+
+    macOS is the awkward case. Contents/Resources/ is where a bundle's data
+    belongs and is the only copy that survives dragging VRP.app to
+    /Applications - but a .app's interior is not browsable from an Open dialog
+    without Show Package Contents. The portable zip therefore ALSO drops a copy
+    beside the bundle (see _build_portable_macos), which is the one a Mac tester
+    actually opens. Roughly 9 MB uncompressed, ~0.5 MB in the zip.
+
+    They come from ./chirp at the enforced CHIRP_COMMIT pin, so they always
+    match the drivers this build bundles. Re-copied from scratch every build, so
+    images dropped by a CHIRP bump do not linger in dist/ and ship forever.
+    """
+    files = _sample_files()
+    if not files:
+        return 0
+
+    if onefile:
+        dests = [os.path.join(PROJECT_ROOT, "dist", SAMPLES_DIRNAME)]
+    elif sys.platform == "darwin":
+        dests = [
+            os.path.join(PROJECT_ROOT, "dist", f"{APP_NAME}.app", "Contents",
+                         "Resources", SAMPLES_DIRNAME),
+            os.path.join(PROJECT_ROOT, "dist", APP_NAME, SAMPLES_DIRNAME),
+        ]
+    else:
+        dests = [os.path.join(PROJECT_ROOT, "dist", APP_NAME, SAMPLES_DIRNAME)]
+
+    for dest in dests:
+        parent = os.path.dirname(dest)
+        if not os.path.isdir(parent):
+            # e.g. dist/VRP.app absent because --windowed didn't run.
+            print(f"! {parent} not found - skipping {SAMPLES_DIRNAME}/ there.")
+            continue
+        if os.path.isdir(dest):
+            shutil.rmtree(dest)
+        os.makedirs(dest)
+        for full in files:
+            shutil.copy2(full, dest)
+        with open(os.path.join(dest, "README.txt"), "w", encoding="utf-8") as fh:
+            fh.write(_SAMPLES_README.format(chirp_pin=_chirp_pin_short()))
+        print(f"  + {len(files)} sample images in "
+              f"{os.path.relpath(dest, os.path.join(PROJECT_ROOT, 'dist'))}")
+    return 0
+
+
 def build_portable(version: str, include_samples: bool = True) -> int:
     """Zip the frozen app into dist/VRP-<version>-<platform>.zip.
 
     The no-install distribution: the tester unzips it and runs the app straight
-    out of the folder. The zip's single top-level directory is named for the
-    release (VRP-20260715.3/), not "vrp/", so unzipping two releases side by
-    side doesn't merge them and the folder on disk says which build it is.
+    out of the folder.
 
-    ``include_samples`` also drops CHIRP's test images into a top-level
-    ``sample-images/`` folder beside the app, so a tester with no radio (or no
-    cable to hand) can still open a real image and exercise the grid. They go at
-    the TOP level deliberately, not inside the app's internals - that is
-    plumbing a user should never have to open, and a File-Open dialog needs
-    somewhere obvious to point at. They come from ./chirp at the enforced
-    CHIRP_COMMIT pin, so they always match the bundled driver set.
+    **The version lives on the zip, never on what comes out of it.** The single
+    top-level directory is plain "VRP/", holding VRP.exe (Windows) or VRP.app
+    (macOS). That asymmetry is the point: the *download* has to be tellable
+    apart (two releases in ~/Downloads, and a browser silently renaming the
+    second one "VRP (1).zip" helps nobody), but the *installed* thing has to
+    keep one identity so upgrading replaces it. A versioned VRP-20260715.3.app
+    dragged to /Applications sits beside VRP-20260714.1.app forever; a
+    versioned folder leaves the user running whichever old build they happen to
+    click.
 
-    Samples are on by default for the portable build because that IS the tester
-    build; the Inno Setup installer never includes them (it wraps dist/vrp/
-    only), since a real user has their own radio.
+    The cost, accepted deliberately: extracting a new release over an existing
+    VRP/ folder MERGES rather than replaces, so files dropped between builds
+    (a retired DLL, a removed help doc) survive in place. Delete the old folder
+    first for a clean run — the Windows packer says so on stdout. macOS is
+    unaffected: Finder replaces a .app bundle wholesale rather than merging it.
+
+    help/ and sample-images/ are NOT added here. stage_help/stage_samples put
+    them in the app folder before this runs, so the walk below picks them up the
+    same way the installer does - one staging step, every artifact consistent.
+    ``include_samples`` survives only for the macOS top-level copy; see
+    _build_portable_macos.
 
     Windows and macOS need genuinely different packaging, not just a different
     filename - see _build_portable_macos.
     """
-    top = f"{RELEASE_PREFIX}-{version}"
+    top = RELEASE_PREFIX
     zip_path = os.path.join(
-        PROJECT_ROOT, "dist", f"{top}-{artifact_suffix()}.zip"
+        PROJECT_ROOT, "dist",
+        f"{RELEASE_PREFIX}-{version}-{artifact_suffix()}.zip",
     )
     if sys.platform == "darwin":
         return _build_portable_macos(top, zip_path, include_samples)
@@ -427,12 +514,17 @@ def build_portable(version: str, include_samples: bool = True) -> int:
 
 
 def _build_portable_zipfile(top: str, zip_path: str, include_samples: bool) -> int:
-    """Windows/Linux: zip the dist/vrp/ onedir folder with zipfile.
+    """Windows/Linux: zip the dist/VRP/ onedir folder with zipfile.
 
     PyInstaller's onedir doesn't care what its folder is called, only that the
     executable and _internal/ stay together inside it - so re-rooting every
-    entry under a release-named top folder is safe here. It is NOT safe for a
-    macOS .app; see _build_portable_macos.
+    entry under the top folder is safe here. It is NOT safe for a macOS .app;
+    see _build_portable_macos.
+
+    ``include_samples`` is unused: stage_samples already put the images in the
+    onedir folder (or didn't, under --no-samples), and the walk below ships
+    whatever is there. The parameter stays for signature parity with the macOS
+    packer, which does still act on it.
     """
     onedir = os.path.join(PROJECT_ROOT, "dist", APP_NAME)
     if not os.path.isdir(onedir):
@@ -454,37 +546,28 @@ def _build_portable_zipfile(top: str, zip_path: str, include_samples: bool) -> i
                 zf.write(full, arcname)
                 count += 1
 
-        samples = 0
-        if include_samples:
-            for full in _sample_files():
-                zf.write(
-                    full,
-                    os.path.join(top, SAMPLES_DIRNAME, os.path.basename(full)),
-                )
-                samples += 1
-            if samples:
-                zf.writestr(
-                    os.path.join(top, SAMPLES_DIRNAME, "README.txt"),
-                    _SAMPLES_README.format(chirp_pin=_chirp_pin_short()),
-                )
-                samples += 1
-
     size_mb = os.path.getsize(zip_path) / (1024 * 1024)
-    print(f"Zipped {count} app files ({size_mb:.1f} MB) under {top}{os.sep}")
-    if include_samples and samples:
-        print(f"  + {samples} files in {top}{os.sep}{SAMPLES_DIRNAME}{os.sep}")
+    print(f"Zipped {count} files ({size_mb:.1f} MB) under {top}{os.sep} "
+          f"(app + help + samples)")
     print(f"Output: {os.path.relpath(zip_path, PROJECT_ROOT)}")
+    print(
+        f"\nNOTE: this unzips to a plain {top}{os.sep} folder, so a new release "
+        f"lands on top\nof the old one. Windows MERGES an extract into an "
+        f"existing folder rather than\nreplacing it, so files retired between "
+        f"builds would linger. Tell upgraders to\ndelete the old "
+        f"{top}{os.sep} first. Say so in the release notes."
+    )
     return 0
 
 
 def _build_portable_macos(top: str, zip_path: str, include_samples: bool) -> int:
-    """macOS: stage vrp.app + sample-images, then zip them with ditto.
+    """macOS: stage VRP.app + sample-images, then zip them with ditto.
 
     Two things make this genuinely different from the Windows path:
 
-    1. **The artifact is dist/vrp.app, not dist/vrp/.** With --windowed,
-       PyInstaller emits BOTH: dist/vrp/ (the raw COLLECT folder) and
-       dist/vrp.app (the bundle). Shipping the folder would hand a Mac user a
+    1. **The artifact is dist/VRP.app, not dist/VRP/.** With --windowed,
+       PyInstaller emits BOTH: dist/VRP/ (the raw COLLECT folder) and
+       dist/VRP.app (the bundle). Shipping the folder would hand a Mac user a
        bare unix binary instead of something they can double-click.
 
     2. **A .app must not be zipped with Python's zipfile.** zipfile follows
@@ -495,9 +578,18 @@ def _build_portable_macos(top: str, zip_path: str, include_samples: bool) -> int
        permissions and resource forks. It is used for the staging copy too, for
        the same reason.
 
-    Staging (build/portable/VRP-<version>/) exists so sample-images/ can sit
-    BESIDE the .app inside the zip, matching the Windows layout; --keepParent
-    then puts that release-named folder at the zip root.
+    Staging (build/portable/VRP/) exists so sample-images/ can sit BESIDE the
+    .app inside the zip, matching the Windows layout; --keepParent then puts
+    that folder at the zip root.
+
+    That beside-the-app copy is deliberately a SECOND copy: stage_samples
+    already put the images in the bundle's Contents/Resources/, which is what
+    survives dragging VRP.app to /Applications, but a .app's interior is not
+    browsable from a File > Open dialog without Show Package Contents. The
+    outer copy is the one a tester actually opens. ~0.5 MB compressed for the
+    pair, which is the right trade against telling a blind user to right-click
+    into a bundle. (Windows needs no equivalent: the installer puts
+    sample-images/ in the install directory, where it is a normal folder.)
 
     NOT YET RUN ON A MAC - written on Windows and unverified. Every failure
     mode here is loud (missing .app, missing ditto, non-zero ditto exit) rather
@@ -568,6 +660,142 @@ def _build_portable_macos(top: str, zip_path: str, include_samples: bool) -> int
     return 0
 
 
+_DMG_README = """\
+Versatile Radio Programmer (VRP)
+================================
+
+To install: drag VRP onto the Applications folder in this window.
+
+Then eject this disk image and launch VRP from Applications (or Spotlight).
+Installing over an older VRP replaces it - the app is always named "VRP", never
+VRP-<date>, so upgrades don't pile up.
+
+First launch: VRP is not signed with an Apple Developer ID yet, so macOS refuses
+to open it the ordinary way. RIGHT-CLICK (or Control-click) VRP in Applications,
+choose Open, then confirm. You only do this once. If you prefer the Terminal:
+
+    xattr -dr com.apple.quarantine /Applications/VRP.app
+
+Sample radio images
+-------------------
+
+The sample-images folder here holds one saved memory image per radio CHIRP
+supports, so you can try VRP with no radio and no cable: File > Open Image File,
+then pick any .img.
+
+A copy also travels inside the app, and Help > Sample Radio Images opens it in
+Finder - so you do not need to keep this disk image to reach them.
+
+Radio driver support provided by the CHIRP project - chirpmyradio.com.
+"""
+
+
+def build_dmg(version: str, include_samples: bool = True) -> int:
+    """Wrap dist/VRP.app in a macOS disk image - the counterpart to --installer.
+
+    A .dmg is what a Mac user expects an installer to be: mount it, drag the app
+    onto the Applications alias sitting beside it, eject. That drag is the whole
+    install, which is why the symlink matters - without it the user has to know
+    to open a second Finder window and find /Applications themselves.
+
+    Layout inside the volume:
+        VRP.app
+        Applications -> /Applications      (the drop target)
+        sample-images/                     (also inside the .app; see below)
+        README.txt                         (install + Gatekeeper instructions)
+
+    sample-images/ is here as well as in the bundle because this is the one
+    moment the user is looking at a real Finder window with the images in it.
+    The in-bundle copy is what survives the install, reachable afterwards from
+    Help > Sample Radio Images.
+
+    UDZO (zlib-compressed, read-only) is the ordinary format for a distributed
+    dmg; the volume is named for the release so a mounted image says which build
+    it is, even though the app inside is deliberately unversioned.
+
+    NOT YET RUN ON A MAC - hdiutil exists only there. Every failure mode is loud
+    (missing .app, missing hdiutil, non-zero exit) rather than silent.
+    """
+    if sys.platform != "darwin":
+        print("A .dmg can only be built on macOS (hdiutil is macOS-only).")
+        return 1
+
+    app = os.path.join(PROJECT_ROOT, "dist", f"{APP_NAME}.app")
+    if not os.path.isdir(app):
+        print(f"Cannot build the dmg: {app} not found.")
+        print("Run the onedir build first (python build.py, no --onefile);")
+        print("PyInstaller only produces the .app with --windowed.")
+        return 1
+    if shutil.which("hdiutil") is None:
+        print("Cannot build the dmg: `hdiutil` not found on PATH.")
+        print("It ships with macOS.")
+        return 1
+
+    volume = f"{RELEASE_PREFIX}-{version}"
+    dmg_path = os.path.join(
+        PROJECT_ROOT, "dist", f"{volume}-{artifact_suffix()}.dmg"
+    )
+    staging_root = os.path.join(PROJECT_ROOT, "build", "dmg")
+    staging = os.path.join(staging_root, volume)
+    shutil.rmtree(staging_root, ignore_errors=True)
+    os.makedirs(staging, exist_ok=True)
+
+    print("\nStaging the disk image...")
+    # ditto, not copytree - a .app relies on symlinks and the executable bit,
+    # and shutil follows/loses both. Same reason as the portable zip.
+    rc = subprocess.run(["ditto", app, os.path.join(staging, f"{APP_NAME}.app")])
+    if rc.returncode != 0:
+        print(f"ditto failed to copy the .app (exit {rc.returncode}).")
+        return rc.returncode
+
+    # The drop target. A relative symlink would point inside the volume; this
+    # must be the absolute /Applications on the user's machine.
+    os.symlink("/Applications", os.path.join(staging, "Applications"))
+
+    if include_samples:
+        files = _sample_files()
+        if files:
+            samples_dir = os.path.join(staging, SAMPLES_DIRNAME)
+            os.makedirs(samples_dir, exist_ok=True)
+            for full in files:
+                shutil.copy2(full, samples_dir)  # plain data files
+            with open(os.path.join(samples_dir, "README.txt"), "w",
+                      encoding="utf-8") as fh:
+                fh.write(_SAMPLES_README.format(chirp_pin=_chirp_pin_short()))
+            print(f"  + {len(files)} sample images")
+
+    with open(os.path.join(staging, "README.txt"), "w", encoding="utf-8") as fh:
+        fh.write(_DMG_README)
+
+    print("Creating the disk image with hdiutil...")
+    if os.path.exists(dmg_path):
+        os.remove(dmg_path)  # rebuilding the same release replaces it
+    cmd = [
+        "hdiutil", "create",
+        "-volname", volume,
+        "-srcfolder", staging,
+        "-ov",                 # overwrite an existing image
+        "-format", "UDZO",     # compressed, read-only: the distribution format
+        dmg_path,
+    ]
+    print("Command:", " ".join(cmd))
+    rc = subprocess.run(cmd)
+    if rc.returncode != 0:
+        print(f"hdiutil failed (exit {rc.returncode}).")
+        return rc.returncode
+    shutil.rmtree(staging_root, ignore_errors=True)
+
+    size_mb = os.path.getsize(dmg_path) / (1024 * 1024)
+    print(f"Disk image built ({size_mb:.1f} MB), volume name {volume}")
+    print(f"Output: {os.path.relpath(dmg_path, PROJECT_ROOT)}")
+    print(
+        "\nNOTE: the .app inside is unsigned and unnotarized, so Gatekeeper "
+        "refuses it\non first launch. The README.txt in the image tells the "
+        "user to right-click ->\nOpen. Say so in the release notes too."
+    )
+    return 0
+
+
 def _find_iscc() -> str | None:
     """Locate the Inno Setup command-line compiler (ISCC.exe).
 
@@ -594,7 +822,7 @@ def _find_iscc() -> str | None:
 
 
 def build_installer(version: str) -> int:
-    """Compile installer.iss with Inno Setup, wrapping the dist/vrp/ folder."""
+    """Compile installer.iss with Inno Setup, wrapping the dist/VRP/ folder."""
     onedir = os.path.join(PROJECT_ROOT, "dist", APP_NAME)
     if not os.path.isdir(onedir):
         print(f"Cannot build installer: {onedir}{os.sep} not found.")
@@ -623,8 +851,8 @@ def main() -> None:
     parser.add_argument(
         "--onefile",
         action="store_true",
-        help="Build a single self-extracting dist/vrp.exe (slower start) "
-             "instead of the default dist/vrp/ folder.",
+        help="Build a single self-extracting dist/VRP.exe (slower start) "
+             "instead of the default dist/VRP/ folder.",
     )
     parser.add_argument(
         "--installer",
@@ -633,17 +861,28 @@ def main() -> None:
              "Setup (installer.iss). Incompatible with --onefile.",
     )
     parser.add_argument(
+        "--dmg",
+        action="store_true",
+        help="After the onedir build, wrap dist/VRP.app in a macOS disk image "
+             "(VRP.app + an /Applications symlink to drag it onto). The macOS "
+             "counterpart to --installer; macOS-only, incompatible with "
+             "--onefile.",
+    )
+    parser.add_argument(
         "--portable",
         action="store_true",
-        help="After the onedir build, zip it as dist/VRP-<version>-win64.zip — "
-             "a no-install build to hand to testers. Incompatible with --onefile.",
+        help="After the onedir build, zip it as "
+             "dist/VRP-<version>-<platform>.zip (unzipping to a plain VRP/ "
+             "folder) — a no-install build to hand to testers. Incompatible "
+             "with --onefile.",
     )
     parser.add_argument(
         "--no-samples",
         action="store_true",
         help="Omit the sample-images/ folder (CHIRP's test images) from the "
-             "--portable zip. They're included by default so a tester with no "
-             "radio can still open a real image.",
+             "build entirely — the app folder, the portable zip AND the "
+             "installer. They're included by default so anyone with no radio "
+             "(or no cable to hand) can still open a real image.",
     )
     parser.add_argument(
         "--no-chirp-sync",
@@ -670,6 +909,16 @@ def main() -> None:
             "--portable zips the onedir folder, so it can't be combined with "
             "--onefile. (A onefile build is already a single portable .exe.)"
         )
+    if args.dmg and args.onefile:
+        parser.error(
+            "--dmg wraps the .app bundle, which only --windowed onedir "
+            "produces, so it can't be combined with --onefile."
+        )
+    if args.dmg and sys.platform != "darwin":
+        parser.error(
+            "--dmg builds a macOS disk image with hdiutil and only works on "
+            "macOS. On Windows use --installer, which produces a setup.exe."
+        )
 
     version = _read_version()
 
@@ -685,10 +934,17 @@ def main() -> None:
 
     print("\nBuild succeeded.")
 
-    # Help docs ship with every build (the Help menu opens them), so this runs
-    # before the portable/installer steps that package dist/ up.
+    # Help docs and sample images ship with EVERY build, not just the portable
+    # zip, so both run before the portable/installer steps that package dist/
+    # up. Everything downstream then inherits them from one staged source.
     print("\nStaging the help documents...")
     stage_help(onefile=args.onefile)
+
+    if args.no_samples:
+        print("\nSkipping the sample images (--no-samples).")
+    else:
+        print("\nStaging the sample images...")
+        stage_samples(onefile=args.onefile)
 
     suffix = ".exe" if os.name == "nt" else ""
     if args.onefile:
@@ -707,7 +963,13 @@ def main() -> None:
             print(f"\nPortable zip failed with exit code {rc}.")
             sys.exit(rc)
         print("\nPortable build ready.")
-        print(f"Output: dist{os.sep}{RELEASE_PREFIX}-{version}-win64.zip")
+
+    if args.dmg:
+        rc = build_dmg(version, include_samples=not args.no_samples)
+        if rc != 0:
+            print(f"\nDisk image failed with exit code {rc}.")
+            sys.exit(rc)
+        print("\nDisk image ready.")
 
     if args.installer:
         rc = build_installer(version)

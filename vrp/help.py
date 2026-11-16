@@ -12,7 +12,7 @@ risking a silent fall back to IE, or a Help menu that does nothing. See
 PROGRESS_LOG "2026-06-29 — Removed the retired webview UI" for the related
 decision not to keep the old webview stack for docs.
 
-Frozen, help/ sits BESIDE the executable (dist/vrp/help/), not inside
+Frozen, help/ sits BESIDE the executable (dist/VRP/help/), not inside
 _internal/, for the same reason sample-images/ does: a user should be able to
 find and open these files themselves without opening the app's plumbing.
 """
@@ -20,6 +20,8 @@ find and open these files themselves without opening the app's plumbing.
 from __future__ import annotations
 
 import logging
+import os
+import subprocess
 import sys
 import webbrowser
 from pathlib import Path
@@ -27,6 +29,7 @@ from pathlib import Path
 log = logging.getLogger(__name__)
 
 HELP_DIRNAME = "help"
+SAMPLES_DIRNAME = "sample-images"
 
 # The shipped documents, by the name the Help menu knows them as.
 GETTING_STARTED = "GettingStarted.html"
@@ -40,7 +43,7 @@ def help_dir() -> Path:
     root is two parents up).
 
     Frozen: beside the executable — except on macOS, where the executable lives
-    inside vrp.app/Contents/MacOS/ and "beside" it is somewhere no user can see,
+    inside VRP.app/Contents/MacOS/ and "beside" it is somewhere no user can see,
     so build.py stages the docs into the bundle's Contents/Resources/ instead
     (the platform convention). Both are checked; the Windows/onedir location
     wins when present, and is what the caller reports when nothing is found.
@@ -63,6 +66,70 @@ def help_dir() -> Path:
 def help_path(name: str) -> Path:
     """The full path to one help document. May not exist; callers check."""
     return help_dir() / name
+
+
+def samples_dir() -> Path:
+    """The directory holding CHIRP's sample radio images.
+
+    Frozen, this mirrors help_dir() exactly — beside the executable, or the
+    bundle's Contents/Resources/ on macOS — because build.py's stage_samples and
+    setup.py's stage_bundle_extras put both folders in the same two places.
+
+    From source it is ./chirp/tests/images instead: there is no sample-images/
+    in the repo, the staged copies are made from CHIRP's test images at build
+    time. That is not a fallback for developers only — CLAUDE.md has testers
+    running from source via run-win.bat/run-mac.sh, so this is the path most
+    people who use the Help menu item will actually get.
+    """
+    if not getattr(sys, "frozen", False):
+        root = Path(__file__).resolve().parent.parent
+        return root / "chirp" / "tests" / "images"
+
+    exe_dir = Path(sys.executable).resolve().parent
+    beside_exe = exe_dir / SAMPLES_DIRNAME
+    candidates = (
+        beside_exe,
+        exe_dir.parent / "Resources" / SAMPLES_DIRNAME,  # macOS .app bundle
+    )
+    for candidate in candidates:
+        if candidate.is_dir():
+            return candidate
+    return beside_exe
+
+
+def open_folder(path: Path) -> bool:
+    """Show a folder in the platform's file manager.
+
+    Not webbrowser.open: handed a directory it is inconsistent across platforms
+    and can hand the user a browser's file listing instead of Explorer or
+    Finder, which is a much worse place to be reading filenames with a screen
+    reader. Each platform's own "open this the way a double-click would" tool
+    does the right thing.
+
+    Returns False when the folder is missing (a --no-samples build, or an unzip
+    that dropped it) so the caller can say so rather than leave the user
+    pressing a menu item that silently does nothing.
+    """
+    if not path.is_dir():
+        log.error("Folder not found: %s", path)
+        return False
+    log.debug("Opening folder: %s", path)
+    try:
+        if sys.platform == "win32":
+            os.startfile(path)  # noqa: S606 - Windows-only, no shell involved
+        elif sys.platform == "darwin":
+            subprocess.run(["open", str(path)], check=True)
+        else:
+            subprocess.run(["xdg-open", str(path)], check=True)
+    except Exception:  # noqa: BLE001 - any failure is "it didn't open"
+        log.exception("Could not open the folder: %s", path)
+        return False
+    return True
+
+
+def open_samples() -> bool:
+    """Show the sample radio images folder. False if it isn't there."""
+    return open_folder(samples_dir())
 
 
 def open_help(name: str) -> bool:

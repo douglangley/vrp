@@ -51,6 +51,27 @@ called out.
 itself. The **Help** menu also has **Getting Started** (this guide) and
 **Keyboard Commands** (the full reference), which open in your browser.
 
+## Trying VRP without a radio
+
+You do not need a radio, a cable, or a working driver to start learning VRP.
+Every copy ships with a set of **sample radio images** — one saved memory file
+for each radio model CHIRP supports, more than 350 of them.
+
+1. Go to the **Help** menu and choose **Sample Radio Images**. The folder opens
+   in File Explorer (Windows) or Finder (macOS).
+2. Note where it is, then go to **File** and choose **Open Image File**
+   (Windows: Ctrl+O — macOS: Command+O).
+3. Pick any `.img` file in that folder.
+
+The channel grid fills with that radio's memory channels, and every command in
+this guide works on it: editing, sorting, bulk operations, banks, find. If you
+are not sure which to start with, try `Baofeng_UV-5R.img` or
+`Quansheng_UV-K5.img`.
+
+Nothing you do here can reach a radio. Editing a sample only changes your copy
+of the file, and VRP never writes to a radio unless you deliberately choose
+**Upload to Radio**.
+
 ## Downloading from your radio
 
 1. Plug your radio data cable into a USB port on the computer, and into the

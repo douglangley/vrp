@@ -361,28 +361,39 @@ fast — about two seconds).
 
 Target: Python 3.11, Windows x64 primary (Linux secondary).
 
-The pipeline is two steps: PyInstaller freezes the app into a `dist/vrp/`
+The pipeline is two steps: PyInstaller freezes the app into a `dist/VRP/`
 **onedir** folder, then Inno Setup (`installer.iss`) wraps that folder into a
-`dist/vrp-<version>-setup.exe` installer. `build.py --installer` runs both. This
+`dist/VRP-<version>-setup.exe` installer. `build.py --installer` runs both. This
 mirrors how upstream CHIRP ships its own PyInstaller build (a real installer with
 a Start-menu shortcut and uninstaller, not a loose self-extracting `.exe`).
 
 **`build.py --portable`** is the no-install alternative: it zips the same onedir
 folder into `dist/VRP-<version>-win64.zip`, whose single top-level directory is
-named for the release (`VRP-20260715.1/`) rather than `vrp/`. A tester unzips it
-anywhere and runs `vrp.exe` from the folder — nothing is installed, and two
-releases unzipped side by side stay separate instead of merging. Handy for
-handing a build to a few people without an installer; `--installer` is still how
-the app is meant to ship broadly. The two are combinable.
+plain `VRP/`. A tester unzips it anywhere and runs `VRP.exe` from the folder —
+nothing is installed. Handy for handing a build to a few people without an
+installer; `--installer` is still how the app is meant to ship broadly. The two
+are combinable.
 
-The portable zip also carries CHIRP's test images in a top-level
-**`sample-images/`** folder (360 images, one per supported model, plus a
-README) — beside `vrp.exe`, not inside `_internal/`, so File ▸ Open Image File
-has somewhere obvious to point. They let a tester exercise the app with **no
-radio and no cable**, and they come from `./chirp` at the enforced
-`CHIRP_COMMIT` pin, so they always match the bundled drivers. They cost about
-0.5 MB compressed. `--no-samples` omits them. The Inno Setup installer never
-includes them (it wraps `dist/vrp/` only) — a real user has their own radio.
+The version is on the **zip**, not on what comes out of it, so unzipping a new
+release lands on top of the previous `VRP/` instead of leaving a second folder
+to choose between. One caveat to put in the release notes: Windows *merges* an
+extract into an existing folder rather than replacing it, so anything dropped
+between builds survives — tell upgraders to delete the old `VRP\` first.
+
+**Every build carries two extra folders**, staged into the app before anything
+packages it: `help/` (the Help menu opens these in your browser) and
+`sample-images/` — CHIRP's test images, 360 of them, one per supported model,
+plus a README. Both sit beside `VRP.exe`, not inside `_internal/`, so File ▸ Open
+Image File has somewhere obvious to point. The images let you exercise the app
+with **no radio and no cable**, and they come from `./chirp` at the enforced
+`CHIRP_COMMIT` pin, so they always match the bundled drivers. About 9 MB raw,
+0.5 MB compressed; `--no-samples` leaves them out of the whole build.
+
+Because both are staged into `dist/VRP/`, the portable zip and the installer
+inherit them from one place — the zip walks that folder and `installer.iss`
+recurses `dist\VRP\*`. The installer puts the images in `{app}\sample-images`
+and adds a Start-menu entry that opens the folder, since hunting through Program
+Files is a poor instruction for a screen reader user.
 
 ### Building on macOS
 
@@ -393,26 +404,77 @@ uv sync --extra build
 uv run python build.py --portable      # -> dist/VRP-<version>-macos-<arch>.zip
 ```
 
-- It zips **`dist/vrp.app`**, not `dist/vrp/`. PyInstaller's `--windowed` emits
+- It zips **`dist/VRP.app`**, not `dist/VRP/`. PyInstaller's `--windowed` emits
   both; the `.app` is the one a Mac user can double-click.
+- The bundle is plain **`VRP.app`** — no version in the name. macOS identifies an
+  app in `/Applications` by its bundle name, so dragging in a versioned
+  `VRP-<version>.app` would add a second app every release rather than replacing
+  the last one. The version is still legible: on the zip, in Get Info
+  (`CFBundleShortVersionString`), and in Help ▸ About.
 - It zips with **`ditto`**, not Python's `zipfile`. A `.app` relies on symlinks
   and the executable bit; `zipfile` follows symlinks instead of storing them and
   `extractall()` doesn't restore permissions, so a zipfile-packed bundle won't
   launch. `ditto` is macOS's own tool and preserves both.
 - The name carries the **architecture** (`macos-arm64` / `macos-x86_64`): a Mac
   build only runs on the arch it was built for, unlike the Windows one.
+- `help/` and `sample-images/` go into the bundle's **`Contents/Resources/`** —
+  the only copy that survives dragging `VRP.app` to `/Applications`. The zip
+  *also* puts `sample-images/` beside the bundle, since a `.app`'s interior
+  isn't reachable from a File ▸ Open dialog without Show Package Contents. Once
+  installed, **Help ▸ Sample Radio Images** opens the in-bundle copy in Finder,
+  so the download folder isn't worth keeping.
 - **`--installer` is Windows-only** (it's Inno Setup) and errors out on macOS.
+  Use **`--dmg`** instead — see below.
 - The `.app` is **unsigned and unnotarized**, so Gatekeeper blocks it on first
   launch — harder than Windows SmartScreen does. Testers must right-click the
   app and choose **Open**, or run
-  `xattr -dr com.apple.quarantine /path/to/VRP-<version>/vrp.app`. Put that in
+  `xattr -dr com.apple.quarantine /path/to/VRP/VRP.app`. Put that in
   the release notes. Signing needs a paid Apple Developer ID; not done yet.
 
 > The macOS packaging path has **not been run on a Mac yet** — it was written on
 > Windows. The naming/routing logic is unit-tested
-> (`tests/test_build_artifact_name.py`) and every failure mode is loud rather
-> than silent, but the first real run is unverified. The Windows path is
-> unaffected and verified.
+> (`tests/test_build_artifact_name.py`, `tests/test_build_staged_content.py`)
+> and every failure mode is loud rather than silent, but the first real run is
+> unverified. The Windows path is unaffected and verified.
+
+#### The macOS installer (`--dmg`)
+
+```bash
+uv run python build.py --dmg          # -> dist/VRP-<version>-macos-<arch>.dmg
+```
+
+The counterpart to `--installer` on Windows, and how VRP is meant to ship on a
+Mac. `hdiutil` (`-format UDZO`, compressed read-only — the ordinary
+distribution format) wraps the bundle into a disk image laid out as:
+
+```
+VRP-<version>          (the volume name — a mounted image says which build)
+  ├── VRP.app
+  ├── Applications ->  /Applications      (symlink: the drop target)
+  ├── sample-images/
+  └── README.txt
+```
+
+The **`/Applications` symlink is the whole install**: mount, drag the app onto
+it, eject. Without it a user has to know to open a second Finder window and find
+`/Applications` themselves. `README.txt` covers that drag *and* the Gatekeeper
+right-click → **Open** dance, because the app is unsigned and a first launch
+otherwise fails in a way that looks like a corrupt download.
+
+`sample-images/` is in the volume as well as inside the bundle — this is the one
+moment the user is looking at a real Finder window containing them. The
+in-bundle copy is what survives the install, reachable afterwards from **Help ▸
+Sample Radio Images**.
+
+`--dmg` is macOS-only (`hdiutil` doesn't exist elsewhere) and can't be combined
+with `--onefile`, which produces no `.app`. Like the rest of the macOS path it
+has **not been run on a Mac**; the layout and the `hdiutil` command line are
+unit-tested with the platform tools stubbed.
+
+`setup.py` is an alternate, experimental macOS packager (py2app) that produces
+the same `VRP.app` layout, including `Contents/Resources/help` and
+`sample-images` via its own `stage_bundle_extras()`. PyInstaller remains the
+primary, tested path.
 
 Why onedir over onefile: onefile re-extracts the whole interpreter + wxPython +
 552 drivers to a temp dir on *every* launch (multi-second cold start) and is a

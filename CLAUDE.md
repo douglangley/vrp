@@ -119,9 +119,11 @@ obscure it. Any future help/docs page must carry it too.
   - about_dialog.py    — Help ▸ About: build info + the CHIRP acknowledgement in
                          two read-only edit boxes (navigable/copyable, unlike
                          wx.adv.AboutBox's static text)
-  - help.py            — locates help/ (beside the exe when frozen; the .app's
-                         Contents/Resources on macOS) and opens a document in
-                         the user's browser
+  - help.py            — locates help/ AND sample-images/ (beside the exe when
+                         frozen; the .app's Contents/Resources on macOS; from
+                         source, chirp/tests/images for the samples) and opens
+                         a document in the user's browser or the samples folder
+                         in Explorer/Finder (`open_folder`, not webbrowser)
   - config.py          — persistent JSON config: prefs + recent files +
                          favorite radios + band-plan region
   - speech.py          — prism speech wrapper, graceful no-op if unavailable
@@ -148,10 +150,12 @@ obscure it. Any future help/docs page must carry it too.
                          See extra_drivers/README.md. First one: Wouxun KG-UV96M.
 - help/                — the shipped user documentation (Getting Started in md/
                          txt/html + KeyboardCommands.html). `build.py`'s
-                         `stage_help()` copies the whole folder BESIDE the exe in
-                         every build; the Help menu opens the .html in the user's
-                         browser. Adding a doc = drop it here + link it from
-                         `_build_help_menu`.
+                         `stage_help()` (and `setup.py`'s
+                         `stage_bundle_extras()` for py2app) copies the whole
+                         folder BESIDE the exe — `Contents/Resources/` in a macOS
+                         bundle — in every build; the Help menu opens the .html
+                         in the user's browser. Adding a doc = drop it here +
+                         link it from `_build_help_menu`.
 - tests/               — unit tests (no hardware needed)
 - tools/               — update_chirp.py (CHIRP version bump),
                          audit_migrations.py + audit_special_migrations.py +
@@ -177,6 +181,13 @@ When adding a command: add it via `self._add(menu, key, label_with_accelerator,
 handler, needs_radio=...)` in the right `_build_*_menu`, add the combo to
 `APP_SHORTCUTS`, add a row to `help/KeyboardCommands.html`, and update
 `docs/keyboard-map.md` and `docs/chirp-feature-coverage.md`.
+
+**A command with no accelerator takes only the `_add` call and a
+`docs/keyboard-map.md` row** (with `—` in the key column) — Help ▸ Getting
+Started, Keyboard Commands, Sample Radio Images and About are all like this. Do
+**not** give it an `APP_SHORTCUTS` entry or a `KeyboardCommands.html` row: both
+surfaces are keys-only, and `tests/test_help_keyboard_parity.py` checks them
+against each other **in both directions**, so a keyless row fails the suite.
 
 `APP_SHORTCUTS` entries are **`(windows_keys, macos_keys, description)`** and F1
 shows the column for the platform it is running on (`shortcuts_for_platform`).
@@ -450,15 +461,32 @@ ran it by mistake). To cut a release build:
 
 uv sync --extra build
 uv run python build.py --installer
-Output: dist/vrp/ (the app folder) + dist/vrp-<version>-setup.exe (the installer)
+Output: dist/VRP/ (the app folder) + dist/VRP-<version>-setup.exe (the installer)
 
-**`--portable`** zips the frozen app into `dist/VRP-<version>-<platform>.zip`
-(top-level folder named `VRP-<version>/`, not `vrp/`, so side-by-side unzips stay
-separate) — a no-install build to hand to a few testers. Incompatible with
+**Naming: the version goes on the download, never on the installed thing.**
+`APP_NAME = "VRP"` (build.py) is PyInstaller's `--name`, so it *is* the shipped
+filename — `VRP.exe`, `VRP.app`, the `dist/VRP/` folder — and it is uppercase
+(user-facing) and **stable across releases**. macOS identifies an app in
+`/Applications` by its bundle name, so a versioned `VRP-<version>.app` installs a
+*second copy* every release and leaves the user able to launch a stale build;
+Windows gets the same treatment for consistency. Zips and installers still carry
+the version, because a *download* does have to be tellable apart. `setup.py`'s
+py2app path must agree — it regressed here once, emitting
+`VRP-<version>-macos-<arch>.app`. `tests/test_build_artifact_name.py` guards both
+directions (including a source-level check of `setup.py`, which can't be imported
+off macOS).
+
+**`--portable`** zips the frozen app into `dist/VRP-<version>-<platform>.zip`,
+unzipping to a plain **`VRP/`** folder — a no-install build to hand to a few
+testers, and a new release lands on top of the old one. The tradeoff, accepted
+deliberately: Windows *merges* an extract into an existing folder rather than
+replacing it, so files retired between builds linger — the packer prints a
+reminder to delete the old `VRP\` first, and it belongs in the release notes.
+macOS is unaffected (Finder replaces a `.app` wholesale). Incompatible with
 `--onefile` (already one file). Platform-aware, and the difference is NOT just
 the filename:
-- **Windows** (`-win64.zip`): zips `dist/vrp/` with `zipfile`. Verified.
-- **macOS** (`-macos-<arch>.zip`): zips **`dist/vrp.app`** (PyInstaller's
+- **Windows** (`-win64.zip`): zips `dist/VRP/` with `zipfile`. Verified.
+- **macOS** (`-macos-<arch>.zip`): zips **`dist/VRP.app`** (PyInstaller's
   `--windowed` emits both it and the raw folder) using **`ditto`**, never
   `zipfile` — zipfile follows symlinks instead of storing them and `extractall`
   drops the executable bit, either of which leaves a bundle that won't launch.
@@ -466,24 +494,61 @@ the filename:
   for. **Not yet run on a Mac** (written on Windows); naming/routing is
   unit-tested in `tests/test_build_artifact_name.py`.
 - **`--installer` is Windows-only** (Inno Setup) and errors out elsewhere.
+  **`--dmg` is its macOS counterpart** and errors out elsewhere: it wraps
+  `dist/VRP.app` in `dist/VRP-<version>-macos-<arch>.dmg` with `hdiutil`
+  (`-format UDZO`), holding the app beside an **`/Applications` symlink** — that
+  drag *is* the install, and without the symlink the user has to go find
+  `/Applications` themselves. `sample-images/` and a `README.txt` (drag-to-
+  install + the Gatekeeper right-click → Open dance) ride along in the volume.
+  The volume is named `VRP-<version>` so a mounted image says which build it is,
+  even though the app inside stays unversioned. **Not yet run on a Mac**; the
+  layout and the `hdiutil` command line are unit-tested with the platform tools
+  stubbed (`tests/test_build_artifact_name.py`).
 **Every build stages `help/`** (`stage_help()`) beside the executable — into
-`dist/vrp/help/`, or the .app's `Contents/Resources/help/` on macOS, where
+`dist/VRP/help/`, or the .app's `Contents/Resources/help/` on macOS, where
 `vrp/help.py` looks for it. It is a post-PyInstaller copy, not `--add-data`,
 because PyInstaller 6 puts datas under `_internal/` and the docs belong somewhere
 a user can find them. Both downstream artifacts inherit it for free: the portable
-zip walks `dist/vrp/`, and `installer.iss` recurses `dist\vrp\*`.
+zip walks `dist/VRP/`, and `installer.iss` recurses `dist\VRP\*`.
 
-`--portable` also ships CHIRP's test images in a top-level **`sample-images/`** folder
-(beside `vrp.exe`, NOT in `_internal/` — a tester must be able to find them from
-a File-Open dialog) so the app can be exercised with no radio; they come from
-`./chirp` at the `CHIRP_COMMIT` pin, so they match the bundled drivers. ~0.5 MB
-compressed; `--no-samples` omits them. The installer never includes them.
+**`stage_samples()` does the same for CHIRP's test images** — a top-level
+**`sample-images/`** folder (beside `VRP.exe`, NOT in `_internal/` — a user must
+be able to find them from a File-Open dialog) so the app can be exercised with no
+radio and no cable. 360 images, ~9 MB raw / ~0.5 MB compressed, from `./chirp` at
+the `CHIRP_COMMIT` pin so they always match the bundled drivers. **`--no-samples`
+now omits them from the whole build**, not just the zip.
 
-`build.py` defaults to **onedir** (a `dist/vrp/` folder), not onefile, because
+**Both fold into the app folder BEFORE anything packages it**, which is the only
+reason every artifact stays consistent: the portable zip walks `dist/VRP/`, and
+`installer.iss` recurses `dist\VRP\*` with no rule of its own for either folder.
+Never add content by writing it straight into a packager — that is how the
+installer ended up shipping no sample images at all. On macOS both also go into
+the bundle's `Contents/Resources/`, the only copy that survives dragging
+`VRP.app` to `/Applications`; the portable zip keeps a *second* `sample-images/`
+beside the bundle, because a `.app`'s interior isn't reachable from an Open
+dialog without Show Package Contents. The installer adds a Start-menu entry
+pointing at `{app}\sample-images` (guarded with `Check: DirExists`, so
+`--no-samples` drops it) — "browse to the install directory" is a poor
+instruction for a screen-reader user. **Help ▸ Sample Radio Images**
+(`on_sample_images` → `vrp_help.open_samples`) is the in-app route on both
+platforms, and the only one on macOS, where an `/Applications` install leaves
+the images inside the bundle. It uses `os.startfile`/`open`/`xdg-open`, **not**
+`webbrowser.open` — handed a directory that can produce a browser file listing
+instead of Explorer/Finder, a much worse place to read filenames with a screen
+reader. `samples_dir()` resolves to `./chirp/tests/images` from source (which is
+what testers running `run-win.bat` get), and mirrors `help_dir()` when frozen.
+
+**`setup.py`'s py2app path has its own `stage_bundle_extras()`** producing the
+identical layout. py2app's `packages` only copies importable trees, so without it
+the bundle shipped neither folder and the Help menu opened nothing. If you touch
+one staging function, touch the other — `tests/test_build_staged_content.py`
+checks both, the installer's Source line, and its Start-menu guard.
+
+`build.py` defaults to **onedir** (a `dist/VRP/` folder), not onefile, because
 onefile re-extracts the whole interpreter + wxPython + 552 drivers to a temp dir
 on every launch (the slow cold start) and trips Defender/SmartScreen more often;
 onedir starts instantly. `--installer` then wraps that folder with **Inno Setup**
-(`installer.iss`) into a `dist/vrp-<version>-setup.exe` with a Start-menu shortcut
+(`installer.iss`) into a `dist/VRP-<version>-setup.exe` with a Start-menu shortcut
 and uninstaller — the way upstream CHIRP ships its own PyInstaller build. Use
 `python build.py --onefile` only for a quick throwaway single-exe test. The
 PyInstaller step is well under a minute (552 drivers bundled, not compiled — see

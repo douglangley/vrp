@@ -6,6 +6,171 @@ architecture, keyboard map, and CHIRP feature-coverage checklist.
 
 ---
 
+## 2026-07-25 — A real macOS installer, and a way to find the sample images
+
+**Outcome:** `build.py --dmg` produces
+`dist/VRP-<version>-macos-<arch>.dmg` — the counterpart to `--installer` on
+Windows — and a new **Help ▸ Sample Radio Images** command opens the bundled
+images in Explorer/Finder.
+
+**The .dmg.** `hdiutil create -format UDZO` over a staged volume holding
+`VRP.app`, an **`/Applications` symlink**, `sample-images/` and a `README.txt`.
+The symlink is the substance, not decoration: the drag onto it *is* the install,
+and without it the user has to know to open a second Finder window and find
+`/Applications`. The README covers that drag and the Gatekeeper right-click →
+Open dance, because the app is unsigned and a first launch otherwise fails in a
+way indistinguishable from a corrupt download. The volume is named
+`VRP-<version>` so a mounted image says which build it is, while the app inside
+stays plain `VRP.app` — the same split as the zip. Copies with `ditto`, never
+`shutil`, for the usual symlink/executable-bit reasons.
+
+**The menu command exists because the .dmg makes it necessary.** Installing to
+`/Applications` and ejecting is precisely the flow that strips away the
+beside-the-app `sample-images/` copy and leaves only the one inside the bundle,
+where Show Package Contents is the sole route. Windows had a Start-menu shortcut
+for this; macOS had nothing. `vrp/help.py` grew `samples_dir()` (mirroring
+`help_dir()`) and `open_folder()`, and the Help menu grew one item.
+
+Three things worth keeping:
+
+- **`open_folder` is not `webbrowser.open`.** Handed a directory, webbrowser is
+  inconsistent across platforms and can hand back a *browser's* file listing
+  rather than Explorer or Finder — a much worse place to read filenames with a
+  screen reader. `os.startfile` / `open` / `xdg-open` each do what a
+  double-click does.
+- **From source, `samples_dir()` resolves to `./chirp/tests/images`.** There is
+  no `sample-images/` in the repo — the staged copies are made from CHIRP's test
+  images at build time. CLAUDE.md has testers running from source via
+  `run-win.bat`, so that is the path most people invoking this command actually
+  get, not a developer-only fallback.
+- **No accelerator, so no `APP_SHORTCUTS` entry and no `KeyboardCommands.html`
+  row.** Both surfaces are keys-only and `test_help_keyboard_parity.py` checks
+  them against each other in *both* directions, so a keyless row fails the
+  suite. CLAUDE.md's "adding a command" checklist now says so explicitly —
+  following it literally would have broken the build.
+
+Mnemonic is **R** (`Sample &Radio Images`); S was already taken by Keyboard
+Shortcuts, and a duplicate would silently make one item unreachable.
+
+**Docs:** `help/GettingStarted` gained a "Trying VRP without a radio" section in
+all three formats (html/md/txt) — the sample images were previously undocumented
+*entirely*, so shipping 360 of them told the user nothing. It also says plainly
+that editing a sample cannot reach a radio.
+
+**Verification:** suite **584 passed**. The new wx tests build a real
+`MainWindow` and assert the item exists, is enabled with no radio loaded (the
+whole point), is absent from `_radio_gated_keys`, and announces both outcomes
+with `assertive=True` on failure — wiring, not source text. The `.dmg` layout
+and `hdiutil` command line are tested on Windows by stubbing `ditto`/`hdiutil`/
+`os.symlink`; the assertions cover the `/Applications` symlink target, the
+UDZO format, and both filename and volume name.
+
+**Owed:** `--dmg` has never run on a Mac — `hdiutil` exists only there. Also
+still unverified: whether the Help item's Finder call behaves under VoiceOver.
+
+## 2026-07-25 — Help and sample images now reach every artifact, not just the zip
+
+**Outcome:** `help/` and `sample-images/` are staged into the built app before
+anything packages it, so the Windows installer, the portable zip, the macOS
+bundle and the py2app bundle all carry both. Two real gaps closed:
+
+- **The Inno Setup installer shipped no sample images.** They were written
+  straight into the portable zip by `_build_portable_zipfile`, so the *installer*
+  — the way the app is actually meant to ship — gave a user no means of opening a
+  real image without a radio and a cable already in hand. The original note
+  ("a real user has their own radio") assumed the radio is the hard part; the
+  cable, the driver, and a first successful download are the hard part.
+- **The py2app bundle shipped no help documents at all.** py2app's `packages`
+  only copies importable trees and `help/` is a plain repo folder, so Help ▸
+  Getting Started opened nothing. `setup.py` had no counterpart to `stage_help`.
+
+**The shape of the fix is the point.** `stage_samples()` now mirrors
+`stage_help()`, and both run in `main()` before the portable/installer steps.
+Every packager then inherits content from one staged copy instead of assembling
+its own: the zip walks `dist/VRP/`, and `installer.iss` recurses `dist\VRP\*`
+with no rule of its own for either folder. `_build_portable_zipfile` lost its
+private sample-adding block entirely. Adding content by writing it into a single
+packager is precisely how the installer ended up empty-handed, and the layout
+now can't drift between artifacts because there is only one.
+
+**macOS is the awkward case, and is documented rather than papered over.** Both
+folders go into `Contents/Resources/` — the only copy that survives dragging
+`VRP.app` to `/Applications` — and the portable zip *additionally* drops
+`sample-images/` beside the bundle, because a `.app`'s interior is not reachable
+from a File ▸ Open dialog without Show Package Contents. That duplication is
+deliberate (~0.5 MB compressed for the pair) and is the right trade against
+telling a blind user to right-click into a bundle. Windows needs no equivalent:
+the installer puts the folder in the install directory and adds a **Start-menu
+entry** that opens it, guarded by `Check: DirExists` so `--no-samples` drops the
+shortcut too. `--no-samples` now omits the images from the *whole build*, not
+just the zip.
+
+**Verification (Windows, real artifacts):** `build.py --portable --installer`
+staged 4 help documents and 360 images. The zip holds 4 `VRP/help/` entries and
+361 `VRP/sample-images/` entries (images + README) at the top level and **zero**
+under `_internal/`. ISCC's own compile log shows all four help files and the
+image set being compressed from `dist\VRP\`. Suite **563 passed**.
+
+**Owed:** the macOS side is unrun, as ever. And on macOS the images are in the
+bundle with nothing in the app pointing at them, so after an `/Applications`
+install the only route is Show Package Contents — the equivalent of the Windows
+Start-menu shortcut would be a Help-menu item revealing the folder in Finder.
+That is a UI change (new command, `APP_SHORTCUTS`, `KeyboardCommands.html`,
+keyboard-map) and was **not** made here; noted in README.
+
+## 2026-07-25 — The shipped app is "VRP", and the version is on the download only
+
+**Outcome:** Both packagers now emit `VRP.exe` / `VRP.app` / a `dist/VRP/`
+folder, and the portable zip unpacks to a plain `VRP/` directory. The zip and
+installer filenames still carry the release (`VRP-20260725.1-macos-arm64.zip`,
+`VRP-20260725.1-setup.exe`).
+
+**The bug this fixes is an upgrade bug, not a cosmetic one.** `setup.py`'s
+py2app path built `dist/VRP-<version>-<arch>.app` — the reasoning at the time
+was that a tester with several builds on disk could tell them apart by the
+bundle name. That reasoning holds for a *download folder* and fails badly for
+`/Applications`: macOS has no concept that `VRP-20260725.1.app` supersedes
+`VRP-20260714.1.app`, so every release installed as a brand-new app beside the
+last, and a Spotlight hit could launch a months-old build with no indication it
+was stale. Windows had the milder version of the same problem — each portable
+zip unpacked to its own `VRP-<version>/` folder, so "which one do I run?"
+accumulated with every release.
+
+**The split that resolves it:** version the artifact that gets *downloaded*
+(two zips in `~/Downloads` must be tellable apart, and a browser silently
+renaming the second one "(1)" helps nobody); do not version the artifact that
+gets *installed* (it needs one stable identity so upgrading replaces it). The
+release is still legible from inside the app — `CFBundleShortVersionString` in
+Get Info, and Help ▸ About, which already speaks it as "Release 1 of 25 July
+2026".
+
+**Accepted cost, documented rather than hidden:** extracting a new zip over an
+existing `VRP/` folder MERGES on Windows instead of replacing, so a file retired
+between builds survives in place. `_build_portable_zipfile` now prints a
+"delete the old `VRP\` first" note for the release notes. macOS is unaffected —
+Finder replaces a `.app` bundle wholesale.
+
+**Also changed:** `installer.iss` (`MyAppExeName`, the `dist\VRP\*` source glob,
+`OutputBaseFilename`) — it had `vrp.exe` hardcoded, which survived only because
+Windows paths are case-insensitive. `build.py` also lost a stray
+`Output: ...-win64.zip` line in `main()` that would have printed the wrong
+platform on a Mac; `build_portable` already prints the real path.
+
+**Verification:** suite **554 passed** (7 → 11 cases in the naming test).
+`tests/test_build_artifact_name.py` grew three guards: the extracted folder never
+carries the version (both platforms), `APP_NAME` is `"VRP"`, and — by reading
+the source text, since `setup.py` `sys.exit()`s off macOS and runs a build as an
+import side effect — py2app's `final_app` has no version in it. The Windows
+build itself is **not re-run yet**; the naming is unit-tested but a real
+`--installer` pass and a fresh unzip are still owed, and the macOS py2app path
+remains Mac-only.
+
+**Found, not fixed (separate from this change):** `setup.py`'s py2app build does
+not stage `help/` at all — no `resources` option, and `packages` copies only the
+`vrp` package, so a py2app bundle ships with no help documents and the Help menu
+finds nothing. `build.py`'s `stage_help()` has no py2app counterpart. Noted in
+CLAUDE.md "Building".
+
 ## 2026-07-25 — CHIRP pin bumped to c2e70ff
 
 **Outcome:** `CHIRP_COMMIT` moves from `906e039` (2026-06-25) to **`c2e70ff`**
