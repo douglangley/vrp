@@ -568,13 +568,19 @@ Notes:
   supplemental on the desktop: there is no ARIA live region (that died with the
   webview UI), and on Windows the generic DataViewCtrl announces no per-cell
   cursor, so VRP's Left/Right cell cursor is voiced **only** through prism — a
-  prism-less build navigates cells silently. prism dlopens a native `prism.dll`
+  prism-less build navigates cells silently. prism loads a native `prism.dll`
   from `prism/_native/`, which is package data PyInstaller won't bundle from the
-  import alone; without the flag `import prism` raises `FileNotFoundError` and
-  speech is silently dead. `win32more`/`numpy` stay `--exclude-module`'d as
-  guards only — prism imports neither (just `cffi`); the "~795 win32more
-  modules" scare was a Nuitka `--include-package` artifact, and under
-  PyInstaller prism costs ~1 MB. See PROGRESS_LOG "2026-07-15 — prism".
+  import alone. **Since prismatoid 0.18 that flag is not enough:** the bindings
+  are a compiled cffi extension (`_prism_cffi.pyd`) in the same folder, reached
+  through a runtime `__path__` append and importing `_cffi_backend` from C —
+  both invisible to PyInstaller. `prism_native_args()` adds them (`--add-binary`
+  + `--hidden-import=_cffi_backend`) and **aborts the build** if the extension
+  is missing. Without them `import prism` fails and speech is silently dead.
+  After any prismatoid upgrade, freeze and run a tiny `import prism` probe —
+  the in-source suite cannot catch this. `win32more`/`numpy` stay
+  `--exclude-module`'d as guards only — prism imports neither; the "~795
+  win32more modules" scare was a Nuitka `--include-package` artifact. See
+  PROGRESS_LOG "2026-07-15 — prism" and "2026-11-16 — prism 0.18.3".
 - `build.py` explicitly `--collect-submodules` for `chirp.drivers` — loaded via
   dynamic `__import__`, which PyInstaller's static analysis can't follow.
   **Bundling them is not enough to make them work.** `chirp/drivers/__init__.py`

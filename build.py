@@ -74,9 +74,11 @@ Notes:
     UI), and on Windows the generic DataViewCtrl announces no per-cell cursor,
     so VRP's own Left/Right cell cursor is voiced ONLY through prism. A
     prism-less build navigates cells silently -- see the 2026-07-15 PROGRESS_LOG
-    entry. prism ships a native prism.dll in prism/_native/ which it dlopens at
-    import time, so --collect-binaries=prism is required; without it `import
-    prism` raises FileNotFoundError and speech is silently dead.
+    entry. prism ships a native prism.dll in prism/_native/, so
+    --collect-binaries=prism is required. Since prismatoid 0.18 its bindings
+    are also a compiled cffi extension in that folder, which needs an explicit
+    --add-binary plus --hidden-import=_cffi_backend (prism_native_args()).
+    Missing any of these, `import prism` fails and speech is silently dead.
     The old "prism drags in ~795 win32more modules plus numpy" note was a
     NUITKA-era artifact (--include-package=win32more force-included the package
     regardless of imports). prism imports only cffi -- never win32more, never
@@ -188,6 +190,53 @@ def ensure_chirp_on_pin(auto_sync: bool = True) -> bool:
     return True
 
 
+def prism_native_args() -> list:
+    """PyInstaller args that make prism's compiled core loadable when frozen.
+
+    Since prismatoid 0.18 the Python bindings are a compiled cffi extension
+    (``prism/_native/_prism_cffi.pyd`` on Windows, ``...abi3.so`` elsewhere)
+    rather than an ABI-mode ``dlopen`` from ``prism/lib.py``. Two things about
+    it are invisible to PyInstaller's static analysis, and each one alone
+    leaves a frozen build that crashes on ``import prism`` — which VRP survives
+    by going silent, the worst possible failure for this app:
+
+    * The extension lives in ``_native/``, which ``prism/_native.py`` appends to
+      the package ``__path__`` at runtime. ``--collect-binaries`` skips Python
+      extension modules and ``--hidden-import=prism._prism_cffi`` cannot find
+      it, so it is shipped explicitly into the same ``prism/_native`` folder.
+    * The extension imports ``_cffi_backend`` from C, so it is named as a
+      hidden import.
+
+    Verified 2026-11-16 by freezing a probe: without these, ``No module named
+    'prism._prism_cffi'`` then ``'_cffi_backend'``; with them, 15 backends and
+    NVDA acquired. Aborts the build if no compiled extension is found, rather
+    than producing an app with no voice.
+    """
+    import importlib.machinery
+    import importlib.util
+
+    spec = importlib.util.find_spec("prism")
+    if spec is None or not spec.submodule_search_locations:
+        raise SystemExit("prism (prismatoid) is not installed; cannot build.")
+    native_dir = os.path.join(list(spec.submodule_search_locations)[0], "_native")
+    suffixes = tuple(importlib.machinery.EXTENSION_SUFFIXES)
+    extensions = sorted(
+        name for name in (os.listdir(native_dir) if os.path.isdir(native_dir) else [])
+        if name.startswith("_prism_cffi") and name.endswith(suffixes)
+    )
+    if not extensions:
+        raise SystemExit(
+            f"No compiled prism extension (_prism_cffi*) in {native_dir}. A build "
+            "without it has no speech; check the installed prismatoid version."
+        )
+    args = [
+        "--add-binary=%s%sprism/_native" % (os.path.join(native_dir, name), os.pathsep)
+        for name in extensions
+    ]
+    args.append("--hidden-import=_cffi_backend")
+    return args
+
+
 def build(onefile: bool) -> int:
     cmd = [
         sys.executable, "-m", "PyInstaller",
@@ -213,13 +262,16 @@ def build(onefile: bool) -> int:
         f"--paths={os.path.join(PROJECT_ROOT, 'chirp')}",
 
         # ---- prism (speech) — REQUIRED, not optional ----
-        # prism dlopens a native prism.dll from prism/_native/ (see prism/lib.py
-        # _find_native_dir), which PyInstaller does not bundle on its own: it is
-        # package *data*, not an import. Without this flag `import prism` raises
-        # FileNotFoundError from os.add_dll_directory and the app runs silent —
-        # which on Windows means the Left/Right cell cursor, whose only voice is
-        # prism, announces nothing. Verified frozen: 14 backends, NVDA acquired.
+        # prism loads a native prism.dll from prism/_native/ (see
+        # prism/_native.py), which PyInstaller does not bundle on its own: it is
+        # package *data*, not an import. Without this flag `import prism` fails
+        # and the app runs silent — which on Windows means the Left/Right cell
+        # cursor, whose only voice is prism, announces nothing.
         "--collect-binaries=prism",
+        # ...and, since prismatoid 0.18, its compiled cffi extension plus the
+        # _cffi_backend it imports from C — see prism_native_args(). Verified
+        # frozen 2026-11-16 with 0.18.3: 15 backends, NVDA acquired.
+        *prism_native_args(),
         # Belt-and-braces only: prism imports neither of these (its sole
         # third-party import is cffi). win32more is declared by prismatoid's
         # metadata but never imported, and numpy is not a prismatoid dependency

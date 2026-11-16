@@ -6,6 +6,43 @@ architecture, keyboard map, and CHIRP feature-coverage checklist.
 
 ---
 
+## 2026-11-16 — prism 0.18.3, and a frozen build that would have been mute
+
+**Outcome:** `prismatoid` 0.17.0 → **0.18.3**; the `pyproject.toml` floor is
+now `>=0.18.3`. Upstream's notes show no Python API change — `Context`,
+`backends_count`, `create_best`, `speak`, `stop`, `name`, and `braille` are all
+still there — and in-source VRP picks NVDA (15 backends) with the suite at
+**587 passed**.
+
+**The catch was the packaging, and only a frozen probe found it.** 0.18's
+bindings are no longer an ABI-mode `dlopen` from `prism/lib.py`; they are a
+compiled cffi extension, `prism/_native/_prism_cffi.pyd`, which
+`prism/_native.py` reaches by appending `_native/` to the package `__path__` at
+runtime. PyInstaller cannot see that, and `--collect-binaries=prism` skips
+Python extension modules. A console probe frozen with VRP's exact flags failed
+with `No module named 'prism._prism_cffi'`; `--hidden-import=prism._prism_cffi`
+did not help (the module is not findable statically). Shipping the `.pyd` with
+`--add-binary` into `prism/_native` got one step further, to
+`No module named '_cffi_backend'` — imported from C, so also invisible — and
+adding `--hidden-import=_cffi_backend` fixed it: 15 backends, NVDA acquired,
+braille supported. **A release cut with the old `build.py` would have had no
+speech at all**, which in VRP means a silent cell cursor.
+
+`build.py` gained `prism_native_args()`, which finds the installed extension by
+`importlib.machinery.EXTENSION_SUFFIXES` (so the macOS `.abi3.so` is covered
+too) and **aborts the build** if none exists rather than producing a mute app.
+`tests/test_build_prism.py` pins both args and the abort. A real
+`build.py` run puts `prism.dll` and `_prism_cffi.pyd` in
+`dist/VRP/_internal/prism/_native/` and `_cffi_backend` beside them.
+
+**Also in the re-lock:** `win32more` and its metadata packages are gone (0.18
+dropped it), and `pywin32` 312 arrives — from the **CHIRP** pin, whose
+metadata now declares it on Windows, not from prism. This is the first re-lock
+since that bump.
+
+**Not done:** the real `VRP.exe` was built but not launched (the probe covers
+the import path with identical flags); macOS bundling of the `.so` is untested.
+
 ## 2026-11-16 — CHIRP pin bumped to 7052107, and bounded serial writes
 
 **Outcome:** vendored CHIRP moved `5b1bba6` → **`7052107`** (upstream tip,
