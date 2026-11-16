@@ -318,128 +318,6 @@ Real bugs upstream hit, all of which VRP would hit too:
 - GitHub Copilot refused to review the PR — over 20,000 changed lines, mostly
   regenerated locale files.
 
-## Submissions to the project (verbatim)
-
-Recorded here because VRP maintains an out-of-tree CHIRP driver
-(`chirp_backend/extra_drivers/kguv96m.py`) that is intended to be submittable
-upstream as-is.
-
-### The project's own rules
-
-`chirp/.github/pull_request_template.md`, verbatim:
-
-> # CHIRP PR Guidelines
->
-> The following must be true before PRs can be merged:
->
-> 1. All tests must be passing. The "PR Checks" job is speculative and failure doesn't always indicate a critial problem, but generally it needs to pass as well.
-> 1. Commits should be rebased (or simply rebase-able in the web UI) on current master. Do not put merge commits in a PR.
-> 1. Commits in a single PR should be related. Squash intermediate commits into logical units (i.e. "fix tests" commits need not survive on their own). Keep cleanup commits separate from functional changes.
-> 1. Major new features or bug fixes should reference a [CHIRP issue](https://chirpmyradio.com/projects/chirp/issues) _in the commit message_. Do this with the pattern `Fixes #1234` or `Related to #1234` so that the ticket system links the commit to the issue.
-> 1. Please write a reasonable commit message, especially if making some change that isn't totally obvious (such as adding a new model, adding a feature, etc). The first line of every commit is emailed to the users' list after each build. It should be short, but meaningful for regular users (examples: "thd74: Fixed tone decoding" or "uv5r: Added settings support"). There should be a blank line after the first, followed by additional text so that it gets formatted properly for the mailing list.
-> 1. New drivers should be accompanied by a test image in `tests/images` (except for thin aliases where the driver is sufficiently tested already). All new drivers must use `MemoryMapBytes`.
-> 1. All files must be GPLv3 licensed or contain no license verbiage. No additional restrictions can be placed on the usage (i.e. such as noncommercial).
-> 1. Do not add new py2-compatibility code (No new uses of `six`, `future`, etc).
-
-Note the direct implications for a KG-UV96M submission: **a test image in
-`tests/images` is required**, the driver **must use `MemoryMapBytes`**, the first
-commit line is **emailed to the users' list**, and a feature should reference a
-chirpmyradio.com issue number in the commit message.
-
-### The author, Deniz Sincar, on his own submission
-
-From the pull request description, verbatim:
-
-> I'm blind and use NVDA on Windows daily; this is based on real usage and
-> confirmed against NVDA's developer-info dumps to identify exactly which widgets
-> were reporting raw/unhelpful accessibility info. I've tested all three changes
-> manually with NVDA.
-
-> ## Why no test image / new driver
->
-> No new radio drivers are added; this is purely GUI accessibility plumbing, so
-> the "new drivers need a test image" requirement doesn't apply.
-
-> ## Not covered (left as follow-up)
->
-> The Browser tab's raw memory editor (`developer.py`) uses a hand-rolled
-> `wx.lib.scrolledpanel.ScrolledPanel` layout rather than `PropertyGrid`/`Grid`,
-> so it needs separate treatment — it's a developer-facing tool rather than a
-> regular Settings page, so I left it out of scope here.
-
-> ## Testing
->
-> - Manually tested with NVDA on Windows across all three grids (memory grid,
->   settings grid incl. live edit announcements, radio info grids).
-> - `tools/cpep8.py` and `mypy --config-file .mypy.ini` pass clean on all changed
->   files.
-> - Branch is rebased on current `master`, no merge commits.
->
-> There's no existing CHIRP issue tracker ticket for this yet — happy to file one
-> if maintainers prefer that before merge.
-
-On keeping accessibility in-tree rather than in a separate module, which the
-maintainer initially asked about:
-
-> However, I think making accessibility a separate module may actually increase
-> the maintenance burden rather than reduce it.
->
-> An accessibility fork or separate implementation effectively creates two
-> applications to maintain. Any future UI change would need to be implemented
-> twice, and the two versions would inevitably drift apart over time.
->
-> The goal of these changes is not to introduce an alternative UI, but to make
-> the existing one expose information in a way that screen readers can consume.
-> For sighted users, nothing changes.
->
-> Keeping accessibility integrated also avoids user confusion ("which CHIRP
-> should I install?") and reduces the chance that accessibility breaks because a
-> new feature was added to the main UI but not to the accessibility module.
->
-> Ironically, making accessibility a separate module may increase the risk of it
-> falling into disrepair, because it becomes something that can be forgotten,
-> skipped, or left unsynchronized with the main UI.
->
-> From a maintenance perspective, I believe a small amount of accessibility code
-> living alongside the existing UI is actually less work than maintaining a
-> separate accessibility implementation.
->
-> I'm also happy to keep the changes isolated, well documented, and as
-> non-invasive as possible so they're easy to understand and maintain in the
-> future.
-
-(This was a misunderstanding — kk7ds meant a separate *file in the same repo*,
-not a fork, and clarified so. The exchange is still worth reading before opening
-anything upstream, because it shows what the maintainer's concerns actually are.)
-
-### The maintainer, kk7ds, on accepting accessibility work
-
-Worth reading before submitting anything in this area. Verbatim:
-
-> Thanks for doing this. I'll be honest, this is a topic that I have avoided for
-> a long time, mostly because the people that want (no, DEMAND) it are extremely
-> intolerant of answers like "I don't have the time or desire to work on this".
-> It has been a touchy subject for years to the point that I'm almost loathe to
-> accept this because I'll have to maintain it going forward. That said, it's
-> pretty understandable as it is, so if it really works and the libraries
-> required remain available, it seems like a win.
->
-> My ask for putting it into a separate module are partially because I think it
-> makes sense and partially because I want to make sure it's easily
-> rip-out-able if it falls into disrepair.
-
-And on the cross-platform requirement, which is the constraint that killed the
-prism approach:
-
-> Either way, CHIRP is a cross-platform app, so anything that is merged here
-> needs to work for all three platforms, which I'm sure is possible.
-
-On 2026-07-31, after merging:
-
-> @denizsincar29 can you create a user account on the main site
-> https://chirpmyradio.com/projects/chirp/wiki/Home so I can cc you on any bugs
-> that are reported for this stuff? Thanks!
-
 ## Open items
 
 - [ ] **Verify the braille gap** on a physical display (Finding 1).
@@ -453,12 +331,9 @@ On 2026-07-31, after merging:
 - [ ] Capture payown's macOS testing durably: revision tested, VoiceOver and
       macOS versions, and the specific checks run. Scope is known (grid
       navigation + channel editing); the surrounding detail is not. It is
-      currently VRP's only macOS evidence, it is second-hand, and it is now being
-      cited upstream.
+      currently VRP's only macOS evidence, and it is second-hand.
 - [ ] Decide whether a Windows `wx.Accessible` layer over `DataViewListCtrl` is
       worth adding to the roadmap.
-- [ ] Consider whether VRP has anything to contribute upstream, and note that
-      there is now one active blind contributor there working the same problem.
 
 ## Sources
 
@@ -466,6 +341,5 @@ On 2026-07-31, after merging:
   its description, and its full review thread
 - `chirp/wxui/accessibility.py`, `common.py`, `memedit.py`, `radioinfo.py` at pin
   `5b1bba6`, vendored locally
-- `chirp/.github/pull_request_template.md` at the same pin
 - `wx_accessible_grid/grid.py` (0.8.0) and `vrp/native/channel_grid.py`
 - prism backend registry and feature flags, probed on this machine 2026-08-08
