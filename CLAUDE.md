@@ -383,7 +383,7 @@ uv sync --extra dev
 ```
 
 CHIRP is pinned for reproducibility; record the commit when updating (current:
-906e039, 2026-06-25). `uv sync` installs the editable ./chirp automatically —
+7052107, 2026-11-15). `uv sync` installs the editable ./chirp automatically —
 no separate `uv pip install -e ./chirp` step.
 
 ## Testing
@@ -401,11 +401,13 @@ After migration or CHIRP-pin changes, also run all opt-in broad audits:
 `.venv\Scripts\python.exe tools\audit_migrations.py` and
 `.venv\Scripts\python.exe tools\audit_special_migrations.py`, plus
 `.venv\Scripts\python.exe tools\audit_bank_migrations.py` and
-`.venv\Scripts\python.exe tools\audit_dstar_migrations.py`. The baselines are
-2,310 ordinary-corpus migrations (six VHF/UHF/HF/AM/split/DV sources × 385
-targets); 1,989 named special slots across 70 targets; 70 bank models (54
-mutable, 16 fixed); a 385-target DV sweep; and 960 actual-DV/required-call-list
-cases from 358 pinned images, all with zero unexpected failures. Normal
+`.venv\Scripts\python.exe tools\audit_dstar_migrations.py`. The baselines (at
+CHIRP 7052107) are 2,424 ordinary-corpus migrations (six
+VHF/UHF/HF/AM/split/DV sources × 404 targets); 2,456 named special slots across
+76 targets; 74 bank models (58 mutable, 16 fixed); a 404-target DV sweep; and
+964 actual-DV/required-call-list cases from 376 pinned images, all with zero
+unexpected failures. The ordinary audit is the slow one (~5 minutes, CPU-bound,
+and silent until it finishes) — that is normal, not a hang. Normal
 band/feature/driver incompatibilities are expected and must remain classified
 rather than treated as crashes. The screen-reader acceptance matrix is
 `docs/testing/2026-07-25-cross-radio-migration-accessibility.md`; never mark a
@@ -419,7 +421,7 @@ Debug logging:  uv run python main.py --debug
 ## Updating CHIRP
 
 CHIRP is vendored at ./chirp, pinned to a tested commit recorded in the
-**`CHIRP_COMMIT`** file (currently 906e039), and bundled into the exe. The
+**`CHIRP_COMMIT`** file (currently 7052107), and bundled into the exe. The
 `./chirp` tree itself is gitignored, not committed; `run-win.bat`/`run-mac.sh`
 clone it and check out the `CHIRP_COMMIT` SHA so everyone runs identical code.
 To update:

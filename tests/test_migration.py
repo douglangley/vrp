@@ -63,7 +63,18 @@ def test_detailed_report_keeps_each_incompatibility_reason():
 
     from chirp_backend import migration
 
-    batch = migration.batch_from_radio(_source(UV5R))
+    # Plant the incompatibility explicitly rather than relying on fixture data:
+    # CHIRP's own Baofeng_UV-5R.img once stored a corrupt split (TX 1650 Hz) in
+    # channel 1, and upstream replaced the image with a valid 146/446 MHz split
+    # (CHIRP 7052107), silently removing the only rejection this test checked.
+    source = _source(UV5R)
+    bad = source.get_memory(1)
+    bad.duplex = "split"
+    bad.offset = 1650
+    source.set_memory(bad)
+    assert source.get_memory(1).offset == 1650
+
+    batch = migration.batch_from_radio(source)
     ok, summary, affected, report = memory_ops.apply_migration_batch(
         batch, destination=1, overwrite=True
     )

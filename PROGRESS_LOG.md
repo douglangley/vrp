@@ -6,6 +6,49 @@ architecture, keyboard map, and CHIRP feature-coverage checklist.
 
 ---
 
+## 2026-11-16 — CHIRP pin bumped to 7052107
+
+**Outcome:** vendored CHIRP moved `5b1bba6` → **`7052107`** (upstream tip,
+2026-11-15) via `tools/update_chirp.py`. 213 files, +46,611/−7,806. Registered
+driver classes are now **573** (including VRP's out-of-tree KG-UV96M, which
+upstream still does not ship). Image fixtures **358 → 376** (18 new, 8 changed).
+
+**Upstream, in brief:** 14 new driver modules — Baofeng DM-32UV, BTECH UV-PRO,
+Kenwood NX-800 and TM-D750, Retevis RT18 and RT97S, TYT UVL-15W, Wouxun KG-WV50,
+Yaesu FT-8000R, FTM-150, FTM-300D and FTX-1, Zastone D9000, and a CN UV-K5
+variant — plus changes to 81 existing drivers, rewritten `set_doc` help for many
+UV-5R settings (which VRP's settings editor shows as-is), `_()` wrapping of
+validation messages, and `serialtrace` moved from `chirp.wxui` to core `chirp`.
+
+**The first run failed one test, and it was a fixture, not a driver.**
+`test_detailed_report_keeps_each_incompatibility_reason` expected UV-5R channel
+1 to be rejected by a UV-5R Mini with "Tx freq 0.001650 is out of supported
+range". Upstream **replaced `Baofeng_UV-5R.img`**: channel 1 was a corrupt split
+(TX 1,650 Hz) and is now a valid 146/446 MHz split the Mini accepts. The tool
+rolled back as designed. The test now plants the out-of-range split on the
+source itself, so it no longer depends on fixture contents; it passes on both
+pins. Worth remembering: a fixture refresh can quietly remove the only case a
+test was exercising.
+
+**Verification.** Suite **584 passed** on the new pin. All four opt-in audits
+re-run, zero unexpected failures:
+
+| Audit | Result |
+|---|---|
+| Ordinary migrations | 2,424 (6 sources × 404 targets): 856 imported, 1,568 incompatible |
+| Named specials | 2,456 slots across 76 targets: 1,240 imported, 1,216 incompatible |
+| Banks | 74 models (16 fixed, 58 mutable verified); 40 names verified, 33 unsupported, 1 write ignored |
+| D-STAR | 404-target sweep (14/390) + 964 actual-DV cases (485/479) |
+
+Two kinds of harmless console noise appear in audit output: "Failed to parse
+version '0.3.0dev'" (CHIRP logging an old version string stored in a fixture)
+and "dirty blocks: […]" (a bare `print` in upstream's `thd72.py`).
+
+**Not done:** no frozen rebuild against the new pin, and no hardware pass.
+Upstream's new 2 s serial `write_timeout` (in `chirp.wxui.clone.open_serial`)
+is not yet mirrored in VRP's `_open_radio_serial`; that lands separately once
+verified on a real radio.
+
 ## 2026-07-25 — A real macOS installer, and a way to find the sample images
 
 **Outcome:** `build.py --dmg` produces
